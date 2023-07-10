@@ -1,5 +1,6 @@
 #include <getopt.h>
-
+#include <unistd.h>
+#include <cstring>
 #include <iostream>
 
 #include "server/server.hpp"
