@@ -1,5 +1,9 @@
 #include <getopt.h>
+
 #include <iostream>
+
+#include "server/server.hpp"
+#include "utils/status.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
@@ -29,6 +33,9 @@ int main(int argc, char *argv[]) {
   std::string config_filename;
   std::string app_name = argv[0];
 
+  vectordb::Status status;
+  vectordb::server::Server &server = vectordb::server::Server::GetInstance();
+
   if (argc < 2) {
     print_help(app_name);
     goto FAIL;
@@ -53,7 +60,15 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
+  server.Init(config_filename);
+
+  status = server.Start();
+  if (status.ok()) {
+    std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
+  } else {
+    std::cout << status.message() << std::endl;
+    goto FAIL;
+  }
 
   /* wait signal */
   pause();

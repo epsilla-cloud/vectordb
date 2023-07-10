@@ -4,8 +4,26 @@ project(vectordb)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 
-add_subdirectory(utils)
-add_subdirectory(server)
+# Now all includes are relative to the engine directory
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(vectordb main.cpp)
-target_link_libraries(vectordb utils server)
+# Specify source files in the root directory
+set(SOURCE_FILES main.cpp)
+
+# Add source files in the utils directory
+file(GLOB UTILS_FILES "utils/*.cpp")
+list(APPEND SOURCE_FILES ${UTILS_FILES})
+
+# Add source files in the server directory
+file(GLOB UTILS_FILES "server/*.cpp")
+list(APPEND SOURCE_FILES ${UTILS_FILES})
+
+add_executable(vectordb ${SOURCE_FILES})
+
+# # Specify all your source files
+# set(SOURCE_FILES
+#     main.cpp
+#     utils/status.cpp
+# )
+
+# add_executable(vectordb ${SOURCE_FILES})

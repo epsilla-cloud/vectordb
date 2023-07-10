@@ -1,19 +1,12 @@
 #pragma once
 
-#include "utils/error.hpp"
-
 #include <string>
+
+#include "utils/error.hpp"
 
 namespace vectordb {
 
 class Status;
-
-inline Status StatusCheck(const Status& status) {
-    if (!status.ok()) {
-        return status;
-    }
-    return Status::OK();
-}
 
 using StatusCode = ErrorCode;
 
@@ -55,5 +48,12 @@ class Status {
  private:
   char* state_ = nullptr;
 };
+
+inline Status StatusCheck(const Status& status) {
+  if (!status.ok()) {
+    return status;
+  }
+  return Status::OK();
+}
 
 }  // namespace vectordb

@@ -6,20 +6,19 @@
 
 namespace vectordb {
 
-enum class ErrorCode : int32_t {
-  INFRA_SUCCESS = 0,
-  INFRA_ERROR_CODE_BASE = 40000,
-  DB_SUCCESS = 0,
-  DB_ERROR_CODE_BASE = 50000,
-  // Add all the other error codes here...
-};
+using ErrorCode = int32_t;
+
+constexpr ErrorCode INFRA_SUCCESS = 0;
+constexpr ErrorCode INFRA_ERROR_CODE_BASE = 40000;
+constexpr ErrorCode DB_SUCCESS = 0;
+constexpr ErrorCode DB_ERROR_CODE_BASE = 50000;
 
 constexpr ErrorCode ToInfraErrorCode(const int32_t error_code) {
-  return static_cast<ErrorCode>(static_cast<int32_t>(ErrorCode::INFRA_ERROR_CODE_BASE) + static_cast<int32_t>(error_code));
+  return INFRA_ERROR_CODE_BASE + error_code;
 }
 
 constexpr ErrorCode ToDbErrorCode(const int32_t error_code) {
-  return static_cast<ErrorCode>(static_cast<int32_t>(ErrorCode::DB_ERROR_CODE_BASE) + static_cast<int32_t>(error_code));
+  return DB_ERROR_CODE_BASE + error_code;
 }
 
 // infra error code
