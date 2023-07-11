@@ -28,6 +28,10 @@ list(APPEND SOURCE_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "server/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
 
+# Add source files in the catalog directory
+file(GLOB UTILS_FILES "catalog/*.cpp")
+list(APPEND SOURCE_FILES ${UTILS_FILES})
+
 add_executable(vectordb ${SOURCE_FILES})
 
 # # Specify all your source files
