@@ -52,7 +52,7 @@ class Json {
     }
 
     std::string name = json.getString("name");
-    int age = json.getInt("age");
+    int64_t age = json.getInt("age");
     bool isMarried = json.getBool("isMarried");
     std::string spouseName = json.getObject("spouse").getString("name");
     int spouseAge = json.getObject("spouse").getInt("age");
