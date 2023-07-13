@@ -58,6 +58,7 @@ struct TableSchema {
   size_t id_ = 0;
   std::string name_;
   std::vector<FieldSchema> fields_;
+  std::vector<AutoEmbedding> auto_embeddings_;
 };
 
 struct DatabaseSchema {
