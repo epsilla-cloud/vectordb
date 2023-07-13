@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "catalog/meta_types.hpp"
+#include "db/catalog/meta_types.hpp"
 
 namespace vectordb {
 namespace engine {

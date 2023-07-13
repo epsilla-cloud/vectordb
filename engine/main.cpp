@@ -5,7 +5,7 @@
 
 #include "server/server.hpp"
 #include "utils/status.hpp"
-#include "catalog/meta.hpp"
+#include "db/catalog/meta.hpp"
 
 #include "utils/json.hpp"
 
