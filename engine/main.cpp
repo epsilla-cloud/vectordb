@@ -7,6 +7,7 @@
 #include "utils/status.hpp"
 #include "catalog/meta.hpp"
 
+#include "utils/json.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
