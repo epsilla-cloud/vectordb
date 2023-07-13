@@ -26,10 +26,10 @@ struct TableSchema {
 };
 
 enum class FieldType {
-  INT8 = 1,
-  INT16 = 2,
-  INT32 = 3,
-  INT64 = 4,
+  INT1 = 1,  // TINYINT
+  INT2 = 2,  // SMALLINT
+  INT4 = 3,  // INT
+  INT8 = 4,  // BIGINT
   
   FLOAT = 10,
   DOUBLE = 11,
@@ -47,7 +47,7 @@ enum class FieldType {
 struct FieldSchema {
   size_t id_ = 0;
   std::string name_;
-  FieldType field_type_ = FieldType::INT64;
+  FieldType field_type_ = FieldType::INT4;
   int32_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
   size_t table_id_ = 0;
 };
