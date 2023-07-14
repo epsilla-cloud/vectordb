@@ -10,6 +10,8 @@ namespace meta {
 
 namespace {
 
+constexpr const char* DEFAULT_DB_NAME = "default";
+
 constexpr const char* ID = "id";
 constexpr const char* NAME = "name";
 constexpr const char* PATH = "path";
@@ -22,6 +24,8 @@ constexpr const char* MODEL_NAME = "model_name";
 constexpr const char* FIELD_TYPE = "field_type";
 constexpr const char* VECTOR_DIMENSION = "vector_dimension";
 constexpr const char* METRIC_TYPE = "metric_type";
+
+constexpr const char* DB_CATALOG_FILE_NAME = "catalog";
 
 // Convert a Json object to a FieldSchema
 Status LoadFieldSchemaFromJson(const vectordb::Json& json, meta::FieldSchema& field_schema) {
@@ -66,12 +70,74 @@ Status LoadTableSchemaFromJson(const vectordb::Json& json, meta::TableSchema& ta
 
   return Status::OK();
 }
+
+// Convert a FieldSchema to a Json object
+void DumpFieldSchemaToJson(const meta::FieldSchema& field_schema, vectordb::Json& json) {
+  json.SetInt(ID, field_schema.id_);
+  json.SetString(NAME, field_schema.name_);
+  json.SetInt(FIELD_TYPE, static_cast<int>(field_schema.field_type_));
+  // Only vector fields have vector_dimension_ and metric_type_.
+  if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
+      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
+    json.SetInt(VECTOR_DIMENSION, field_schema.vector_dimension_);
+    json.SetInt(METRIC_TYPE, static_cast<int>(field_schema.metric_type_));
+  }
+}
+
+// Convert a TableSchema to a Json object
+void DumpTableSchemaToJson(const meta::TableSchema& table_schema, vectordb::Json& json) {
+  json.SetInt(ID, table_schema.id_);
+  json.SetString(NAME, table_schema.name_);
+
+  // Dump fields
+  for (const auto& field_schema : table_schema.fields_) {
+    vectordb::Json field_json;
+    DumpFieldSchemaToJson(field_schema, field_json);
+    json.AddObjectToArray(FIELDS, field_json);
+  }
+
+  // Dump auto_embeddings
+  if (!table_schema.auto_embeddings_.empty()) {
+    for (const auto& auto_embedding : table_schema.auto_embeddings_) {
+      vectordb::Json auto_embedding_json;
+      auto_embedding_json.SetInt(SRC_FIELD_ID, auto_embedding.src_field_id_);
+      auto_embedding_json.SetInt(TGT_FIELD_ID, auto_embedding.tgt_field_id_);
+      auto_embedding_json.SetString(MODEL_NAME, auto_embedding.model_name_);
+      json.AddObjectToArray(AUTO_EMBEDDINGS, auto_embedding_json);
+    }
+  }
+}
+
+// Convert a DatabaseSchema to a Json object
+void DumpDatabaseSchemaToJson(const DatabaseSchema& db_schema, vectordb::Json& json) {
+  json.SetInt("id", db_schema.id_);
+  // json.AddString("name", db_schema.name_);
+  // Dump tables
+  for (const auto& table_schema : db_schema.tables_) {
+    vectordb::Json table_json;
+    DumpTableSchemaToJson(table_schema, table_json);
+    json.AddObjectToArray(TABLES, table_json);
+  }
+}
+
+Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
+  // Convert the DatabaseSchema to a Json object
+  vectordb::Json json;
+  DumpDatabaseSchemaToJson(db, json);
+
+  // Write the Json object to a string
+  std::string json_string = json.DumpToString();
+
+  // Write the string to the file
+  return server::CommonUtil::AtomicWriteToFile(file_path, json_string);
+}
+
 }  // namespace
 
 BasicMetaImpl::BasicMetaImpl() {
   DatabaseSchema default_db;
-  default_db.name_ = "default";
-  databases_["default"] = default_db;
+  default_db.name_ = DEFAULT_DB_NAME;
+  databases_[DEFAULT_DB_NAME] = default_db;
 }
 
 BasicMetaImpl::~BasicMetaImpl() {}
@@ -81,31 +147,36 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
     return Status(DB_UNEXPECTED_ERROR, "Database catalog file is already loaded: " + db_catalog_path);
   }
 
-  std::string json_content;
-  if (server::CommonUtil::IsFileExist(db_catalog_path)) {
-    json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path);
-  } else {
-    // TODO: create directory with an empty db.
-    return Status(DB_NOT_FOUND, "Database catalog file not found: " + db_catalog_path);
-  }
-
-  Json json;
-  if (!json.LoadFromString(json_content)) {
-    return Status(DB_UNEXPECTED_ERROR, "Failed to parse database catalog file: " + db_catalog_path);
-  }
-
-  // Load the actual database schema from the JSON data.
   DatabaseSchema db_schema;
-  db_schema.id_ = json.GetInt("id");
-  db_schema.name_ = json.GetString("name");
-  db_schema.path_ = db_catalog_path;
-  // Load tables
-  size_t tables_size = json.GetArraySize(TABLES);
-  for (size_t i = 0; i < tables_size; ++i) {
-    vectordb::Json table_json = json.GetArrayElement(TABLES, i);
-    meta::TableSchema table_schema;
-    LoadTableSchemaFromJson(table_json, table_schema);
-    db_schema.tables_.emplace_back(table_schema);
+  if (server::CommonUtil::IsFileExist(db_catalog_path)) {
+    std::string json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path);
+    Json json;
+    if (!json.LoadFromString(json_content)) {
+      return Status(DB_UNEXPECTED_ERROR, "Failed to parse database catalog file: " + db_catalog_path);
+    }
+
+    // Load the actual database schema from the JSON data.
+    db_schema.id_ = json.GetInt("id");
+    db_schema.name_ = db_name;
+    db_schema.path_ = db_catalog_path;
+    // Load tables
+    size_t tables_size = json.GetArraySize(TABLES);
+    for (size_t i = 0; i < tables_size; ++i) {
+      vectordb::Json table_json = json.GetArrayElement(TABLES, i);
+      meta::TableSchema table_schema;
+      LoadTableSchemaFromJson(table_json, table_schema);
+      db_schema.tables_.emplace_back(table_schema);
+    }
+  } else {
+    // Create directory with an empty db.
+    server::CommonUtil::CreateDirectory(db_catalog_path);
+    // Create database catalog file.
+    DatabaseSchema db_schema;
+    auto status = SaveDBToFile(db_schema, db_catalog_path + "/" + DB_CATALOG_FILE_NAME);
+
+    if (!status.ok()) {
+      return status;
+    }
   }
 
   databases_[db_name] = db_schema;
@@ -145,7 +216,7 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
     return Status(DB_NOT_FOUND, "Database not found: " + db_name);
   }
   auto path = it->second.path_;
-  server::CommonUtil::DeleteDirectory(path); // Completely remove the database.
+  server::CommonUtil::DeleteDirectory(path);  // Completely remove the database.
   loaded_databases_paths_.erase(path);
   databases_.erase(db_name);
   return Status::OK();
@@ -166,9 +237,10 @@ Status BasicMetaImpl::CreateTable(std::string& db_name, TableSchema& table_schem
 
   auto& db = databases_.find(db_name)->second;
   db.tables_.push_back(table_schema);
-  // TODO: Flush the change to disk.
+  // Flush the change of the database schema to disk.
+  status = SaveDBToFile(db, db.path_ + "/" + DB_CATALOG_FILE_NAME);
 
-  return Status::OK();
+  return status;
 }
 
 Status BasicMetaImpl::HasTable(const std::string& db_name, const std::string& table_name, bool& response) {
@@ -212,15 +284,17 @@ Status BasicMetaImpl::DropTable(const std::string& db_name, const std::string& t
     return Status(DB_NOT_FOUND, "Database not found: " + db_name);
   }
 
+  auto& db = it->second;
+
   // Assuming that each table has a unique name within its database
-  for (auto it_table = it->second.tables_.begin(); it_table != it->second.tables_.end(); ++it_table) {
+  for (auto it_table = db.tables_.begin(); it_table != db.tables_.end(); ++it_table) {
     if (it_table->name_ == table_name) {
-      it->second.tables_.erase(it_table);
-      return Status::OK();
+      db.tables_.erase(it_table);
+      // Flush the change of the database schema to disk.
+      auto status = SaveDBToFile(db, db.path_ + "/" + DB_CATALOG_FILE_NAME);
+      return status;
     }
   }
-
-  // TODO: Flush the change to disk.
 
   return Status(TABLE_NOT_FOUND, "Table not found: " + table_name);
 }

@@ -6,7 +6,7 @@
 namespace vectordb {
 
 Json::Json() : doc_(new rapidjson::Document()), val_(doc_.get()) {}  // val initially points to the document
-Json::Json(rapidjson::Value* value) : val_(value) {}               // For nested objects, val points to a value within the document
+Json::Json(rapidjson::Value* value) : val_(value) {}                 // For nested objects, val points to a value within the document
 
 bool Json::LoadFromString(const std::string& json_string) {
   doc_->Parse(json_string.c_str());
@@ -120,6 +120,60 @@ bool Json::HasMember(const std::string& key) const {
     return false;
   }
   return val_->HasMember(key.c_str());
+}
+
+void Json::SetString(const std::string& key, const std::string& value) {
+  (*val_)[key.c_str()].SetString(value.c_str(), doc_->GetAllocator());
+}
+
+void Json::SetInt(const std::string& key, int64_t value) {
+  (*val_)[key.c_str()].SetInt64(value);
+}
+
+void Json::SetDouble(const std::string& key, double value) {
+  (*val_)[key.c_str()].SetDouble(value);
+}
+
+void Json::SetBool(const std::string& key, bool value) {
+  (*val_)[key.c_str()].SetBool(value);
+}
+
+void Json::SetObject(const std::string& key, const Json& object) {
+  (*val_)[key.c_str()].CopyFrom(*object.val_, doc_->GetAllocator());
+}
+
+void Json::SetArray(const std::string& key, const std::vector<Json>& array) {
+  rapidjson::Value arr(rapidjson::kArrayType);
+  for (const auto& item : array) {
+    rapidjson::Value item_val;
+    item_val.CopyFrom(*item.val_, doc_->GetAllocator());
+    arr.PushBack(item_val, doc_->GetAllocator());
+  }
+  (*val_)[key.c_str()].Swap(arr);
+}
+
+void Json::AddStringToArray(const std::string& key, const std::string& value) {
+  rapidjson::Value strVal;
+  strVal.SetString(value.c_str(), doc_->GetAllocator());
+  (*val_)[key.c_str()].PushBack(strVal, doc_->GetAllocator());
+}
+
+void Json::AddIntToArray(const std::string& key, int64_t value) {
+  (*val_)[key.c_str()].PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddDoubleToArray(const std::string& key, double value) {
+  (*val_)[key.c_str()].PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddBoolToArray(const std::string& key, bool value) {
+  (*val_)[key.c_str()].PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddObjectToArray(const std::string& key, const Json& object) {
+  rapidjson::Value objectVal;
+  objectVal.CopyFrom(*object.val_, doc_->GetAllocator());
+  (*val_)[key.c_str()].PushBack(objectVal, doc_->GetAllocator());
 }
 
 }  // namespace vectordb
