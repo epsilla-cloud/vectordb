@@ -28,6 +28,7 @@ void print_banner() {
 int main(int argc, char *argv[]) {
   print_banner();
 
+
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
                                          {nullptr, 0, nullptr, 0}};
