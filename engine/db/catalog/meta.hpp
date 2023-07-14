@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "db/catalog/meta_types.hpp"
+#include "utils/status.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -30,11 +31,11 @@ class Meta {
 
   virtual Status CreateTable(std::string& db_name, TableSchema& table_schema) = 0;
 
-  virtual Status HasTable(std::string& db_name, bool& response) = 0;
+  virtual Status HasTable(const std::string& db_name, const std::string& table_name, bool& response) = 0;
 
-  virtual Status GetTable(std::string& db_name, TableSchema& response) = 0;
+  virtual Status GetTable(const std::string& db_name, const std::string& table_name, TableSchema& response) = 0;
 
-  virtual Status DropTable(std::string& db_name, const std::string& table_name) = 0;
+  virtual Status DropTable(const std::string& db_name, const std::string& table_name) = 0;
 };  // MetaData
 
 using MetaPtr = std::shared_ptr<Meta>;

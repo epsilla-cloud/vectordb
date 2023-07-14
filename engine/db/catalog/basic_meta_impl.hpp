@@ -2,6 +2,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <unordered_set>
 
 #include "db/catalog/meta.hpp"
 
@@ -26,11 +27,11 @@ class BasicMetaImpl : public Meta {
 
   Status CreateTable(std::string& db_name, TableSchema& table_schema) override;
 
-  Status HasTable(std::string& db_name, bool& response) override;
+  Status HasTable(const std::string& db_name, const std::string& table_name, bool& response) override;
 
-  Status GetTable(std::string& db_name, TableSchema& response) override;
+  Status GetTable(const std::string& db_name, const std::string& table_name, TableSchema& response) override;
 
-  Status DropTable(std::string& db_name, const std::string& table_name) override;
+  Status DropTable(const std::string& db_name, const std::string& table_name) override;
 
  private:
   std::unordered_map<std::string, DatabaseSchema> databases_;

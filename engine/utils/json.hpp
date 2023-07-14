@@ -14,16 +14,19 @@ class Json {
 
   bool LoadFromString(const std::string& json_string);
   std::string DumpToString();
-  std::string GetString(const std::string& key);
-  int64_t GetInt(const std::string& key);
-  double GetDouble(const std::string& key);
-  bool GetBool(const std::string& key);
-  std::string GetString();
-  int64_t GetInt();
-  double GetDouble();
-  bool GetBool();
-  Json GetObject(const std::string& key);                      // Get nested object
-  Json GetArrayElement(const std::string& key, size_t index);  // Get specific element from array
+  std::string GetString(const std::string& key) const;
+  int64_t GetInt(const std::string& key) const;
+  double GetDouble(const std::string& key) const;
+  bool GetBool(const std::string& key) const;
+  std::string GetString() const;
+  int64_t GetInt() const;
+  double GetDouble() const;
+  bool GetBool() const;
+  size_t GetSize() const;
+  Json GetObject(const std::string& key) const;                      // Get nested object
+  size_t GetArraySize(const std::string& key) const;
+  Json GetArrayElement(const std::string& key, size_t index) const;  // Get specific element from array
+  bool HasMember(const std::string& key) const;
 
  private:
   std::unique_ptr<rapidjson::Document> doc_;
