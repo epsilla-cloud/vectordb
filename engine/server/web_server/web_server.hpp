@@ -25,10 +25,9 @@ class WebServer {
     ~WebServer() = default;
 
     Status
-    StartWebServer();
-
+    StartService();
     Status
-    StopWebServer();
+    StopService();
 
   public:
     static WebServer&
