@@ -64,6 +64,7 @@ struct TableSchema {
 struct DatabaseSchema {
   size_t id_ = 0;
   std::string name_;
+  std::string path_;  // path to the database catalog file
   std::vector<TableSchema> tables_;
 };
 

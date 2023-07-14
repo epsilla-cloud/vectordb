@@ -18,23 +18,23 @@ class Meta {
  public:
   virtual ~Meta() = default;
 
-  virtual Status CreateDatabase(std::string& db_catalog_path_, const std::string& dbName) = 0;
+  virtual Status LoadDatabase(std::string& db_catalog_path, const std::string& db_name) = 0;
 
-  virtual Status DescribeDatabase(const std::string& dbName) = 0;
+  virtual Status HasDatabase(const std::string& db_name, bool& response) = 0;
 
-  virtual Status DropDatabase(const std::string& dbName) = 0;
+  virtual Status GetDatabase(const std::string& db_name, DatabaseSchema& response) = 0;
 
-  virtual Status CreateTable(TableSchema& table_schema) = 0;
+  virtual Status UnloadDatabase(const std::string& db_name) = 0;
 
-  virtual Status DescribeTable(TableSchema& table_schema) = 0;
+  virtual Status DropDatabase(const std::string& db_name) = 0;
 
-  virtual Status DropTable(const std::string& table_id) = 0;
+  virtual Status CreateTable(std::string& db_name, TableSchema& table_schema) = 0;
 
-  virtual Status CreateField(FieldSchema& field_schema) = 0;
+  virtual Status HasTable(std::string& db_name, bool& response) = 0;
 
-  virtual Status DescribeField(FieldSchema& field_schema) = 0;
+  virtual Status GetTable(std::string& db_name, TableSchema& response) = 0;
 
-  virtual Status DropField(const std::string& field_id) = 0;
+  virtual Status DropTable(std::string& db_name, const std::string& table_name) = 0;
 };  // MetaData
 
 using MetaPtr = std::shared_ptr<Meta>;
