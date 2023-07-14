@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "catalog/meta_types.hpp"
+#include "db/catalog/meta_types.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -18,11 +18,11 @@ class Meta {
  public:
   virtual ~Meta() = default;
 
-  virtual Status CreateDatabase(DatabaseSchema& database_schema) = 0;
+  virtual Status CreateDatabase(std::string& db_catalog_path_, const std::string& dbName) = 0;
 
-  virtual Status DescribeDatabase(DatabaseSchema& database_schema) = 0;
+  virtual Status DescribeDatabase(const std::string& dbName) = 0;
 
-  virtual Status DropDatabase(const std::string& database_id) = 0;
+  virtual Status DropDatabase(const std::string& dbName) = 0;
 
   virtual Status CreateTable(TableSchema& table_schema) = 0;
 
