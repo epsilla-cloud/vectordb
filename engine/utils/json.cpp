@@ -1,0 +1,101 @@
+#include "json.hpp"
+
+#include "thirdparty/rapidjson/stringbuffer.h"
+#include "thirdparty/rapidjson/writer.h"
+
+namespace vectordb {
+
+Json::Json() : doc_(new rapidjson::Document()), val_(doc_.get()) {}  // val initially points to the document
+Json::Json(rapidjson::Value* value) : val_(value) {}               // For nested objects, val points to a value within the document
+
+bool Json::LoadFromString(const std::string& json_string) {
+  doc_->Parse(json_string.c_str());
+  val_ = doc_.get();  // After parsing, val points to the document
+  if (doc_->HasParseError()) {
+    return false;
+  }
+  return true;
+}
+
+std::string Json::DumpToString() {
+  rapidjson::StringBuffer buffer;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+  val_->Accept(writer);  // Write the value pointed to by val
+
+  return buffer.GetString();
+}
+
+std::string Json::GetString(const std::string& key) {
+  if ((*val_)[key.c_str()].IsString()) {
+    return (*val_)[key.c_str()].GetString();
+  }
+  return "";
+}
+
+int64_t Json::GetInt(const std::string& key) {
+  if ((*val_)[key.c_str()].IsInt64()) {
+    return (*val_)[key.c_str()].GetInt64();
+  }
+  return 0;
+}
+
+double Json::GetDouble(const std::string& key) {
+  if ((*val_)[key.c_str()].IsDouble()) {
+    return (*val_)[key.c_str()].GetDouble();
+  }
+  return 0.0;
+}
+
+bool Json::GetBool(const std::string& key) {
+  if ((*val_)[key.c_str()].IsBool()) {
+    return (*val_)[key.c_str()].GetBool();
+  }
+  return false;  // Default value if key not found or not a boolean
+}
+
+std::string Json::GetString() {
+  if (val_->IsString()) {
+    return val_->GetString();
+  }
+  return "";
+}
+
+int64_t Json::GetInt() {
+  if (val_->IsInt64()) {
+    return val_->GetInt64();
+  }
+  return 0;
+}
+
+double Json::GetDouble() {
+  if (val_->IsDouble()) {
+    return val_->GetDouble();
+  }
+  return 0.0;
+}
+
+bool Json::GetBool() {
+  if (val_->IsBool()) {
+    return val_->GetBool();
+  }
+  return false;  // Default value if key not found or not a boolean
+}
+
+Json Json::GetObject(const std::string& key) {
+  if ((*val_)[key.c_str()].IsObject()) {
+    return Json(&(*val_)[key.c_str()]);
+  }
+  return Json(nullptr);  // Return an invalid Json object if key not found or not an object
+}
+
+Json Json::GetArrayElement(const std::string& key, size_t index) {
+  if ((*val_)[key.c_str()].IsArray()) {
+    auto& array = (*val_)[key.c_str()];
+    if (index < array.Size()) {
+      return Json(&array[(rapidjson::SizeType)index]);
+    }
+  }
+  return Json(nullptr);  // Return an invalid Json object if key not found, not an array, or index out of range
+}
+
+}  // namespace vectordb

@@ -5,6 +5,9 @@
 
 #include "server/server.hpp"
 #include "utils/status.hpp"
+#include "db/catalog/meta.hpp"
+
+#include "utils/json.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
@@ -24,6 +27,7 @@ void print_banner() {
 
 int main(int argc, char *argv[]) {
   print_banner();
+
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
