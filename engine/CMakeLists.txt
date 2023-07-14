@@ -35,7 +35,16 @@ file(GLOB UTILS_FILES "db/index/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
 
 
+# Add source files in sub dir web_server
+file(GLOB_RECURSE WEB_SERVER_FILES "server/web_server/*")
+list(APPEND SOURCE_FILES ${WEB_SERVER_FILES})
+
 add_executable(vectordb ${SOURCE_FILES})
+
+# add third-party dependencies
+# oatpp
+find_package(oatpp 1.3.0 REQUIRED)
+target_link_libraries(vectordb PUBLIC oatpp::oatpp)
 
 # # Specify all your source files
 # set(SOURCE_FILES
