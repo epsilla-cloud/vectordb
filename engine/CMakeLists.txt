@@ -12,8 +12,6 @@ GET_CURRENT_TIME(BUILD_TIME)
 string(REGEX REPLACE "\n" "" BUILD_TIME ${BUILD_TIME})
 message(STATUS "Build time = ${BUILD_TIME}")
 
-
-
 # Now all includes are relative to the engine directory
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
