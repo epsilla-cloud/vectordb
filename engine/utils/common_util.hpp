@@ -23,6 +23,7 @@ class CommonUtil {
   static std::string GetFileName(const std::string& filename);
   static std::string GetExePath();
   static std::string ReadContentFromFile(const std::string& file_path);
+  static Status AtomicWriteToFile(const std::string& path, const std::string& content);
 
   static bool TimeStrToTime(const std::string& time_str, time_t& time_integer, tm& time_struct,
                             const std::string& format = "%d-%d-%d %d:%d:%d");

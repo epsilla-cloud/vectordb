@@ -81,11 +81,13 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
     return Status(DB_UNEXPECTED_ERROR, "Database catalog file is already loaded: " + db_catalog_path);
   }
 
-  if (!server::CommonUtil::IsFileExist(db_catalog_path)) {
+  std::string json_content;
+  if (server::CommonUtil::IsFileExist(db_catalog_path)) {
+    json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path);
+  } else {
+    // TODO: create directory with an empty db.
     return Status(DB_NOT_FOUND, "Database catalog file not found: " + db_catalog_path);
   }
-
-  std::string json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path);
 
   Json json;
   if (!json.LoadFromString(json_content)) {
@@ -160,7 +162,10 @@ Status BasicMetaImpl::CreateTable(std::string& db_name, TableSchema& table_schem
     return Status(TABLE_ALREADY_EXISTS, "Table already exists: " + table_schema.name_);
   }
 
-  databases_.find(db_name)->second.tables_.push_back(table_schema);
+  // TODO: Validate the table schema.
+
+  auto& db = databases_.find(db_name)->second;
+  db.tables_.push_back(table_schema);
   // TODO: Flush the change to disk.
 
   return Status::OK();

@@ -196,6 +196,25 @@ std::string CommonUtil::ReadContentFromFile(const std::string& file_path) {
   return content;
 }
 
+Status CommonUtil::AtomicWriteToFile(const std::string& path, const std::string& content) {
+  std::string temp_path = path + ".tmp";
+  std::ofstream ofs(temp_path);
+  if (!ofs.is_open()) {
+    // LOG_SERVER_ERROR_ << "Failed to open temp file: " << temp_path;
+    return Status(INFRA_UNEXPECTED_ERROR, "Failed to open temp file: " + temp_path);
+  }
+
+  ofs << content;
+  ofs.close();
+
+  if (std::rename(temp_path.c_str(), path.c_str()) != 0) {
+    // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
+    return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + temp_path + " to " + path);
+  }
+
+  return Status::OK();
+}
+
 bool CommonUtil::TimeStrToTime(const std::string& time_str, time_t& time_integer, tm& time_struct,
                                const std::string& format) {
   time_integer = 0;
