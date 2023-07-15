@@ -123,39 +123,55 @@ bool Json::HasMember(const std::string& key) const {
 }
 
 void Json::SetString(const std::string& key, const std::string& value) {
-  (*val_)[key.c_str()].SetString(value.c_str(), doc_->GetAllocator());
+  rapidjson::Value key_value(rapidjson::StringRef(key.c_str()), doc_->GetAllocator());
+  rapidjson::Value str_value;
+  str_value.SetString(value.c_str(), doc_->GetAllocator());
+  val_->AddMember(key_value, str_value, doc_->GetAllocator());
 }
 
 void Json::SetInt(const std::string& key, int64_t value) {
-  (*val_)[key.c_str()].SetInt64(value);
+  rapidjson::Value key_value(rapidjson::StringRef(key.c_str()), doc_->GetAllocator());
+  rapidjson::Value int_value;
+  int_value.SetInt64(value);
+  val_->AddMember(key_value, int_value, doc_->GetAllocator());
 }
 
 void Json::SetDouble(const std::string& key, double value) {
-  (*val_)[key.c_str()].SetDouble(value);
+  rapidjson::Value key_value(rapidjson::StringRef(key.c_str()), doc_->GetAllocator());
+  rapidjson::Value double_value;
+  double_value.SetDouble(value);
+  val_->AddMember(key_value, double_value, doc_->GetAllocator());
 }
 
 void Json::SetBool(const std::string& key, bool value) {
-  (*val_)[key.c_str()].SetBool(value);
+  rapidjson::Value key_value(rapidjson::StringRef(key.c_str()), doc_->GetAllocator());
+  rapidjson::Value bool_value;
+  bool_value.SetBool(value);
+  val_->AddMember(key_value, bool_value, doc_->GetAllocator());
 }
 
 void Json::SetObject(const std::string& key, const Json& object) {
-  (*val_)[key.c_str()].CopyFrom(*object.val_, doc_->GetAllocator());
+  rapidjson::Value key_value(rapidjson::StringRef(key.c_str()), doc_->GetAllocator());
+  rapidjson::Value object_value;
+  object_value.CopyFrom(*object.val_, doc_->GetAllocator());
+  val_->AddMember(key_value, object_value, doc_->GetAllocator());
 }
 
 void Json::SetArray(const std::string& key, const std::vector<Json>& array) {
+  rapidjson::Value key_value(rapidjson::StringRef(key.c_str()), doc_->GetAllocator());
   rapidjson::Value arr(rapidjson::kArrayType);
   for (const auto& item : array) {
     rapidjson::Value item_val;
     item_val.CopyFrom(*item.val_, doc_->GetAllocator());
     arr.PushBack(item_val, doc_->GetAllocator());
   }
-  (*val_)[key.c_str()].Swap(arr);
+  val_->AddMember(key_value, arr, doc_->GetAllocator());
 }
 
 void Json::AddStringToArray(const std::string& key, const std::string& value) {
-  rapidjson::Value strVal;
-  strVal.SetString(value.c_str(), doc_->GetAllocator());
-  (*val_)[key.c_str()].PushBack(strVal, doc_->GetAllocator());
+  rapidjson::Value str_value;
+  str_value.SetString(value.c_str(), doc_->GetAllocator());
+  (*val_)[key.c_str()].PushBack(str_value, doc_->GetAllocator());
 }
 
 void Json::AddIntToArray(const std::string& key, int64_t value) {

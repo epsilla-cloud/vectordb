@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(vectordb)
 
 set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
 
 # get build time
 MACRO(GET_CURRENT_TIME CURRENT_TIME)

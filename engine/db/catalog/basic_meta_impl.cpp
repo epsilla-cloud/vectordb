@@ -21,6 +21,7 @@ constexpr const char* AUTO_EMBEDDINGS = "auto_embeddings";
 constexpr const char* SRC_FIELD_ID = "src_field_id";
 constexpr const char* TGT_FIELD_ID = "tgt_field_id";
 constexpr const char* MODEL_NAME = "model_name";
+constexpr const char* IS_PRIMARY_KEY = "is_primary_key";
 constexpr const char* FIELD_TYPE = "field_type";
 constexpr const char* VECTOR_DIMENSION = "vector_dimension";
 constexpr const char* METRIC_TYPE = "metric_type";
@@ -31,6 +32,7 @@ constexpr const char* DB_CATALOG_FILE_NAME = "catalog";
 Status LoadFieldSchemaFromJson(const vectordb::Json& json, meta::FieldSchema& field_schema) {
   field_schema.id_ = json.GetInt(ID);
   field_schema.name_ = json.GetString(NAME);
+  field_schema.is_primary_key_ = json.GetBool(IS_PRIMARY_KEY);
   field_schema.field_type_ = static_cast<meta::FieldType>(json.GetInt(FIELD_TYPE));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
@@ -73,8 +75,10 @@ Status LoadTableSchemaFromJson(const vectordb::Json& json, meta::TableSchema& ta
 
 // Convert a FieldSchema to a Json object
 void DumpFieldSchemaToJson(const meta::FieldSchema& field_schema, vectordb::Json& json) {
+  json.LoadFromString("{}");
   json.SetInt(ID, field_schema.id_);
   json.SetString(NAME, field_schema.name_);
+  json.SetBool(IS_PRIMARY_KEY, field_schema.is_primary_key_);
   json.SetInt(FIELD_TYPE, static_cast<int>(field_schema.field_type_));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
@@ -86,10 +90,13 @@ void DumpFieldSchemaToJson(const meta::FieldSchema& field_schema, vectordb::Json
 
 // Convert a TableSchema to a Json object
 void DumpTableSchemaToJson(const meta::TableSchema& table_schema, vectordb::Json& json) {
+  json.LoadFromString("{}");
   json.SetInt(ID, table_schema.id_);
   json.SetString(NAME, table_schema.name_);
 
   // Dump fields
+  std::vector<vectordb::Json> empty_array;
+  json.SetArray(FIELDS, empty_array);
   for (const auto& field_schema : table_schema.fields_) {
     vectordb::Json field_json;
     DumpFieldSchemaToJson(field_schema, field_json);
@@ -98,8 +105,11 @@ void DumpTableSchemaToJson(const meta::TableSchema& table_schema, vectordb::Json
 
   // Dump auto_embeddings
   if (!table_schema.auto_embeddings_.empty()) {
+    std::vector<vectordb::Json> empty_array;
+    json.SetArray(AUTO_EMBEDDINGS, empty_array);
     for (const auto& auto_embedding : table_schema.auto_embeddings_) {
       vectordb::Json auto_embedding_json;
+      auto_embedding_json.LoadFromString("{}");
       auto_embedding_json.SetInt(SRC_FIELD_ID, auto_embedding.src_field_id_);
       auto_embedding_json.SetInt(TGT_FIELD_ID, auto_embedding.tgt_field_id_);
       auto_embedding_json.SetString(MODEL_NAME, auto_embedding.model_name_);
@@ -110,8 +120,14 @@ void DumpTableSchemaToJson(const meta::TableSchema& table_schema, vectordb::Json
 
 // Convert a DatabaseSchema to a Json object
 void DumpDatabaseSchemaToJson(const DatabaseSchema& db_schema, vectordb::Json& json) {
+  json.LoadFromString("{}");
   json.SetInt("id", db_schema.id_);
   // json.AddString("name", db_schema.name_);
+  
+  // Initialize an empty array for tables
+  std::vector<vectordb::Json> empty_array;
+  json.SetArray(TABLES, empty_array);
+
   // Dump tables
   for (const auto& table_schema : db_schema.tables_) {
     vectordb::Json table_json;
@@ -121,6 +137,11 @@ void DumpDatabaseSchemaToJson(const DatabaseSchema& db_schema, vectordb::Json& j
 }
 
 Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
+  // Skip the default database
+  if (db.name_ == DEFAULT_DB_NAME) {
+    return Status::OK();
+  }
+
   // Convert the DatabaseSchema to a Json object
   vectordb::Json json;
   DumpDatabaseSchemaToJson(db, json);
@@ -149,7 +170,7 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
 
   DatabaseSchema db_schema;
   if (server::CommonUtil::IsFileExist(db_catalog_path)) {
-    std::string json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path);
+    std::string json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path + "/" + DB_CATALOG_FILE_NAME);
     Json json;
     if (!json.LoadFromString(json_content)) {
       return Status(DB_UNEXPECTED_ERROR, "Failed to parse database catalog file: " + db_catalog_path);

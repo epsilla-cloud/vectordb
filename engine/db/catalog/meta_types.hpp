@@ -43,6 +43,7 @@ enum class MetricType {
 struct FieldSchema {
   size_t id_ = 0;
   std::string name_;
+  bool is_primary_key_ = false;
   FieldType field_type_ = FieldType::INT4;
   int32_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
   MetricType metric_type_ = MetricType::EUCLIDEAN;

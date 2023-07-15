@@ -41,3 +41,47 @@ class BasicMetaImpl : public Meta {
 }  // namespace meta
 }  // namespace engine
 }  // namespace vectordb
+
+/**
+ *
+  // Test catalog
+  vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
+  std::string db_name = "test_db";
+  std::string db_catalog_path = "/tmp/epsilla-01/";
+  meta->LoadDatabase(db_catalog_path, db_name);
+  meta->DropTable(db_name, "test_table_2");
+  vectordb::engine::meta::TableSchema table_schema;
+  table_schema.name_ = "test_table_2";
+  vectordb::engine::meta::FieldSchema id_field;
+  id_field.name_ = "id";
+  id_field.is_primary_key_ = true;
+  id_field.field_type_ = vectordb::engine::meta::FieldType::INT4;
+  table_schema.fields_.push_back(id_field);
+  vectordb::engine::meta::FieldSchema doc_field;
+  doc_field.name_ = "doc";
+  doc_field.field_type_ = vectordb::engine::meta::FieldType::STRING;
+  table_schema.fields_.push_back(doc_field);
+  vectordb::engine::meta::FieldSchema vec_field;
+  vec_field.name_ = "vec1";
+  vec_field.field_type_ = vectordb::engine::meta::FieldType::VECTOR_FLOAT;
+  vec_field.vector_dimension_ = 768;
+  table_schema.fields_.push_back(vec_field);
+  vectordb::engine::meta::FieldSchema vec2_field;
+  vec2_field.name_ = "vec1";
+  vec2_field.field_type_ = vectordb::engine::meta::FieldType::VECTOR_DOUBLE;
+  vec2_field.vector_dimension_ = 768;
+  vec2_field.metric_type_ = vectordb::engine::meta::MetricType::COSINE;
+  table_schema.fields_.push_back(vec2_field);
+  vectordb::engine::meta::AutoEmbedding auto_embed;
+  auto_embed.src_field_id_ = 2;
+  auto_embed.tgt_field_id_ = 3;
+  auto_embed.model_name_ = "sentence-transformers/paraphrase-albert-small-v2";
+  table_schema.auto_embeddings_.push_back(auto_embed);
+  table_schema.auto_embeddings_.push_back({2, 4, "sentence-transformers/paraphrase-albert-small-v1"});
+  
+  auto status2 = meta->CreateTable(db_name, table_schema);
+  if (!status2.ok()) {
+    std::cout << status2.message() << std::endl;
+  }
+ 
+*/
