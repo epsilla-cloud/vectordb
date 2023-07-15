@@ -7,6 +7,8 @@
 #include "utils/status.hpp"
 #include "db/catalog/meta.hpp"
 
+#include "db/catalog/basic_meta_impl.hpp"
+
 #include "utils/json.hpp"
 
 void print_help(const std::string &app_name) {
@@ -27,7 +29,6 @@ void print_banner() {
 
 int main(int argc, char *argv[]) {
   print_banner();
-
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
