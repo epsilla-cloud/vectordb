@@ -6,6 +6,7 @@
 
 #include "utils/read_write_lock.hpp"
 
+namespace vectordb {
 template <typename KeyType, typename ValueType>
 class ConcurrentHashMap {
  private:
@@ -38,3 +39,4 @@ class ConcurrentHashMap {
     }
   }
 };
+}  // namespace vectordb

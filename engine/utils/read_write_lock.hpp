@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <mutex>
 
+namespace vectordb {
 class ReadWriteLock {
  private:
   std::mutex mtx_;
@@ -16,3 +17,4 @@ class ReadWriteLock {
   void LockWrite();
   void UnlockWrite();
 };
+}  // namespace vectordb

@@ -1,5 +1,6 @@
 #include "utils/read_write_lock.hpp"
 
+namespace vectordb {
 void ReadWriteLock::LockRead() {
   std::unique_lock<std::mutex> lock(mtx_);
   cv_.wait(lock, [this] { return !writer_; });
@@ -24,3 +25,4 @@ void ReadWriteLock::UnlockWrite() {
   writer_ = false;
   cv_.notify_all();
 }
+} // namespace vectordb
