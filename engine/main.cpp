@@ -8,6 +8,10 @@
 #include "db/catalog/meta.hpp"
 
 #include "db/catalog/basic_meta_impl.hpp"
+#include "db/index/space_l2.hpp"
+#include "db/index/space_ip.hpp"
+#include "db/index/space_cosine.hpp"
+
 
 #include "utils/json.hpp"
 
