@@ -8,8 +8,17 @@
 #include "db/catalog/meta.hpp"
 
 #include "db/catalog/basic_meta_impl.hpp"
+#include "db/index/space_l2.hpp"
+#include "db/index/space_ip.hpp"
+#include "db/index/space_cosine.hpp"
+#include "db/table_segment.hpp"
+#include "db/table.hpp"
+#include "db/db.hpp"
+#include "db/ann_graph_segment.hpp"
 
 #include "utils/json.hpp"
+#include "utils/concurrent_hashmap.hpp"
+#include "utils/concurrent_bitset.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
