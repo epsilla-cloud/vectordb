@@ -11,6 +11,7 @@
 #include "db/index/space_l2.hpp"
 #include "db/index/space_ip.hpp"
 #include "db/index/space_cosine.hpp"
+#include "db/table_segment.hpp"
 
 
 #include "utils/json.hpp"
