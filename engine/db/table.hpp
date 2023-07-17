@@ -6,6 +6,7 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/table_segment.hpp"
+#include "db/ann_graph_segment.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
@@ -24,12 +25,16 @@ class Table {
   Status Load(std::string& db_catalog_path);
 
  private:
-  AtomicCounter next_record_id_;                // The next record's internal id.
-  AtomicCounter commited_record_id;             // The max record id that is ready to be used by queries.
-  std::shared_ptr<TableSegment> disk_segment_;  // The table segment loaded/synced from disk.
-  TableSegment in_memory_segments_[1024];       // The in-memory table segments. For now we support up to 1 billion vectors per table
-                                                // In the future we can use horizontal partitioning to support more vectors.
-                                                // But it will be beyond this service's scope.
+  AtomicCounter next_record_id_;                        // The next record's internal id.
+  AtomicCounter commited_record_id;                     // The max record id that is ready to be used by queries.
+  std::shared_ptr<TableSegment> disk_segment_;          // The table segment loaded/synced from disk.
+  TableSegment in_memory_table_segments_[1024];         // The in-memory table segments. For now we support up to 1 billion vectors per table
+                                                        // In the future we can use horizontal partitioning to support more vectors.
+                                                        // But it will be beyond this service's scope.
+  std::shared_ptr<ANNGraphSegment> ann_graph_segment_;  // The ann graph segment loaded/synced from disk.
+  ANNGraphSegment in_memory_ann_graph_segments_[1024];  // The in-memory ann graph segments. For now we support up to 1 billion vectors per table
+                                                        // In the future we can use horizontal partitioning to support more vectors.
+                                                        // But it will be beyond this service's scope.
 };
 
 }  // namespace engine

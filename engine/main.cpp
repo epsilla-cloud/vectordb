@@ -14,6 +14,7 @@
 #include "db/table_segment.hpp"
 #include "db/table.hpp"
 #include "db/db.hpp"
+#include "db/ann_graph_segment.hpp"
 
 #include "utils/json.hpp"
 #include "utils/concurrent_hashmap.hpp"

@@ -26,6 +26,7 @@ class TableSegment {
  private:
   bool from_disk_;                                              // Whether the table segment is loaded from disk (or synced with disk during rebuild)
   size_t size_limit_;                                           // The maximum size of the segment. Default 2^20.
+  size_t first_record_id_;                                      // The internal record id of the first record in the segment.
   std::atomic<size_t> record_number_;                           // Currently how many records in the segment.
   std::unordered_map<size_t, size_t> field_id_mem_offset_map_;  // The offset of each attribute in attribute table.
                                                                 // Constructed from schema.
