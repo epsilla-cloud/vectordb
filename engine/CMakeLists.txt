@@ -31,6 +31,9 @@ file(GLOB UTILS_FILES "db/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/catalog/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
+file(GLOB UTILS_FILES "db/index/*.cpp")
+list(APPEND SOURCE_FILES ${UTILS_FILES})
+
 
 add_executable(vectordb ${SOURCE_FILES})
 
