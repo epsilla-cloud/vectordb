@@ -7,12 +7,15 @@
 #include "db/catalog/meta.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
+#include "utils/status.hpp"
 
 namespace vectordb {
 namespace engine {
 
 class TableSegment {
  public:
+  // Default constructor just for table level init.
+  explicit TableSegment();
   // Load segment from disk.
   explicit TableSegment(meta::TableSchema& table_schema, std::string& db_catalog_path);
   // Create an in-memory segment.

@@ -12,7 +12,8 @@
 #include "db/index/space_ip.hpp"
 #include "db/index/space_cosine.hpp"
 #include "db/table_segment.hpp"
-
+#include "db/table.hpp"
+#include "db/db.hpp"
 
 #include "utils/json.hpp"
 #include "utils/concurrent_hashmap.hpp"
