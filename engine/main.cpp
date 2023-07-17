@@ -19,6 +19,7 @@
 #include "utils/json.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/concurrent_bitset.hpp"
+#include "utils/concurrent_queue.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
