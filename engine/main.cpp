@@ -7,7 +7,19 @@
 #include "utils/status.hpp"
 #include "db/catalog/meta.hpp"
 
+#include "db/catalog/basic_meta_impl.hpp"
+#include "db/index/space_l2.hpp"
+#include "db/index/space_ip.hpp"
+#include "db/index/space_cosine.hpp"
+#include "db/table_segment.hpp"
+#include "db/table.hpp"
+#include "db/db.hpp"
+#include "db/ann_graph_segment.hpp"
+
 #include "utils/json.hpp"
+#include "utils/concurrent_hashmap.hpp"
+#include "utils/concurrent_bitset.hpp"
+#include "utils/concurrent_queue.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
@@ -27,7 +39,6 @@ void print_banner() {
 
 int main(int argc, char *argv[]) {
   print_banner();
-
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
