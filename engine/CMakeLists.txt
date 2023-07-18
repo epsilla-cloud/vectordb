@@ -44,3 +44,8 @@ add_executable(vectordb ${SOURCE_FILES})
 # )
 
 # add_executable(vectordb ${SOURCE_FILES})
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(vectordb PUBLIC OpenMP::OpenMP_CXX)
+endif()

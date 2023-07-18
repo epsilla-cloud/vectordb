@@ -21,6 +21,8 @@
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_queue.hpp"
 
+#include <omp.h>
+
 void print_help(const std::string &app_name) {
   std::cout << std::endl
             << "Usage: " << app_name << " [OPTIONS]" << std::endl
