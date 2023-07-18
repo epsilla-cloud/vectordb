@@ -8,8 +8,6 @@
 
 #include "db/index/nsg/distance.hpp"
 #include "db/index/nsg/neighbor.hpp"
-// #include "knowhere/common/Config.h"
-
 #include "utils/concurrent_bitset.hpp"
 
 namespace vectordb {
@@ -72,18 +70,14 @@ class NsgIndex {
 
   virtual ~NsgIndex();
 
-  void
-  SetKnnGraph(Graph& knng);
+  void SetKnnGraph(Graph& knng);
 
-  virtual void
-  Build(size_t nb, const float* data, const int64_t* ids, const BuildParams& parameters);
+  virtual void Build(size_t nb, const float* data, const int64_t* ids, const BuildParams& parameters);
 
-  void
-  Search(const float* query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist, int64_t* ids,
-         SearchParams& params, ConcurrentBitsetPtr bitset = nullptr);
+  void Search(const float* query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist, int64_t* ids,
+              SearchParams& params, ConcurrentBitsetPtr bitset = nullptr);
 
-  int64_t
-  GetSize();
+  int64_t GetSize();
 
   // Not support yet.
   // virtual void Add() = 0;
@@ -99,46 +93,35 @@ class NsgIndex {
   //                   const BuildParam &parameters);
 
  protected:
-  virtual void
-  InitNavigationPoint();
+  virtual void InitNavigationPoint();
 
   // link specify
-  void
-  GetNeighbors(const float* query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
-               boost::dynamic_bitset<>& has_calculated_dist);
+  void GetNeighbors(const float* query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
+                    boost::dynamic_bitset<>& has_calculated_dist);
 
   // FindUnconnectedNode
-  void
-  GetNeighbors(const float* query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset);
+  void GetNeighbors(const float* query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset);
 
   // navigation-point
-  void
-  GetNeighbors(const float* query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* param = nullptr);
+  void GetNeighbors(const float* query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* param = nullptr);
 
   // only for search
   // void
   // GetNeighbors(const float* query, node_t* I, float* D, SearchParams* params);
 
-  void
-  Link();
+  void Link();
 
-  void
-  SyncPrune(size_t q, std::vector<Neighbor>& pool, boost::dynamic_bitset<>& has_calculated, float* cut_graph_dist);
+  void SyncPrune(size_t q, std::vector<Neighbor>& pool, boost::dynamic_bitset<>& has_calculated, float* cut_graph_dist);
 
-  void
-  SelectEdge(unsigned& cursor, std::vector<Neighbor>& sort_pool, std::vector<Neighbor>& result, bool limit = false);
+  void SelectEdge(unsigned& cursor, std::vector<Neighbor>& sort_pool, std::vector<Neighbor>& result, bool limit = false);
 
-  void
-  InterInsert(unsigned n, std::vector<std::mutex>& mutex_vec, float* dist);
+  void InterInsert(unsigned n, std::vector<std::mutex>& mutex_vec, float* dist);
 
-  void
-  CheckConnectivity();
+  void CheckConnectivity();
 
-  void
-  DFS(size_t root, boost::dynamic_bitset<>& flags, int64_t& count);
+  void DFS(size_t root, boost::dynamic_bitset<>& flags, int64_t& count);
 
-  void
-  FindUnconnectedNode(boost::dynamic_bitset<>& flags, int64_t& root);
+  void FindUnconnectedNode(boost::dynamic_bitset<>& flags, int64_t& root);
 };
 
 }  // namespace index
