@@ -28,6 +28,9 @@ constexpr ErrorCode INFRA_UNSUPPORTED_ERROR = ToInfraErrorCode(2);
 // db error code
 constexpr ErrorCode DB_UNEXPECTED_ERROR = ToDbErrorCode(1);
 constexpr ErrorCode DB_UNSUPPORTED_ERROR = ToDbErrorCode(2);
+constexpr ErrorCode DB_NOT_FOUND = ToDbErrorCode(3);
+constexpr ErrorCode TABLE_ALREADY_EXISTS = ToDbErrorCode(4);
+constexpr ErrorCode TABLE_NOT_FOUND = ToDbErrorCode(5);
 
 namespace server {
 
