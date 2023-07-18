@@ -3,19 +3,20 @@
 #include <oatpp/core/Types.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 
+#include "db/catalog/meta.hpp"
+
 namespace verctordb {
 namespace server {
 namespace web {
 
 #include OATPP_CODEGEN_BEGIN(DTO)
 
-class LoadDBDto : public oatpp::DTO {
-    DTO_INIT(LoadDBDto, DTO)
+class SchemaInfoDto: public oatpp::DTO {
+    DTO_INIT(SchemaInfoDto, DTO)
 
     DTO_FIELD(Int32, statusCode);
     DTO_FIELD(String, message);
-    // DTO_FIELD(String, path);
-    // DTO_FIELD(String, db_name);
+    // DTO_FIELD(Object<vectordb::engine::meta::TableSchema>, schema);
 };
 
 // class CollectionFieldsDto : public oatpp::data::mapping::type::Object {
