@@ -1,6 +1,11 @@
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <string>
+
 #include "server/web_server/utils/util.hpp"
 #include "db/catalog/meta.hpp"
-#include <iostream>
+
 namespace vectordb {
 namespace server {
 namespace web {
@@ -48,6 +53,21 @@ namespace web {
     }
 
     return vectordb::engine::meta::MetricType::EUCLIDEAN;
+  }
+
+  std::string WebUtil::JoinStrs(const std::vector<std::string>& strings, const std::string& delimiter) {
+      std::ostringstream oss;
+      bool first = true;
+
+      for (const auto& str : strings) {
+          if (!first) {
+              oss << delimiter;
+          }
+          oss << str;
+          first = false;
+      }
+
+      return oss.str();
   }
 } // namespace web
 } // namespace server
