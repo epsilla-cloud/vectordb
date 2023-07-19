@@ -131,13 +131,12 @@ class NNDescent {
           cc += update(j, k);
         }
       }
-
     }
 
     cost += cc;
 
     int t = 0;
-    #pragma omp parallel for default(shared) reduction(+:t)
+#pragma omp parallel for default(shared) reduction(+ : t)
     for (int i = 0; i < N; ++i) {
       nn_old[i].clear();
       nn_new[i].clear();
@@ -177,7 +176,7 @@ class NNDescent {
       }
     }
 
-    #pragma omp parallel for default(shared) reduction(+:t)
+#pragma omp parallel for default(shared) reduction(+ : t)
     for (int i = 0; i < N; ++i) {
       if (rnn_old[i].size() > unsigned(S)) {
         random_shuffle(rnn_old[i].begin(), rnn_old[i].end());

@@ -27,16 +27,19 @@ NsgIndex::NsgIndex(const size_t& dimension, const size_t& n, Metric_Type metric)
 }
 
 NsgIndex::~NsgIndex() {
-  delete[] ori_data_;
+  // delete[] ori_data_;
   delete[] ids_;
   delete distance_;
 }
 
-void NsgIndex::Build(size_t nb, const float* data, const int64_t* ids, const BuildParams& parameters) {
+size_t NsgIndex::Build(size_t nb, float* data, const int64_t* ids, const BuildParams& parameters) {
+  std::cout << "Start build" << std::endl;
   ntotal = nb;
-  ori_data_ = new float[ntotal * dimension];
+  // ori_data_ = new float[ntotal * dimension];
   ids_ = new int64_t[ntotal];
-  memcpy((void*)ori_data_, (void*)data, sizeof(float) * ntotal * dimension);
+  // TODO: Check if need to use memcpy
+  ori_data_ = data;
+  // memcpy((void*)ori_data_, (void*)data, sizeof(float) * ntotal * dimension);
   if (ids == nullptr) {
     for (size_t i = 0; i < nb; i++) {
       ids_[i] = i;
@@ -49,23 +52,29 @@ void NsgIndex::Build(size_t nb, const float* data, const int64_t* ids, const Bui
   out_degree = parameters.out_degree;
   candidate_pool_size = parameters.candidate_pool_size;
 
+  std::cout << "Init navigation" << std::endl;
+
   // TimeRecorder rc("NSG", 1);
   InitNavigationPoint();
   // rc.RecordSection("init");
 
+  std::cout << "Link" << std::endl;
   Link();
   // rc.RecordSection("Link");
 
+  std::cout << "Check connectivity" << std::endl;
   CheckConnectivity();
   // rc.RecordSection("Connect");
   // rc.ElapseFromBegin("finish");
 
   is_trained = true;
 
-  int total_degree = 0;
+  size_t total_degree = 0;
   for (size_t i = 0; i < ntotal; ++i) {
     total_degree += nsg[i].size();
   }
+
+  return total_degree;
   // LOG_DEBUG_ << "Graph physical size: " << total_degree * sizeof(node_t) / 1024 / 1024 << "m";
   // LOG_DEBUG_ << "Average degree: " << total_degree / ntotal;
 

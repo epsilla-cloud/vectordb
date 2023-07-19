@@ -72,7 +72,7 @@ class NsgIndex {
 
   void SetKnnGraph(Graph& knng);
 
-  virtual void Build(size_t nb, const float* data, const int64_t* ids, const BuildParams& parameters);
+  size_t Build(size_t nb, float* data, const int64_t* ids, const BuildParams& parameters);
 
   void Search(const float* query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist, int64_t* ids,
               SearchParams& params, ConcurrentBitsetPtr bitset = nullptr);

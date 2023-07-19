@@ -45,23 +45,6 @@ void print_banner() {
 int main(int argc, char *argv[]) {
   print_banner();
 
-  int x = 5000, y = 5000;
-  int n = x * y;
-  int dim = 16;
-  float* data = new float[n * dim];
-  for (int i = 0; i < x; i++) {
-    for (int j = 0; j < y; ++j) {
-      int k = i * y + j;
-      data[k * dim] = i;
-      data[k * dim + 1] = j;
-      for (int p = 2; p < dim; ++p) {
-        data[k * dim + p] = 0;
-      }
-    }
-  }
-  std::cout << "here" << std::endl;
-  vectordb::engine::index::KNNGraph graph(n, dim, 4, data);
-
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
                                          {nullptr, 0, nullptr, 0}};
