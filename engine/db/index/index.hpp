@@ -24,6 +24,8 @@ class SpaceInterface {
     }
 };
 
+
+
 }  // namespace vectordb
 
 /**
