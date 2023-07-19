@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 #include "db/index/platform_macros.hpp"
 #include "db/index/simdlib.hpp"

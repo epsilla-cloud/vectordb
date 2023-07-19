@@ -21,6 +21,11 @@
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_queue.hpp"
 
+#include "db/index/nsg/nsg.hpp"
+#include "db/index/knn/knn.hpp"
+
+#include <omp.h>
+
 void print_help(const std::string &app_name) {
   std::cout << std::endl
             << "Usage: " << app_name << " [OPTIONS]" << std::endl
