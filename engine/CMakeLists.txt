@@ -4,7 +4,13 @@ project(vectordb)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
 
-# Get build time
+# Find Boost
+find_package(Boost REQUIRED)
+
+# Include Boost headers
+include_directories(${Boost_INCLUDE_DIRS})
+
+# get build time
 MACRO(GET_CURRENT_TIME CURRENT_TIME)
     execute_process(COMMAND "date" +"%Y-%m-%d %H:%M.%S" OUTPUT_VARIABLE ${CURRENT_TIME})
 ENDMACRO(GET_CURRENT_TIME)
@@ -33,6 +39,8 @@ file(GLOB UTILS_FILES "db/catalog/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/index/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
+file(GLOB UTILS_FILES "db/index/nsg/*.cpp")
+list(APPEND SOURCE_FILES ${UTILS_FILES})
 
 # Add source files in sub dir db_server
 file(GLOB_RECURSE DB_SERVER_FILES "server/db_server/*")
@@ -58,3 +66,11 @@ target_link_libraries(vectordb PUBLIC oatpp::oatpp)
 # )
 
 # add_executable(vectordb ${SOURCE_FILES})
+
+# Link Boost libraries
+target_link_libraries(vectordb ${Boost_LIBRARIES})
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(vectordb PUBLIC OpenMP::OpenMP_CXX)
+endif()
