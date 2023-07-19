@@ -97,6 +97,6 @@ int main(int argc, char *argv[]) {
   return EXIT_SUCCESS;
 
 FAIL:
-  std::cout << "Epsilla server exit..." << std::endl;
+  std::cout << "Epsilla Vector Database server exit..." << std::endl;
   return EXIT_FAILURE;
 }
