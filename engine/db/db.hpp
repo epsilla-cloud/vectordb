@@ -39,7 +39,7 @@ class DB {
 };
 
 
-using DBPtr = std::shared_ptr<DB>;
+using db_ptr = std::shared_ptr<DB>;
 
 
 //
