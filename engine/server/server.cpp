@@ -1,5 +1,7 @@
 
 #include "server/server.hpp"
+#include "server/web_server/web_server.hpp"
+#include "server/db_server/db_server.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -38,6 +40,8 @@ Status Server::LoadConfig() {
 }
 
 Status Server::StartService() {
+  web::WebServer::GetInstance().Start();
+  db::DBServer::GetInstance().Start();
   return Status::OK();
 }
 
