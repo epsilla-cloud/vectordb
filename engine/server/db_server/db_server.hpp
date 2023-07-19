@@ -10,7 +10,7 @@ namespace db {
 
 class DBServer {
 private:
-  engine::DBPtr db_;
+  engine::db_ptr db_ptr_;
 
 private:
   DBServer() = default;
