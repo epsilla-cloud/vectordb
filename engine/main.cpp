@@ -24,6 +24,8 @@
 #include "db/index/nsg/nsg.hpp"
 #include "db/index/knn/knn.hpp"
 
+#include "db/execution/vec_search_executor.hpp"
+
 #include <omp.h>
 
 void print_help(const std::string &app_name) {
