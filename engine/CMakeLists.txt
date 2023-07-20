@@ -88,7 +88,9 @@ set_target_properties(pybinding PROPERTIES
 target_link_libraries(pybinding PUBLIC vectordb_dylib)
 target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})
 
-
+# Add source files in the query directory
+file(GLOB QUERY_FILES "query/*.cpp")
+list(APPEND SOURCE_FILES ${QUERY_FILES})
 
 
 if(APPLE)
