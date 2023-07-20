@@ -1,5 +1,5 @@
 //#include <omp.h>
-#include </opt/homebrew/Cellar/libomp/16.0.6/include/omp.h>
+#include <omp.h>
 #include "server/db_server/db_server.hpp"
 
 namespace vectordb {
