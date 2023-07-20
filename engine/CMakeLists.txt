@@ -70,6 +70,11 @@ target_link_libraries(vectordb PUBLIC oatpp::oatpp)
 # Link Boost libraries
 target_link_libraries(vectordb ${Boost_LIBRARIES})
 
+if(APPLE)
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/Cellar/libomp/16.0.6/include")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY "/opt/homebrew/Cellar/libomp/16.0.6/lib/libomp.dylib")
+endif()
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(vectordb PUBLIC OpenMP::OpenMP_CXX)
