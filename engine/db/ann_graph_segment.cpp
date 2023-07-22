@@ -21,7 +21,7 @@ struct NSGConfig {
 };
 
 // Recommended default: 45, 50, 300, 100
-const NSGConfig Default_NSG_Config(45, 16, 60, 16);
+const NSGConfig Default_NSG_Config(45, 50, 300, 100);
 
 ANNGraphSegment::ANNGraphSegment()
     : synced_with_disk_(false),
@@ -89,6 +89,7 @@ void ANNGraphSegment::BuildFromVectorTable(float* vector_table, size_t n, size_t
     offset += knn.size();
   }
   offset_table_[n] = offset;
+  navigation_point_ = index_->navigation_point;
 }
 
 void ANNGraphSegment::Debug() {
