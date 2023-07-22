@@ -37,6 +37,7 @@ class OracleL2 {
 };
 
 float OracleL2::operator()(int p, int q) const {
+  // std::cout << fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_) << " ";
   return fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_);
 }
 }  // namespace
