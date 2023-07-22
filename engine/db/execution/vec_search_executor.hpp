@@ -113,7 +113,7 @@ class VecSearchExecutor {
       const int64_t cand_id,
       const float* query_data,
       const float& dist_bound,
-      float& dist_thresh,
+      // float& dist_thresh,
       std::vector<Candidate>& set_L,
       const int64_t local_queue_start,
       int64_t& local_queue_size,
@@ -175,3 +175,75 @@ class VecSearchExecutor {
 }  // namespace execution
 }  // namespace engine
 }  // namespace vectordb
+
+
+/**
+ * 
+
+  std::srand(std::time(nullptr));
+  int x = 100, y = 100;
+  int n = x * y;
+  int dim = 1536;
+  float *data = new float[n * dim];
+  for (int i = 0; i < n; i++) {
+    for (int p = 0; p < dim; ++p) {
+      data[i * dim + p] = static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX);
+    }
+  }
+  std::cout << "here" << std::endl;
+  // vectordb::engine::index::Graph knng(n);
+  // vectordb::engine::index::KNNGraph graph(n, dim, 100, data, knng);
+
+  auto ann_graph_segment = std::make_shared<vectordb::engine::ANNGraphSegment>();
+  ann_graph_segment->BuildFromVectorTable(data, n, dim);
+  // ann_graph_segment->Debug();
+  std::cout << ann_graph_segment->navigation_point_ << std::endl;
+
+  auto space_ = new vectordb::L2Space(dim);
+  auto fstdistfunc_ = space_->get_dist_func();
+  auto dist_func_param_ = space_->get_dist_func_param();
+
+  omp_set_max_active_levels(2);
+  omp_set_num_threads(4);
+  std::cout << "start query" << std::endl;
+  float *query = new float[dim];
+  for (int p = 0; p < dim; ++p) {
+    query[p] = static_cast<double>(std::rand()) / static_cast<double>(RAND_MAX);
+    // std::cout << query[p] << " ";
+  }
+// #pragma omp parallel
+  {
+    auto executor = std::make_shared<vectordb::engine::execution::VecSearchExecutor>(
+        n, dim,
+        ann_graph_segment->navigation_point_,
+        ann_graph_segment->offset_table_,
+        ann_graph_segment->neighbor_list_,
+        data,
+        fstdistfunc_, dist_func_param_,
+        4, 500, 500, 15);
+    executor->brute_force_queue_.resize(10000000);
+
+    int K = 10;
+    for (auto i = 0; i < 100000000; i++) {
+      // std::cout << std::endl;
+      // std::cout << "Query" << std::endl;
+      // for (int j = 0; j < dim; ++j) {
+      //   std::cout << query[j] << " ";
+      // }
+      // std::cout << std::endl;
+      // std::cout << "Compare" << std::endl;
+      // executor->brute_force_search_ = false;
+      executor->Search(query, K);
+      // for (int j = 0; j < K; ++j) {
+      //   std::cout << executor->search_result_[j] << " ";
+      // }
+      // std::cout << std::endl;
+      // executor->brute_force_search_ = true;
+      // executor->Search(query, K);
+      // for (int j = 0; j < K; ++j) {
+      //   std::cout << executor->search_result_[j] << " ";
+      // }
+      // std::cout << std::endl;
+    }
+  }
+*/

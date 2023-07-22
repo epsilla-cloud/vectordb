@@ -378,7 +378,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
     const int64_t cand_id,
     const float *query_data,
     const float &dist_bound,
-    float &dist_thresh,
+    // float &dist_thresh,
     std::vector<Candidate> &set_L,
     const int64_t local_queue_start,
     int64_t &local_queue_size,
@@ -400,7 +400,8 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 
     ++tmp_count_computation;
     float dist = fstdistfunc_(vector_table_ + dimension_ * nb_id, query_data, dist_func_param_);
-    if (dist > dist_bound || dist > dist_thresh) {
+    if (dist > dist_bound) {
+    // if (dist > dist_bound || dist > dist_thresh) {
       continue;
     }
     Candidate cand(nb_id, dist, false);
@@ -527,7 +528,7 @@ void VecSearchExecutor::SearchImpl(
           no_need_to_continue = true;
           break;
         }
-        float dist_thresh = last_dist;
+        // float dist_thresh = last_dist;
         auto &cand = set_L[master_queue_start + k_master];
         if (!cand.is_checked_) {
           cand.is_checked_ = true;
@@ -537,7 +538,7 @@ void VecSearchExecutor::SearchImpl(
               cand_id,
               query_data,
               last_dist,
-              dist_thresh,
+              // dist_thresh,
               set_L,
               master_queue_start,
               master_queue_size,
@@ -602,7 +603,7 @@ void VecSearchExecutor::SearchImpl(
                 cand_id,
                 query_data,
                 last_dist,
-                dist_thresh,
+                // dist_thresh,
                 set_L,
                 local_queue_start,
                 local_queue_size,
@@ -667,6 +668,10 @@ void VecSearchExecutor::SearchImpl(
   for (int64_t k_i = 0; k_i < K; ++k_i) {
     set_K[k_i] = set_L[k_i + master_queue_start].id_;
   }
+  // for (int64_t k_i = 0; k_i < K; ++k_i) {
+  //   std::cout << set_L[k_i + master_queue_start].distance_ << " " << std::endl;
+  // }
+  // std::cout << std::endl;
 
   {  // Reset
     is_visited.reset();
@@ -691,7 +696,9 @@ bool VecSearchExecutor::Search(const float *query_data, const int64_t K) {
     // TODO: exclude deleted and not passing filter records.
     for (int64_t k_i = 0; k_i < K; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
+      // std::cout << brute_force_queue_[k_i].distance_ << " " << std::endl;
     }
+    // std::cout << std::endl;
   } else {
     SearchImpl(
         query_data,
