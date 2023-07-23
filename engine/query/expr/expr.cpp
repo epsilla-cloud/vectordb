@@ -20,20 +20,75 @@ namespace expr {
     Operator,
   };
 
-  std::vector<char> char_arith_operator = {'+', '-', '*', '/', '%'};
-  std::vector<char> char_compare_operator = {'>', '<', '='};
-
-  bool checkCharExists(std::vector<char> arr, char c) {
-    auto it = std::find(arr.begin(), arr.end(), c);
-    return it != arr.end();
+  bool isArithChar(char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%';
   };
 
-  std::vector<std::string> str_arith_operator = {"+", "-", "*", "/", "%"};
-  std::vector<std::string> str_compare_operator = {">", "<", "="};
+  bool isCompareChar(char c) {
+    return c == '>' || c == '<' || c == '=';
+  };
 
-  bool checkStrExists(std::vector<std::string> arr, std::string str) {
-    auto it = std::find(arr.begin(), arr.end(), str);
-    return it != arr.end();
+  bool isArithStr(std::string str) {
+    return str == "+" || str == "-" || str == "*" || str == "/" || str == "%";
+  };
+
+  bool isCompareStr(std::string str) {
+    return str == "+" || str == "-" || str == "*" || str == "/" || str == "%";
+  };
+
+  bool isLogicalStr(std::string str) {
+    std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+        return std::toupper(c);
+    });
+    return str == "AND" || str == "OR" || str == "NOT";
+  }
+
+  bool isOperator(std::string str) {
+    return isArithStr(str) || isCompareStr(str) || isLogicalStr(str);
+  };
+
+  int getPrecedence(std::string& op) {
+    if (op == "+" || op == "-")
+      return 1;
+    else if (op == "*" || op == "/" || op == "%")
+      return 2;
+    else if (isCompareStr(op))
+      return 3;
+    else if (isLogicalStr(op))
+      return 4;
+    return 0;
+}
+
+  std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
+    std::vector<std::string> res;
+    std::stack<std::string> operatorStack;
+
+    for (std::string str : tokens) {
+      if (str == "(") {
+        operatorStack.push(str);
+      } else if (str == ")") {
+        while (!operatorStack.empty() && operatorStack.top() != "(") {
+          res.push_back(operatorStack.top());
+          operatorStack.pop();
+        }
+        operatorStack.pop(); // Pop the '('
+      } else if (isOperator(str)) {
+        while (!operatorStack.empty() && getPrecedence(operatorStack.top()) >= getPrecedence(str)) {
+          res.push_back(operatorStack.top());
+          operatorStack.pop();
+        }
+        operatorStack.push(str);
+      } else {
+        res.push_back(str);
+      }
+    }
+
+    while (!operatorStack.empty()) {
+        res.push_back(operatorStack.top());
+        operatorStack.pop();
+    }
+
+    return res;
   };
 
   ExprNodePtr Expr::ParseFromStr(std::string expression) {
@@ -56,11 +111,11 @@ namespace expr {
           } else if (std::isalpha(c) || c == '_') {
             cur_token += c;
             state = State::Attribute;
-          } else if (checkCharExists(char_arith_operator, c) || c == '(' || c == ')') {
+          } else if (isArithChar(c) || c == '(' || c == ')') {
             if (c == '-' && i != last_index && std::isdigit(expression[i + 1])) {
               if (!token_list.empty()) {
                 std::string ele = token_list.back();
-                if (!checkStrExists(str_arith_operator, ele) && ele != "(") {
+                if (!isArithStr(ele) && ele != "(") {
                   token_list.push_back(std::string(1, c));
                 } else {
                   cur_token += c;
@@ -73,8 +128,8 @@ namespace expr {
             } else {
               token_list.push_back(std::string(1, c));
             }
-          } else if (checkCharExists(char_compare_operator, c)) {
-            if (i != last_index && checkCharExists(char_compare_operator, expression[i + 1]) && expression[i + 1] == '=') {
+          } else if (isCompareChar(c)) {
+            if (i != last_index && isCompareChar(expression[i + 1]) && expression[i + 1] == '=') {
               cur_token += c;
               state = State::Operator;
             } else if (c != '=') {
@@ -91,15 +146,15 @@ namespace expr {
             token_list.push_back(cur_token);
             cur_token.clear();
             state = State::Start;
-          } else if (checkCharExists(char_arith_operator, c) || c == ')') {
+          } else if (isArithChar(c) || c == ')') {
             token_list.push_back(cur_token);
             cur_token.clear();
             token_list.push_back(std::string(1, c));
             state = State::Start;
-          } else if (checkCharExists(char_compare_operator, c)) {
+          } else if (isCompareChar(c)) {
             token_list.push_back(cur_token);
             cur_token.clear();
-            if (i != last_index && checkCharExists(char_compare_operator, expression[i + 1])) {
+            if (i != last_index && isCompareChar(expression[i + 1])) {
               cur_token += c;
               state = State::Operator;
             } else {
@@ -117,15 +172,15 @@ namespace expr {
             token_list.push_back(cur_token);
             cur_token.clear();
             state = State::Start;
-          } else if (checkCharExists(char_arith_operator, c) || c == ')') {
+          } else if (isArithChar(c) || c == ')') {
             token_list.push_back(cur_token);
             cur_token.clear();
             token_list.push_back(std::string(1, c));
             state = State::Start;
-          } else if (checkCharExists(char_compare_operator, c)) {
+          } else if (isCompareChar(c)) {
             token_list.push_back(cur_token);
             cur_token.clear();
-            if (i != last_index && checkCharExists(char_compare_operator, expression[i + 1])) {
+            if (i != last_index && isCompareChar(expression[i + 1])) {
               cur_token += c;
               state = State::Operator;
             } else {
@@ -160,36 +215,14 @@ namespace expr {
     }
     std::cout << expression + " transfer to: " + boost::algorithm::join(token_list, ", ") << std::endl;
 
+    std::vector<std::string> tokens_queue;
+    tokens_queue = ShuntingYard(token_list);
+    std::cout << "After SY: " + boost::algorithm::join(tokens_queue, ", ") << std::endl;
+
     ExprNodePtr node = std::make_shared<ExprNode>();
     node->op = LogicalOperator::AND;
     node->value.intValue = 12345;
     return node;
-  };
-
-  std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
-    std::vector<std::string> res;
-    std::stack<std::string> operatorStack;
-
-    for (std::string str : tokens) {
-      if (str == "(") {
-        operatorStack.push(str);
-      } else if (str == ")") {
-        while (!operatorStack.empty() && operatorStack.top() != "(") {
-            res.push_back(operatorStack.top());
-            operatorStack.pop();
-        }
-        operatorStack.pop(); // Pop the '('
-      }
-    }
-  };
-
-  bool isOperator(const std::string& str) {
-    if (
-      str == "+" || str == "-" || str == "*" || str == "/" || str == "%" ||
-      str == ">" || str == ">=" || str == "<" || str == "<=" || str == "=="
-    ) {
-      return true;
-    }
   };
 
 } // namespace expr
