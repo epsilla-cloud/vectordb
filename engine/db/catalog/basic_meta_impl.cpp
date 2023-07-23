@@ -4,6 +4,8 @@
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
 
+#include <iostream>
+
 namespace vectordb {
 namespace engine {
 namespace meta {
@@ -153,6 +155,17 @@ Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
   return server::CommonUtil::AtomicWriteToFile(file_path, json_string);
 }
 
+int64_t GetNewTableId(const DatabaseSchema& db) {
+  int64_t max_id = -1;
+  for (const auto& table : db.tables_) {
+    std::cout << table.id_ << " " << table.name_ << std::endl;
+    if (table.id_ > max_id) {
+      max_id = table.id_;
+    }
+  }
+  return max_id + 1;
+}
+
 }  // namespace
 
 BasicMetaImpl::BasicMetaImpl() {
@@ -257,6 +270,11 @@ Status BasicMetaImpl::CreateTable(std::string& db_name, TableSchema& table_schem
   // TODO: Validate the table schema.
 
   auto& db = databases_.find(db_name)->second;
+  
+  // TODO: a better way to assign table id.
+  table_schema.id_ = GetNewTableId(db);
+  std::cout << "table id: " << table_schema.id_ << std::endl;
+
   db.tables_.push_back(table_schema);
   // Flush the change of the database schema to disk.
   status = SaveDBToFile(db, db.path_ + "/" + DB_CATALOG_FILE_NAME);

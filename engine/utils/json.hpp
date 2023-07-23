@@ -27,6 +27,8 @@ class Json {
   Json GetObject(const std::string& key) const;                      // Get nested object
   size_t GetArraySize(const std::string& key) const;
   Json GetArrayElement(const std::string& key, size_t index) const;  // Get specific element from array
+  Json GetArray(const std::string& key) const;  // Get specific element from array
+  Json GetArrayElement(size_t index) const;  // Get specific element from array
   bool HasMember(const std::string& key) const;
 
   void SetString(const std::string& key, const std::string& value);

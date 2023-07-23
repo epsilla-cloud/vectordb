@@ -31,6 +31,7 @@ constexpr ErrorCode DB_UNSUPPORTED_ERROR = ToDbErrorCode(2);
 constexpr ErrorCode DB_NOT_FOUND = ToDbErrorCode(3);
 constexpr ErrorCode TABLE_ALREADY_EXISTS = ToDbErrorCode(4);
 constexpr ErrorCode TABLE_NOT_FOUND = ToDbErrorCode(5);
+constexpr ErrorCode INVALID_RECORD = ToDbErrorCode(6);
 
 namespace server {
 

@@ -116,6 +116,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         for (size_t i = 0; i < fields_size; i++) {
             auto body_field = parsedBody.GetArrayElement("fields", i);
             vectordb::engine::meta::FieldSchema field;
+            field.id_ = i;
             field.name_ = body_field.GetString("name");
             if (body_field.HasMember("primaryKey")) {
                 field.is_primary_key_ = body_field.GetBool("primaryKey");
@@ -149,6 +150,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         std::string name;
         vectordb::Status status = meta->CreateTable(name.assign(db_name), table_schema);
         if (!status.ok()) {
+            std::cout << status.message() << std::endl;
             return createResponse(Status::CODE_501, "Create " + table_schema.name_ + " failed.");
         }
 
