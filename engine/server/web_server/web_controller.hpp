@@ -20,6 +20,7 @@
 #include "server/web_server/utils/util.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
+#include "query/expr/expr.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -572,6 +573,21 @@ class WebController : public oatpp::web::server::api::ApiController {
     dto->message = "Rebuild finished!";
     return createDtoResponse(Status::CODE_200, dto);
   }
+
+    ADD_CORS(TestExrParser)
+
+    ENDPOINT("POST", "/api/expr/test", TestExrParser, BODY_STRING(String, body)) {
+        vectordb::Json parsedBody;
+        parsedBody.LoadFromString(body);
+        std::string expr = parsedBody.GetString("expr");
+        vectordb::query::expr::ExprPtr expr_ptr = std::make_shared<vectordb::query::expr::Expr>();
+        vectordb::query::expr::ExprNodePtr node = expr_ptr->ParseFromStr(expr);
+        if (!node) {
+            return createResponse(Status::CODE_400, "Expression not valid.");
+        }
+
+        return createResponse(Status::CODE_200, "Expr value: " + std::to_string(node->value.intValue));
+    }
 
 /**
  *  Finish ENDPOINTs generation ('ApiController' codegen)
