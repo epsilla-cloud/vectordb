@@ -20,11 +20,19 @@ namespace expr {
     Operator,
   };
 
-  std::vector<char> arith_operator = {'+', '-', '*', '/', '%'};
-  std::vector<char> compare_operator = {'>', '<', '='};
+  std::vector<char> char_arith_operator = {'+', '-', '*', '/', '%'};
+  std::vector<char> char_compare_operator = {'>', '<', '='};
 
   bool checkCharExists(std::vector<char> arr, char c) {
     auto it = std::find(arr.begin(), arr.end(), c);
+    return it != arr.end();
+  };
+
+  std::vector<std::string> str_arith_operator = {"+", "-", "*", "/", "%"};
+  std::vector<std::string> str_compare_operator = {">", "<", "="};
+
+  bool checkStrExists(std::vector<std::string> arr, std::string str) {
+    auto it = std::find(arr.begin(), arr.end(), str);
     return it != arr.end();
   };
 
@@ -48,19 +56,31 @@ namespace expr {
           } else if (std::isalpha(c) || c == '_') {
             cur_token += c;
             state = State::Attribute;
-          } else if (checkCharExists(arith_operator, c) || c == '(') {
+          } else if (checkCharExists(char_arith_operator, c) || c == '(' || c == ')') {
             if (c == '-' && i != last_index && std::isdigit(expression[i + 1])) {
-              cur_token += c;
-              state = State::Number;
+              if (!token_list.empty()) {
+                std::string ele = token_list.back();
+                if (!checkStrExists(str_arith_operator, ele) && ele != "(") {
+                  token_list.push_back(std::string(1, c));
+                } else {
+                  cur_token += c;
+                  state = State::Number;
+                }
+              } else {
+                cur_token += c;
+                state = State::Number;
+              }
             } else {
               token_list.push_back(std::string(1, c));
             }
-          } else if (checkCharExists(compare_operator, c)) {
-            if (i != last_index && checkCharExists(compare_operator, expression[i + 1])) {
+          } else if (checkCharExists(char_compare_operator, c)) {
+            if (i != last_index && checkCharExists(char_compare_operator, expression[i + 1]) && expression[i + 1] == '=') {
               cur_token += c;
               state = State::Operator;
-            } else {
+            } else if (c != '=') {
               token_list.push_back(std::string(1, c));
+            } else {
+              parsing_err = true;
             }
           } else {
             parsing_err = true;
@@ -71,14 +91,15 @@ namespace expr {
             token_list.push_back(cur_token);
             cur_token.clear();
             state = State::Start;
-          } else if (checkCharExists(arith_operator, c) || c == ')') {
+          } else if (checkCharExists(char_arith_operator, c) || c == ')') {
             token_list.push_back(cur_token);
             cur_token.clear();
             token_list.push_back(std::string(1, c));
-          } else if (checkCharExists(compare_operator, c)) {
+            state = State::Start;
+          } else if (checkCharExists(char_compare_operator, c)) {
             token_list.push_back(cur_token);
             cur_token.clear();
-            if (i != last_index && checkCharExists(compare_operator, expression[i + 1])) {
+            if (i != last_index && checkCharExists(char_compare_operator, expression[i + 1])) {
               cur_token += c;
               state = State::Operator;
             } else {
@@ -96,15 +117,15 @@ namespace expr {
             token_list.push_back(cur_token);
             cur_token.clear();
             state = State::Start;
-          } else if (c == '%' || c == '/' || c == '*' || c == '+' || c == '-' || c == ')') {
+          } else if (checkCharExists(char_arith_operator, c) || c == ')') {
             token_list.push_back(cur_token);
             cur_token.clear();
             token_list.push_back(std::string(1, c));
             state = State::Start;
-          } else if (checkCharExists(compare_operator, c)) {
+          } else if (checkCharExists(char_compare_operator, c)) {
             token_list.push_back(cur_token);
             cur_token.clear();
-            if (i != last_index && checkCharExists(compare_operator, expression[i + 1])) {
+            if (i != last_index && checkCharExists(char_compare_operator, expression[i + 1])) {
               cur_token += c;
               state = State::Operator;
             } else {
@@ -139,12 +160,36 @@ namespace expr {
     }
     std::cout << expression + " transfer to: " + boost::algorithm::join(token_list, ", ") << std::endl;
 
-    std::stack<std::string> op_stack;
-    std::queue<std::string> output_queue;
     ExprNodePtr node = std::make_shared<ExprNode>();
     node->op = LogicalOperator::AND;
     node->value.intValue = 12345;
     return node;
+  };
+
+  std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
+    std::vector<std::string> res;
+    std::stack<std::string> operatorStack;
+
+    for (std::string str : tokens) {
+      if (str == "(") {
+        operatorStack.push(str);
+      } else if (str == ")") {
+        while (!operatorStack.empty() && operatorStack.top() != "(") {
+            res.push_back(operatorStack.top());
+            operatorStack.pop();
+        }
+        operatorStack.pop(); // Pop the '('
+      }
+    }
+  };
+
+  bool isOperator(const std::string& str) {
+    if (
+      str == "+" || str == "-" || str == "*" || str == "/" || str == "%" ||
+      str == ">" || str == ">=" || str == "<" || str == "<=" || str == "=="
+    ) {
+      return true;
+    }
   };
 
 } // namespace expr
