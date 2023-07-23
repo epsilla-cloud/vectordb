@@ -401,7 +401,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
     ++tmp_count_computation;
     float dist = fstdistfunc_(vector_table_ + dimension_ * nb_id, query_data, dist_func_param_);
     if (dist > dist_bound) {
-    // if (dist > dist_bound || dist > dist_thresh) {
+      // if (dist > dist_bound || dist > dist_thresh) {
       continue;
     }
     Candidate cand(nb_id, dist, false);
@@ -663,11 +663,11 @@ void VecSearchExecutor::SearchImpl(
     }  // Search Iterations
   }    // Parallel Phase
 
-#pragma omp parallel for
-  // TODO: exclude deleted and not passing filter records.
-  for (int64_t k_i = 0; k_i < K; ++k_i) {
-    set_K[k_i] = set_L[k_i + master_queue_start].id_;
-  }
+// #pragma omp parallel for
+//   // TODO: exclude deleted and not passing filter records.
+//   for (int64_t k_i = 0; k_i < K; ++k_i) {
+//     set_K[k_i] = set_L[k_i + master_queue_start].id_;
+//   }
   // for (int64_t k_i = 0; k_i < K; ++k_i) {
   //   std::cout << set_L[k_i + master_queue_start].distance_ << " " << std::endl;
   // }
@@ -678,28 +678,34 @@ void VecSearchExecutor::SearchImpl(
   }
 }
 
-bool VecSearchExecutor::Search(const float *query_data, const int64_t K) {
+bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end) {
+#pragma omp parallel for
+  for (int64_t v_id = start; v_id < end; ++v_id) {
+    float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
+    brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+  }
+  std::sort(
+      brute_force_queue_.begin(),
+      brute_force_queue_.begin() + end - start);
+  return true;
+}
+
+Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const int64_t total, int64_t& result_size) {
   if (K >= L_local_) {
     // TODO: support search for large K.
-    std::cerr << "K must be smaller than L_local." << std::endl;
-    return false;
+    return Status(DB_UNEXPECTED_ERROR, "Cannot search more than " + std::to_string(L_local_) + " results.");
   }
   if (brute_force_search_) {
-#pragma omp parallel for
-    for (int64_t v_id = 0; v_id < ntotal_; ++v_id) {
-      float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
-      brute_force_queue_[v_id] = Candidate(v_id, dist, false);
-    }
-    std::sort(
-        brute_force_queue_.begin(),
-        brute_force_queue_.begin() + ntotal_);
+    BruteForceSearch(query_data, 0, total);
+    result_size = K < total ? K : total;
     // TODO: exclude deleted and not passing filter records.
-    for (int64_t k_i = 0; k_i < K; ++k_i) {
+    for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       // std::cout << brute_force_queue_[k_i].distance_ << " " << std::endl;
     }
     // std::cout << std::endl;
   } else {
+    int64_t K1 = K < ntotal_ ? K : ntotal_;
     SearchImpl(
         query_data,
         K,
@@ -712,8 +718,36 @@ bool VecSearchExecutor::Search(const float *query_data, const int64_t K) {
         local_queues_sizes_,
         is_visited_,
         subsearch_iterations_);
+    // std::cout << total << " " << ntotal_ << std::endl;
+    if (total > ntotal_) {
+      // Need to brute force search the newly added but haven't been indexed vectors.
+      BruteForceSearch(query_data, ntotal_, total);
+      int64_t K2 = K < (total - ntotal_) ? K : (total - ntotal_);
+      // Merge the brute force results into the search result.
+      const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
+      MergeTwoQueuesInto1stQueueSeqFixed(
+        set_L_,
+        master_queue_start,
+        K1,
+        brute_force_queue_,
+        0,
+        K2);
+      result_size = K < total ? K : total;
+      // TODO: exclude deleted and not passing filter records.
+      for (int64_t k_i = 0; k_i < result_size; ++k_i) {
+        search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
+      }
+    } else {
+      result_size = K1;
+      const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
+#pragma omp parallel for
+      // TODO: exclude deleted and not passing filter records.
+      for (int64_t k_i = 0; k_i < K1; ++k_i) {
+        search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
+      }
+    }
   }
-  return true;
+  return Status::OK();
 }
 
 }  // namespace execution
