@@ -26,8 +26,8 @@ size_t ConcurrentBitset::size() {
   return ((capacity_ + 8 - 1) >> 3);
 }
 
-const uint8_t* ConcurrentBitset::data() {
-  return reinterpret_cast<const uint8_t*>(bitset_.data());
+uint8_t* ConcurrentBitset::data() {
+  return reinterpret_cast<uint8_t*>(bitset_.data());
 }
 
 }  // namespace vectordb

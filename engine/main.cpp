@@ -67,9 +67,14 @@ int main(int argc, char *argv[]) {
   std::string db_name = "test_db";
   std::string db_catalog_path = "/tmp/epsilla-01/";
   meta->LoadDatabase(db_catalog_path, db_name);
+
   vectordb::engine::meta::TableSchema table_schema;
   meta->GetTable(db_name, "test-table-7", table_schema);
-  vectordb::engine::TableSegmentMVP table(table_schema);
+
+  vectordb::engine::TableSegmentMVP table(table_schema, db_catalog_path);
+
+  std::cout << "here"<< std::endl;
+
 
   std::string json_string = R"([
     {
@@ -93,7 +98,7 @@ int main(int argc, char *argv[]) {
       "doc": "This is a test document 3.",
       "vec1": [3.0, 2.0, 3.0, 4.0],
       "vec2": [0.1, 0.4, 0.2, 0.3, 0.5, 0.1, 0.7, 0.6],
-      "doc2": "This is another document.",
+      "doc2": "This is another document.45656",
       "testBool": false
     },
     {
@@ -118,15 +123,15 @@ int main(int argc, char *argv[]) {
       "vec1": [6.0, 2.0, 3.0, 4.0],
       "vec2": [0.1, 0.4, 0.2, 0.3, 0.5, 0.1, 0.7, 0.6],
       "doc2": "This is another document.",
-      "testBool": false
+      "testBool": true
     },
     {
       "id": 7,
       "doc": "This is a test document 7.",
       "vec1": [7.0, 2.0, 3.0, 4.0],
       "vec2": [0.1, 0.4, 0.2, 0.3, 0.5, 0.1, 0.7, 0.6],
-      "doc2": "This is another document.",
-      "testBool": false
+      "doc2": "This is another document435.",
+      "testBool": true
     },
     {
       "id": 8,
@@ -142,16 +147,27 @@ int main(int argc, char *argv[]) {
   vectordb::Json json;
   bool load_success = json.LoadFromString(json_string);
 
-  for (auto w = 0; w < 10; ++w) {
+  // for (auto w = 0; w < 10000; ++w) {
     auto status2 = table.Insert(table_schema, json);
     if (status2.ok()) {
       std::cout << "Insert successfully!" << std::endl;
     } else {
       std::cout << status2.message() << std::endl;
     }
-  }
+  // }
 
-  table.Debug();
+  table.Debug(table_schema);
+  auto status3 = table.SaveTableSegment(table_schema, db_catalog_path);
+  // if (status3.ok()) {
+  //   std::cout << "Save successfully!" << std::endl;
+  // } else {
+  //   std::cout << status3.message() << std::endl;
+  // }
+  
+
+
+
+
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},

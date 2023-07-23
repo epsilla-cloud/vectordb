@@ -7,11 +7,22 @@
 #include "db/catalog/meta.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
-#include "utils/status.hpp"
 #include "utils/json.hpp"
+#include "utils/status.hpp"
 
 namespace vectordb {
 namespace engine {
+
+struct AttributeTable {
+ public:
+  char* data;
+  AttributeTable(int64_t len) {
+    data = new char[len];
+  }
+  ~AttributeTable() {
+    delete[] data;
+  }
+};
 
 class TableSegmentMVP {
  public:
@@ -26,7 +37,10 @@ class TableSegmentMVP {
 
   Status Insert(meta::TableSchema& table_schema, Json& records);
 
-  void Debug();
+  // Save the table segment to disk.
+  Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
+
+  void Debug(meta::TableSchema& table_schema);
 
   ~TableSegmentMVP();
 
@@ -41,15 +55,24 @@ class TableSegmentMVP {
   int64_t primitive_offset_;
   int64_t string_num_;
   int64_t vector_num_;
-  std::shared_ptr<char*> attribute_table_;               // The attribute table in memory (exclude vector attributes and string attributes).
-  std::shared_ptr<std::string*> string_table_;           // The string attribute table in memory.
+  char* attribute_table_;  // The attribute table in memory (exclude vector attributes and string attributes).
+  std::string* string_table_;       // The string attribute table in memory.
   // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
   std::vector<int64_t> vector_dims_;
-  std::vector<std::shared_ptr<float*>> vector_tables_;  // The vector attribute tables. Each vector attribute has its own vector table.
-                                                       // (From left to right defined in schema)
-  std::shared_ptr<ConcurrentBitset> deleted_;          // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
-                                                       // The deleted records still occupy the position in all other structures.
-                                                       // They should be skipped during search.
+  float** vector_tables_;  // The vector attribute tables. Each vector attribute has its own vector table.
+                                                        // (From left to right defined in schema)
+  ConcurrentBitset* deleted_;           // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
+                                                        // The deleted records still occupy the position in all other structures.
+                                                        // They should be skipped during search.
+  // std::shared_ptr<AttributeTable> attribute_table_;  // The attribute table in memory (exclude vector attributes and string attributes).
+  // std::shared_ptr<std::string*> string_table_;       // The string attribute table in memory.
+  // // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
+  // std::vector<int64_t> vector_dims_;
+  // std::vector<std::shared_ptr<float*>> vector_tables_;  // The vector attribute tables. Each vector attribute has its own vector table.
+  //                                                       // (From left to right defined in schema)
+  // std::shared_ptr<ConcurrentBitset> deleted_;           // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
+  //                                                       // The deleted records still occupy the position in all other structures.
+  //                                                       // They should be skipped during search.
 };
 
 }  // namespace engine

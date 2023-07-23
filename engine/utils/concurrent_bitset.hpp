@@ -18,7 +18,7 @@ class ConcurrentBitset {
 
   size_t capacity();
   size_t size();
-  const uint8_t* data();
+  uint8_t* data();
 
  private:
   size_t capacity_;
