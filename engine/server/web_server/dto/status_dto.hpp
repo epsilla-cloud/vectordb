@@ -50,7 +50,8 @@ class SearchRespDto : public oatpp::DTO {
 
     DTO_FIELD(Int32, statusCode);
     DTO_FIELD(String, message);
-    DTO_FIELD(oatpp::ObjectWrapper<vectordb::Json>, result);
+    // DTO_FIELD(Object<oatpp::Any>, result);
+    DTO_FIELD(String, result);
 };
 
 #include OATPP_CODEGEN_END(DTO)
