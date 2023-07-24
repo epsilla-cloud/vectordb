@@ -109,12 +109,12 @@ Status TableMVP::Rebuild(const std::string& db_catalog_path) {
   return Status::OK();
 }
 
-Status TableMVP::Insert(meta::TableSchema& table_schema, vectordb::Json& record) {
-  return table_segment_->Insert(table_schema, record);
+Status TableMVP::Insert(vectordb::Json& record) {
+  return table_segment_->Insert(table_schema_, record);
 }
 
 Status TableMVP::Search(
-    std::string field_name,
+    const std::string& field_name,
     std::vector<std::string>& query_fields,
     const float* query_data,
     const int64_t K,

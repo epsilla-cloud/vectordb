@@ -24,10 +24,10 @@ class TableMVP {
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string& db_catalog_path);
 
-  Status Insert(meta::TableSchema& table_schema, vectordb::Json& records);
+  Status Insert(vectordb::Json& records);
 
   Status Search(
-    std::string field_name,
+    const std::string& field_name,
     std::vector<std::string>& query_fields, 
     const float* query_data, 
     const int64_t K, 

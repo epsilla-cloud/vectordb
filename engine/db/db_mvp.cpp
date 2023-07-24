@@ -43,5 +43,19 @@ std::shared_ptr<TableMVP> DBMVP::GetTable(const std::string& table_name) {
   return tables_[it->second];
 }
 
+Status DBMVP::Rebuild() {
+  // Loop through all tables and rebuild
+  for (int64_t i = 0; i < tables_.size(); ++i) {
+    std::shared_ptr<TableMVP> table = tables_[i];
+    if (table != nullptr) {
+      auto status = table->Rebuild(db_catalog_path_);
+      if (!status.ok()) {
+        std::cout << "Rebuild table " << table->table_schema_.name_ << " failed." << std::endl;
+      }
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace engine
 }  // namespace vectordb

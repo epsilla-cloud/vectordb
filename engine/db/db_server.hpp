@@ -17,13 +17,26 @@ class DBServer {
  public:
   DBServer();
 
-  ~DBMVP() {}
+  ~DBServer() {}
 
-  Status LoadDB(meta::DatabaseSchema& db_schema);
-  Status DropDB(const std::string& db_name);
+  Status LoadDB(const std::string& db_name, std::string& db_catalog_path);
+  Status UnloadDB(const std::string& db_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
+  Status Rebuild();
+  Status Insert(std::string& db_name, std::string& table_name, vectordb::Json& records);
+  Status Search(
+    std::string& db_name,
+    std::string& table_name, 
+    std::string& field_name,
+    std::vector<std::string>& query_fields, 
+    const float* query_data, 
+    const int64_t K, 
+    vectordb::Json& result
+  );
 
  private:
+  std::shared_ptr<meta::Meta> meta_;                           // The db meta.
+  // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.
   std::vector<std::shared_ptr<DBMVP>> dbs_;                    // The dbs.
 };
