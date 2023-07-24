@@ -19,7 +19,7 @@ namespace vectordb {
 namespace engine {
 namespace execution {
 
-constexpr const int BruteforceThreshold = 256;
+constexpr const int BruteforceThreshold = 512;
 
 class VecSearchExecutor {
  public:

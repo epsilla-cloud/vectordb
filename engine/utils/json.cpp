@@ -210,4 +210,28 @@ void Json::AddObjectToArray(const std::string& key, const Json& object) {
   (*val_)[key.c_str()].PushBack(objectVal, doc_->GetAllocator());
 }
 
+void Json::AddStringToArray(const std::string& value) {
+  rapidjson::Value str_value;
+  str_value.SetString(value.c_str(), doc_->GetAllocator());
+  val_->PushBack(str_value, doc_->GetAllocator());
+}
+
+void Json::AddIntToArray(int64_t value) {
+  val_->PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddDoubleToArray(double value) {
+  val_->PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddBoolToArray(bool value) {
+  val_->PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddObjectToArray(const Json& object) {
+  rapidjson::Value objectVal;
+  objectVal.CopyFrom(*object.val_, doc_->GetAllocator());
+  val_->PushBack(objectVal, doc_->GetAllocator());
+}
+
 }  // namespace vectordb

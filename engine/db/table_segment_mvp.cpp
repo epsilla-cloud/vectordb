@@ -50,14 +50,17 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   for (auto& field_schema : table_schema.fields_) {
     if (field_schema.field_type_ == meta::FieldType::STRING) {
       field_id_mem_offset_map_[field_schema.id_] = string_num_;
+      field_name_mem_offset_map_[field_schema.name_] = string_num_;
       ++string_num_;
     } else if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
       vector_dims_.push_back(field_schema.vector_dimension_);
       field_id_mem_offset_map_[field_schema.id_] = vector_num_;
+      field_name_mem_offset_map_[field_schema.name_] = vector_num_;
       ++vector_num_;
     } else {
       field_id_mem_offset_map_[field_schema.id_] = primitive_offset_;
+      field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
       primitive_offset_ += FieldTypeSizeMVP(field_schema.field_type_);
       ++primitive_num_;
     }
@@ -81,10 +84,11 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
 }
 
 TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema)
-    : skip_sync_disk_(true),
+    : skip_sync_disk_(false),
       size_limit_(InitTableSize),
       first_record_id_(0),
       record_number_(0),
+      field_name_mem_offset_map_(0),
       field_id_mem_offset_map_(0),
       primitive_num_(0),
       string_num_(0),
@@ -94,10 +98,11 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema)
 }
 
 TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path)
-    : skip_sync_disk_(false),
+    : skip_sync_disk_(true),
       size_limit_(InitTableSize),
       first_record_id_(0),
       record_number_(0),
+      field_name_mem_offset_map_(0),
       field_id_mem_offset_map_(0),
       primitive_num_(0),
       string_num_(0),
@@ -223,6 +228,9 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records) {
     // DoubleSize();
   }
 
+  // Segment is modified.
+  skip_sync_disk_.store(false);
+
   // Process the insert.
   size_t cursor = record_number_;
   for (auto i = 0; i < new_record_size; ++i) {
@@ -341,6 +349,9 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
     return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + tmp_path + " to " + path);
   }
+
+  // Skip next time until the segment is modified.
+  skip_sync_disk_ = true;
 
   return Status::OK();
 }
