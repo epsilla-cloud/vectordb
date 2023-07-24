@@ -295,10 +295,10 @@ int main(int argc, char *argv[]) {
   vectordb::Status status;
   vectordb::server::Server &server = vectordb::server::Server::GetInstance();
 
-  if (argc < 2) {
-    print_help(app_name);
-    goto FAIL;
-  }
+  // if (argc < 2) {
+  //   print_help(app_name);
+  //   goto FAIL;
+  // }
 
   int value;
   while ((value = getopt_long(argc, argv, "c:dh", long_options, &option_index)) != -1) {

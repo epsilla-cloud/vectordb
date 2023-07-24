@@ -421,6 +421,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         vectordb::Status search_status = db_server->Search(
             db_name, table_name, field_name, query_fields, query, limit, result
         );
+        // std::cout << result.DumpToString() << std::endl;
         if (!search_status.ok()) {
             status_dto->statusCode = Status::CODE_500.code;
             status_dto->message = search_status.message();
@@ -430,7 +431,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         auto res_dto = SearchRespDto::createShared();
         res_dto->statusCode = Status::CODE_200.code;
         res_dto->message = "Query search successfully.";
-        // res_dto->result->LoadFromString(result.DumpToString());
+        res_dto->result->LoadFromString(result.DumpToString());
         return createDtoResponse(Status::CODE_200, res_dto);
     }
 
