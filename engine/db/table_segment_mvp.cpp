@@ -153,6 +153,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     // Create directory with an empty table segment.
     std::string folder_path = db_catalog_path + "/" + std::to_string(table_schema.id_);
     server::CommonUtil::CreateDirectory(folder_path);
+    skip_sync_disk_ = false;
     auto status = SaveTableSegment(table_schema, db_catalog_path);
     if (!status.ok()) {
       throw status.message();

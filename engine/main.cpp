@@ -25,6 +25,8 @@
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 #include "db/table_mvp.hpp"
+#include "db/db_mvp.hpp"
+
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
@@ -70,10 +72,15 @@ int main(int argc, char *argv[]) {
   std::string db_catalog_path = "/tmp/epsilla-01/";
   meta->LoadDatabase(db_catalog_path, db_name);
 
+  vectordb::engine::meta::DatabaseSchema db_schema;
+  meta->GetDatabase(db_name, db_schema);
+  auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
+
   vectordb::engine::meta::TableSchema table_schema;
   meta->GetTable(db_name, "test-table-7", table_schema);
 
-  auto table_mvp = std::make_shared<vectordb::engine::TableMVP>(table_schema, db_catalog_path);
+  auto table_mvp = db->GetTable("test-table-7");
+  
   table_mvp->Rebuild(db_catalog_path);
   std::cout << table_mvp->table_segment_->record_number_ << std::endl;
   std::cout << table_mvp->ann_graph_segment_[0]->record_number_ << std::endl;

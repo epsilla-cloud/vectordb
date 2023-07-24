@@ -182,6 +182,8 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
   }
 
   DatabaseSchema db_schema;
+  db_schema.name_ = db_name;
+  db_schema.path_ = db_catalog_path;
   if (server::CommonUtil::IsFileExist(db_catalog_path)) {
     std::string json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path + "/" + DB_CATALOG_FILE_NAME);
     Json json;
@@ -191,8 +193,6 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
 
     // Load the actual database schema from the JSON data.
     db_schema.id_ = json.GetInt("id");
-    db_schema.name_ = db_name;
-    db_schema.path_ = db_catalog_path;
     // Load tables
     size_t tables_size = json.GetArraySize(TABLES);
     for (size_t i = 0; i < tables_size; ++i) {
