@@ -21,12 +21,14 @@ class DBServer {
 
   Status LoadDB(const std::string& db_name, std::string& db_catalog_path);
   Status UnloadDB(const std::string& db_name);
+  Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema);
+  Status DropTable(const std::string& db_name, const std::string& table_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
   Status Rebuild();
-  Status Insert(std::string& db_name, std::string& table_name, vectordb::Json& records);
+  Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
   Status Search(
-    std::string& db_name,
-    std::string& table_name, 
+    const std::string& db_name,
+    const std::string& table_name, 
     std::string& field_name,
     std::vector<std::string>& query_fields, 
     const float* query_data, 

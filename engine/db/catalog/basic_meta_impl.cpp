@@ -256,7 +256,7 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
   return Status::OK();
 }
 
-Status BasicMetaImpl::CreateTable(std::string& db_name, TableSchema& table_schema) {
+Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema) {
   // Table name cannot be duplicated.
   bool has_table = false;
   auto status = HasTable(db_name, table_schema.name_, has_table);

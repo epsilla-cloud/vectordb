@@ -13,6 +13,7 @@
 #include "db/catalog/meta.hpp"
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/table_mvp.hpp"
+#include "db/db_server.hpp"
 #include "db/db_mvp.hpp"
 #include "server/web_server/dto/status_dto.hpp"
 #include "server/web_server/dto/db_dto.hpp"
@@ -41,7 +42,8 @@ class WebController : public oatpp::web::server::api::ApiController {
  *  Begin ENDPOINTs generation ('ApiController' codegen)
  */
 #include OATPP_CODEGEN_BEGIN(ApiController)
-    vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
+    std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
+    // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
 
     ADD_CORS(root)
 
@@ -67,7 +69,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         parsedBody.LoadFromString(body);
         std::string db_path = parsedBody.GetString("path");
         std::string db_name = parsedBody.GetString("name");
-        vectordb::Status status = meta->LoadDatabase(db_path, db_name);
+        vectordb::Status status = db_server->LoadDB(db_name, db_path);
 
         auto dto = StatusDto::createShared();
         if (!status.ok()) {
@@ -84,7 +86,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     ADD_CORS(UnloadDB)
 
     ENDPOINT("POST", "api/{db_name}/unload", UnloadDB, PATH(String, db_name, "db_name")) {
-        vectordb::Status status = meta->UnloadDatabase(db_name);
+        vectordb::Status status = db_server->UnloadDB(db_name);
 
         auto dto = StatusDto::createShared();
         if (!status.ok()) {
@@ -101,7 +103,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     ADD_CORS(DropDB)
 
     ENDPOINT("DELETE", "api/{db_name}/drop", DropDB, PATH(String, db_name, "db_name")) {
-        vectordb::Status status = meta->DropDatabase(db_name);
+        // Actual erase To be implemented.
+
+        vectordb::Status status = db_server->UnloadDB(db_name);
 
         auto dto = StatusDto::createShared();
         if (!status.ok()) {
@@ -167,8 +171,7 @@ class WebController : public oatpp::web::server::api::ApiController {
             }
         }
 
-        std::string name;
-        vectordb::Status status = meta->CreateTable(name.assign(db_name), table_schema);
+        vectordb::Status status = db_server->CreateTable(db_name, table_schema);
 
         auto dto = StatusDto::createShared();
         if (!status.ok()) {
@@ -188,7 +191,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         PATH(String, db_name, "db_name"),
         PATH(String, table_name, "table_name")) {
 
-        vectordb::Status status = meta->DropTable(db_name, table_name);
+        vectordb::Status status = db_server->DropTable(db_name, table_name);
 
         auto dto = StatusDto::createShared();
         if (!status.ok()) {
@@ -259,29 +262,29 @@ class WebController : public oatpp::web::server::api::ApiController {
         }
 
         std::string table_name = parsedBody.GetString("table");
-        vectordb::engine::meta::DatabaseSchema db_schema;
-        vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
-        if (!db_status.ok()) {
-            status_dto->statusCode = Status::CODE_500.code;
-            status_dto->message = db_status.message();
-            return createDtoResponse(Status::CODE_500, status_dto);
-        }
+        // vectordb::engine::meta::DatabaseSchema db_schema;
+        // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
+        // if (!db_status.ok()) {
+        //     status_dto->statusCode = Status::CODE_500.code;
+        //     status_dto->message = db_status.message();
+        //     return createDtoResponse(Status::CODE_500, status_dto);
+        // }
 
-        vectordb::engine::meta::TableSchema table_schema;
-        vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
-        if (!table_status.ok()) {
-            status_dto->statusCode = Status::CODE_500.code;
-            status_dto->message = table_status.message();
-            return createDtoResponse(Status::CODE_500, status_dto);
-        }
+        // vectordb::engine::meta::TableSchema table_schema;
+        // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
+        // if (!table_status.ok()) {
+        //     status_dto->statusCode = Status::CODE_500.code;
+        //     status_dto->message = table_status.message();
+        //     return createDtoResponse(Status::CODE_500, status_dto);
+        // }
 
         // std::shared_ptr<vectordb::engine::TableMVP> table =
         //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
-        auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
-        auto table = db->GetTable(table_name);
+        // auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
+        // auto table = db->GetTable(table_name);
 
         auto data = parsedBody.GetArray("data");
-        vectordb::Status insert_status = table->Insert(table_schema, data);
+        vectordb::Status insert_status = db_server->Insert(db_name, table_name, data);
         if (!insert_status.ok()) {
             status_dto->statusCode = Status::CODE_500.code;
             status_dto->message = insert_status.message();
@@ -370,27 +373,27 @@ class WebController : public oatpp::web::server::api::ApiController {
         }
 
         std::string table_name = parsedBody.GetString("table");
-        vectordb::engine::meta::DatabaseSchema db_schema;
-        vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
-        if (!db_status.ok()) {
-            status_dto->statusCode = Status::CODE_500.code;
-            status_dto->message = db_status.message();
-            return createDtoResponse(Status::CODE_500, status_dto);
-        }
+        // vectordb::engine::meta::DatabaseSchema db_schema;
+        // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
+        // if (!db_status.ok()) {
+        //     status_dto->statusCode = Status::CODE_500.code;
+        //     status_dto->message = db_status.message();
+        //     return createDtoResponse(Status::CODE_500, status_dto);
+        // }
 
-        vectordb::engine::meta::TableSchema table_schema;
-        vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
-        if (!table_status.ok()) {
-            status_dto->statusCode = Status::CODE_500.code;
-            status_dto->message = table_status.message();
-            return createDtoResponse(Status::CODE_500, status_dto);
-        }
+        // vectordb::engine::meta::TableSchema table_schema;
+        // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
+        // if (!table_status.ok()) {
+        //     status_dto->statusCode = Status::CODE_500.code;
+        //     status_dto->message = table_status.message();
+        //     return createDtoResponse(Status::CODE_500, status_dto);
+        // }
 
-        std::cout << db_schema.path_ << std::endl;
-        // std::shared_ptr<vectordb::engine::TableMVP> table =
-        //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
-        auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
-        auto table = db->GetTable(table_name);
+        // std::cout << db_schema.path_ << std::endl;
+        // // std::shared_ptr<vectordb::engine::TableMVP> table =
+        // //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
+        // auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
+        // auto table = db->GetTable(table_name);
         std::string field_name = parsedBody.GetString("queryField");
 
         std::vector<std::string> query_fields;
@@ -416,7 +419,9 @@ class WebController : public oatpp::web::server::api::ApiController {
         std::cout << query_vector.data() << std::endl;
 
         vectordb::Json result;
-        vectordb::Status search_status = table->Search(field_name, query_fields, query_vector.data(), limit, result);
+        vectordb::Status search_status = db_server->Search(
+            db_name, table_name, field_name, query_fields, query_vector.data(), limit, result
+        );
         if (!search_status.ok()) {
             status_dto->statusCode = Status::CODE_500.code;
             status_dto->message = search_status.message();

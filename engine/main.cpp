@@ -69,27 +69,27 @@ int main(int argc, char *argv[]) {
   // // ann_graph_segment->SaveANNGraph("/tmp/epsilla-03", 1, 3);
 
 
-  std::string db_name = "test_db";
-  std::string db_catalog_path = "/tmp/epsilla-01/";
+  // std::string db_name = "test_db";
+  // std::string db_catalog_path = "/tmp/epsilla-01/";
   
-  std::string db_name2 = "test_db_2";
-  std::string db_catalog_path2 = "/tmp/epsilla-02/";
+  // std::string db_name2 = "test_db_2";
+  // std::string db_catalog_path2 = "/tmp/epsilla-02/";
 
-  std::string db_name3 = "test_db_3";
-  std::string db_catalog_path3 = "/tmp/epsilla-03/";
+  // std::string db_name3 = "test_db_3";
+  // std::string db_catalog_path3 = "/tmp/epsilla-03/";
   
-  auto db_server = std::make_shared<vectordb::engine::DBServer>();
-  db_server->LoadDB(db_name, db_catalog_path);
-  db_server->LoadDB(db_name2, db_catalog_path2);
-  db_server->LoadDB(db_name3, db_catalog_path3);
+  // auto db_server = std::make_shared<vectordb::engine::DBServer>();
+  // db_server->LoadDB(db_name, db_catalog_path);
+  // db_server->LoadDB(db_name2, db_catalog_path2);
+  // db_server->LoadDB(db_name3, db_catalog_path3);
   
-  auto db = db_server->GetDB(db_name);
-  auto table_mvp = db->GetTable("test-table-7");
+  // auto db = db_server->GetDB(db_name);
+  // auto table_mvp = db->GetTable("test-table-7");
   
-  db_server->Rebuild();
-  std::cout << table_mvp->table_segment_->record_number_ << std::endl;
-  std::cout << table_mvp->ann_graph_segment_[0]->record_number_ << std::endl;
-  std::cout << table_mvp->ann_graph_segment_[1]->record_number_ << std::endl;
+  // db_server->Rebuild();
+  // std::cout << table_mvp->table_segment_->record_number_ << std::endl;
+  // std::cout << table_mvp->ann_graph_segment_[0]->record_number_ << std::endl;
+  // std::cout << table_mvp->ann_graph_segment_[1]->record_number_ << std::endl;
   
 
   std::string json_string = R"([
@@ -160,26 +160,26 @@ int main(int argc, char *argv[]) {
 
     ])";
 
-  vectordb::Json json;
-  bool load_success = json.LoadFromString(json_string);
+  // vectordb::Json json;
+  // bool load_success = json.LoadFromString(json_string);
 
-  for (auto w = 0; w < 1; ++w) {
-    auto status2 = table_mvp->Insert(json);
-    if (status2.ok()) {
-      std::cout << "Insert successfully!" << std::endl;
-    } else {
-      std::cout << status2.message() << std::endl;
-    }
-  }
-  std::cout << table_mvp->table_segment_->record_number_ << std::endl;
-  std::cout << table_mvp->ann_graph_segment_[0]->record_number_ << std::endl;
-  std::cout << table_mvp->ann_graph_segment_[1]->record_number_ << std::endl;
+  // for (auto w = 0; w < 1; ++w) {
+  //   auto status2 = table_mvp->Insert(json);
+  //   if (status2.ok()) {
+  //     std::cout << "Insert successfully!" << std::endl;
+  //   } else {
+  //     std::cout << status2.message() << std::endl;
+  //   }
+  // }
+  // std::cout << table_mvp->table_segment_->record_number_ << std::endl;
+  // std::cout << table_mvp->ann_graph_segment_[0]->record_number_ << std::endl;
+  // std::cout << table_mvp->ann_graph_segment_[1]->record_number_ << std::endl;
 
-  vectordb::Json result;
-  float query[4] {5.0, 2.0, 3.0, 4.0};
-  std::vector<std::string> fields {"id", "vec2", "doc2"};
-  table_mvp->Search("vec1", fields, query, 5, result);
-  std::cout << result.DumpToString() << std::endl;
+  // vectordb::Json result;
+  // float query[4] {5.0, 2.0, 3.0, 4.0};
+  // std::vector<std::string> fields {"id", "vec2", "doc2"};
+  // table_mvp->Search("vec1", fields, query, 5, result);
+  // std::cout << result.DumpToString() << std::endl;
 
   // table_mvp->Rebuild(db_catalog_path);
   // std::cout << table_mvp->table_segment_->record_number_ << std::endl;
