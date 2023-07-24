@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 
+#include <oatpp/core/Types.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 #include <oatpp/core/macro/component.hpp>
 #include <oatpp/parser/json/mapping/ObjectMapper.hpp>
@@ -431,6 +432,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         res_dto->statusCode = Status::CODE_200.code;
         res_dto->message = "Query search successfully.";
         // res_dto->result->LoadFromString(result.DumpToString());
+        res_dto->result = result.DumpToString();
         return createDtoResponse(Status::CODE_200, res_dto);
     }
 
