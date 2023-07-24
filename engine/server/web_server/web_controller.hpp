@@ -66,33 +66,51 @@ class WebController : public oatpp::web::server::api::ApiController {
         std::string db_path = parsedBody.GetString("path");
         std::string db_name = parsedBody.GetString("name");
         vectordb::Status status = meta->LoadDatabase(db_path, db_name);
+
+        auto dto = StatusDto::createShared();
         if (!status.ok()) {
-            return createResponse(Status::CODE_500, "Load/Create " + db_name + " failed.");
+            dto->statusCode = Status::CODE_500.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_500, dto);
         }
 
-        return createResponse(Status::CODE_200, "Load/Create " + db_name + " successfully.");
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Load/Create " + db_name + " successfully.";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
     ADD_CORS(UnloadDB)
 
     ENDPOINT("POST", "api/{db_name}/unload", UnloadDB, PATH(String, db_name, "db_name")) {
         vectordb::Status status = meta->UnloadDatabase(db_name);
+
+        auto dto = StatusDto::createShared();
         if (!status.ok()) {
-            return createResponse(Status::CODE_500, "Unload " + db_name + " failed.");
+            dto->statusCode = Status::CODE_500.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_500, dto);
         }
 
-        return createResponse(Status::CODE_200, "Unload " + db_name + " successfully.");
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Unload " + db_name + " successfully.";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
     ADD_CORS(DropDB)
 
     ENDPOINT("DELETE", "api/{db_name}/drop", DropDB, PATH(String, db_name, "db_name")) {
         vectordb::Status status = meta->DropDatabase(db_name);
+
+        auto dto = StatusDto::createShared();
         if (!status.ok()) {
-            return createResponse(Status::CODE_500, "Drop " + db_name + " failed.");
+            dto->statusCode = Status::CODE_500.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_500, dto);
         }
 
-        return createResponse(Status::CODE_200, "Drop " + db_name + " successfully.");
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Drop " + db_name + " successfully.";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
     ADD_CORS(CreateTable)
@@ -149,12 +167,17 @@ class WebController : public oatpp::web::server::api::ApiController {
 
         std::string name;
         vectordb::Status status = meta->CreateTable(name.assign(db_name), table_schema);
+
+        auto dto = StatusDto::createShared();
         if (!status.ok()) {
-            std::cout << status.message() << std::endl;
-            return createResponse(Status::CODE_501, "Create " + table_schema.name_ + " failed.");
+            dto->statusCode = Status::CODE_500.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_500, dto);
         }
 
-        return createResponse(Status::CODE_200, "Create " + table_schema.name_ + " successfully.");
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Create " + table_schema.name_ + " successfully.";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
     ADD_CORS(DropTable)
@@ -164,13 +187,20 @@ class WebController : public oatpp::web::server::api::ApiController {
         PATH(String, table_name, "table_name")) {
 
         vectordb::Status status = meta->DropTable(db_name, table_name);
+
+        auto dto = StatusDto::createShared();
         if (!status.ok()) {
-            return createResponse(Status::CODE_501, "Drop " + table_name + " from " + db_name + " failed.");
+            dto->statusCode = Status::CODE_500.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_500, dto);
         }
 
-        return createResponse(Status::CODE_200, "Drop " + table_name + " from " + db_name + " successfully.");
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Drop " + table_name + " from " + db_name + " successfully.";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
+    // TODO: implement with actual funtion later.
     ADD_CORS(DescribeSchema)
 
     ENDPOINT("GET", "/api/{db_name}/schema/tables/{table_name}/describe", DescribeSchema,
@@ -189,6 +219,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, dto);
     }
 
+    // TODO: implement with actual function later.
     ADD_CORS(ListTables)
 
     ENDPOINT("GET", "/api/{db_name}/schema/tables/show", ListTables, PATH(String, db_name, "db_name")) {
