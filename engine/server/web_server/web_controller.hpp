@@ -373,6 +373,8 @@ class WebController : public oatpp::web::server::api::ApiController {
         }
 
         std::string table_name = parsedBody.GetString("table");
+
+
         // vectordb::engine::meta::DatabaseSchema db_schema;
         // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
         // if (!db_status.ok()) {
@@ -401,26 +403,23 @@ class WebController : public oatpp::web::server::api::ApiController {
             size_t field_size = parsedBody.GetArraySize("response");
             for (size_t i = 0; i < field_size; i++) {
                 auto field = parsedBody.GetArrayElement("response", i);
-                std::cout << field.GetString() << std::endl;
                 query_fields.push_back(field.GetString());
             }
         }
 
-        std::vector<float> query_vector;
         size_t vector_size = parsedBody.GetArraySize("queryVector");
+        float query[4] {5.0, 2.0, 3.0, 4.0};
+        float query_vector[vector_size];
         for (size_t i = 0; i < vector_size; i++) {
             auto vector = parsedBody.GetArrayElement("queryVector", i);
-            std::cout << vector.GetDouble() << std::endl;
-            query_vector.push_back(vector.GetDouble());
+            query_vector[i] = (float)vector.GetDouble();
         }
 
         int64_t limit = parsedBody.GetInt("limit");
-        std::cout << limit << std::endl;
-        std::cout << query_vector.data() << std::endl;
 
         vectordb::Json result;
         vectordb::Status search_status = db_server->Search(
-            db_name, table_name, field_name, query_fields, query_vector.data(), limit, result
+            db_name, table_name, field_name, query_fields, query, limit, result
         );
         if (!search_status.ok()) {
             status_dto->statusCode = Status::CODE_500.code;
@@ -431,7 +430,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         auto res_dto = SearchRespDto::createShared();
         res_dto->statusCode = Status::CODE_200.code;
         res_dto->message = "Query search successfully.";
-        res_dto->result->LoadFromString(result.DumpToString());
+        // res_dto->result->LoadFromString(result.DumpToString());
         return createDtoResponse(Status::CODE_200, res_dto);
     }
 
