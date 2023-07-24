@@ -12,6 +12,8 @@
 #include "utils/status.hpp"
 #include "db/catalog/meta.hpp"
 #include "db/catalog/basic_meta_impl.hpp"
+#include "db/table_mvp.hpp"
+#include "db/db_mvp.hpp"
 #include "server/web_server/dto/status_dto.hpp"
 #include "server/web_server/dto/db_dto.hpp"
 #include "server/web_server/handler/web_request_handler.hpp"
@@ -210,7 +212,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         // vectordb::engine::meta::TableSchema table_schema;
         // vectordb::Status status = meta->GetTable(db_name, table_name, table_schema);
         // if (!status.ok()) {
-            // return createResponse(Status::CODE_501, "Failed to get " + table_name + ".");
+            // return createResponse(Status::CODE_500, "Failed to get " + table_name + ".");
         // }
 
         auto dto = SchemaInfoDto::createShared();
@@ -232,11 +234,63 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     ENDPOINT("POST", "/api/{db_name}/data/insert", InsertRecords,
         PATH(String, db_name, "db_name"),
-        BODY_DTO(Object<RecordsInsertReqDto>, body)) {
-        if (!body->table) {
-            return createResponse(Status::CODE_501, "Missing table name in your payload.");
+        BODY_STRING(String, body)) {
+
+        auto status_dto = StatusDto::createShared();
+
+        vectordb::Json parsedBody;
+        auto valid = parsedBody.LoadFromString(body);
+        if (!valid) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "Invalid payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
         }
-        return createResponse(Status::CODE_200, "I got your db " + db_name + " and your requested table " + body->table);
+
+        if (!parsedBody.HasMember("table")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "table is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("data")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "data is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        std::string table_name = parsedBody.GetString("table");
+        vectordb::engine::meta::DatabaseSchema db_schema;
+        vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
+        if (!db_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = db_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        vectordb::engine::meta::TableSchema table_schema;
+        vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
+        if (!table_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = table_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        // std::shared_ptr<vectordb::engine::TableMVP> table =
+        //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
+        auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
+        auto table = db->GetTable(table_name);
+
+        auto data = parsedBody.GetArray("data");
+        vectordb::Status insert_status = table->Insert(table_schema, data);
+        if (!insert_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = insert_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        status_dto->statusCode = Status::CODE_200.code;
+        status_dto->message = "Insert data to " + table_name + " successfully.";
+        return createDtoResponse(Status::CODE_200, status_dto);
     }
 
     ADD_CORS(DeleteRecordsByID)
@@ -281,7 +335,99 @@ class WebController : public oatpp::web::server::api::ApiController {
         PATH(String, db_name, "db_name"),
         BODY_STRING(String, body)) {
 
-        return createResponse(Status::CODE_200, "Query with " + db_name + ".");
+        auto status_dto = StatusDto::createShared();
+
+        vectordb::Json parsedBody;
+        auto valid = parsedBody.LoadFromString(body);
+        if (!valid) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "Invalid payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("table")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "table is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("queryField")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "queryField is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("queryVector")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "queryVector is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("limit")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "limit is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        std::string table_name = parsedBody.GetString("table");
+        vectordb::engine::meta::DatabaseSchema db_schema;
+        vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
+        if (!db_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = db_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        vectordb::engine::meta::TableSchema table_schema;
+        vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
+        if (!table_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = table_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        std::cout << db_schema.path_ << std::endl;
+        // std::shared_ptr<vectordb::engine::TableMVP> table =
+        //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
+        auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
+        auto table = db->GetTable(table_name);
+        std::string field_name = parsedBody.GetString("queryField");
+
+        std::vector<std::string> query_fields;
+        if (parsedBody.HasMember("response")) {
+            size_t field_size = parsedBody.GetArraySize("response");
+            for (size_t i = 0; i < field_size; i++) {
+                auto field = parsedBody.GetArrayElement("response", i);
+                std::cout << field.GetString() << std::endl;
+                query_fields.push_back(field.GetString());
+            }
+        }
+
+        std::vector<float> query_vector;
+        size_t vector_size = parsedBody.GetArraySize("queryVector");
+        for (size_t i = 0; i < vector_size; i++) {
+            auto vector = parsedBody.GetArrayElement("queryVector", i);
+            std::cout << vector.GetDouble() << std::endl;
+            query_vector.push_back(vector.GetDouble());
+        }
+
+        int64_t limit = parsedBody.GetInt("limit");
+        std::cout << limit << std::endl;
+        std::cout << query_vector.data() << std::endl;
+
+        vectordb::Json result;
+        vectordb::Status search_status = table->Search(field_name, query_fields, query_vector.data(), limit, result);
+        if (!search_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = search_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        auto res_dto = SearchRespDto::createShared();
+        res_dto->statusCode = Status::CODE_200.code;
+        res_dto->message = "Query search successfully.";
+        res_dto->result->LoadFromString(result.DumpToString());
+        return createDtoResponse(Status::CODE_200, res_dto);
     }
 
 /**
