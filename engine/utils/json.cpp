@@ -2,6 +2,7 @@
 
 #include "thirdparty/rapidjson/stringbuffer.h"
 #include "thirdparty/rapidjson/writer.h"
+#include <iostream>
 
 namespace vectordb {
 
@@ -105,6 +106,13 @@ size_t Json::GetArraySize(const std::string& key) const {
   return arr.Size();
 }
 
+Json Json::GetArray(const std::string& key) const {
+  if ((*val_)[key.c_str()].IsArray()) {
+    return Json(&(*val_)[key.c_str()]);
+  }
+  return Json(nullptr);  // Return an invalid Json array if key not found or not an object
+}
+
 Json Json::GetArrayElement(const std::string& key, size_t index) const {
   if ((*val_)[key.c_str()].IsArray()) {
     auto& array = (*val_)[key.c_str()];
@@ -115,8 +123,18 @@ Json Json::GetArrayElement(const std::string& key, size_t index) const {
   return Json(nullptr);  // Return an invalid Json object if key not found, not an array, or index out of range
 }
 
+Json Json::GetArrayElement(size_t index) const {
+  if (val_->IsArray()) {
+    if (index < val_->Size()) {
+      return Json(&((*val_)[(rapidjson::SizeType)index]));
+    }
+  }
+  return Json(nullptr);  // Return an invalid Json object if key not found, not an array, or index out of range
+}
+
 bool Json::HasMember(const std::string& key) const {
   if (!val_->IsObject()) {
+    std::cout << "haha" << std::endl;
     return false;
   }
   return val_->HasMember(key.c_str());
@@ -190,6 +208,30 @@ void Json::AddObjectToArray(const std::string& key, const Json& object) {
   rapidjson::Value objectVal;
   objectVal.CopyFrom(*object.val_, doc_->GetAllocator());
   (*val_)[key.c_str()].PushBack(objectVal, doc_->GetAllocator());
+}
+
+void Json::AddStringToArray(const std::string& value) {
+  rapidjson::Value str_value;
+  str_value.SetString(value.c_str(), doc_->GetAllocator());
+  val_->PushBack(str_value, doc_->GetAllocator());
+}
+
+void Json::AddIntToArray(int64_t value) {
+  val_->PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddDoubleToArray(double value) {
+  val_->PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddBoolToArray(bool value) {
+  val_->PushBack(value, doc_->GetAllocator());
+}
+
+void Json::AddObjectToArray(const Json& object) {
+  rapidjson::Value objectVal;
+  objectVal.CopyFrom(*object.val_, doc_->GetAllocator());
+  val_->PushBack(objectVal, doc_->GetAllocator());
 }
 
 }  // namespace vectordb

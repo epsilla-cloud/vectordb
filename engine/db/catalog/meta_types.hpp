@@ -41,7 +41,7 @@ enum class MetricType {
 };
 
 struct FieldSchema {
-  size_t id_ = 0;
+  int64_t id_ = 0;
   std::string name_;
   bool is_primary_key_ = false;
   FieldType field_type_ = FieldType::INT4;
@@ -50,20 +50,20 @@ struct FieldSchema {
 };
 
 struct AutoEmbedding {
-  size_t src_field_id_ = 0;
-  size_t tgt_field_id_ = 0;
+  int64_t src_field_id_ = 0;
+  int64_t tgt_field_id_ = 0;
   std::string model_name_ = DEFAULT_MODEL_NAME;
 };
 
 struct TableSchema {
-  size_t id_ = 0;
+  int64_t id_ = 0;
   std::string name_;
   std::vector<FieldSchema> fields_;
   std::vector<AutoEmbedding> auto_embeddings_;
 };
 
 struct DatabaseSchema {
-  size_t id_ = 0;
+  int64_t id_ = 0;
   std::string name_;
   std::string path_;  // path to the database catalog file
   std::vector<TableSchema> tables_;

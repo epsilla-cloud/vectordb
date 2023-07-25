@@ -13,16 +13,17 @@
 
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
+#include "utils/status.hpp"
 
 namespace vectordb {
 namespace engine {
 namespace execution {
 
-constexpr const int BruteforceThreshold = 1024;
+constexpr const int BruteforceThreshold = 512;
 
 class VecSearchExecutor {
  public:
-  int64_t ntotal_ = 0;
+  int64_t ntotal_ = 0;      // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
 
@@ -169,7 +170,8 @@ class VecSearchExecutor {
       boost::dynamic_bitset<>& is_visited,
       const int64_t index_threshold);
 
-  bool Search(const float* query_data, const int64_t K);
+  bool BruteForceSearch(const float* query_data, const int64_t start, const int64_t end);
+  Status Search(const float* query_data, const int64_t K, const int64_t total, int64_t& result_size);
 };  // Class VecSearchExecutor
 
 }  // namespace execution
@@ -220,7 +222,7 @@ class VecSearchExecutor {
         ann_graph_segment->neighbor_list_,
         data,
         fstdistfunc_, dist_func_param_,
-        4, 500, 500, 15);
+        4, 100, 100, 15);
     executor->brute_force_queue_.resize(10000000);
 
     int K = 10;

@@ -14,29 +14,28 @@ namespace engine {
 
 class ANNGraphSegment {
  public:
-  // Default constructor just for table level init.
+  // Default constructor just for table level init. Used by default table.
   explicit ANNGraphSegment();
   // Load segment from disk.
-  explicit ANNGraphSegment(std::string& db_catalog_path);
+  explicit ANNGraphSegment(const std::string& db_catalog_path, int64_t table_id, int64_t field_id);
   // Create an in-memory segment.
-  explicit ANNGraphSegment(size_t size_limit);
+  explicit ANNGraphSegment(int64_t size_limit);
 
   // Build the ANN graph from vector table.
-  void BuildFromVectorTable(float* vector_table, size_t n, size_t dim);
-
-  void DumpToDisk(std::string& db_catalog_path);
+  void BuildFromVectorTable(float* vector_table, int64_t n, int64_t dim);
 
   void Debug();
 
-  // Sync the ANN graph index to disk.
-  Status DiskSync(std::string& db_catalog_path);
+  // Save the ANN graph index to disk.
+  Status SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id);
 
   ~ANNGraphSegment();
 
  public:
-  bool synced_with_disk_;              // Whether the table segment is synced with disk.
-  size_t first_record_id_;             // The internal record id (node id) of the first record in the segment.
-  std::atomic<size_t> record_number_;  // Currently how many records (nodes) in the segment.
+  bool skip_sync_disk_;                // For default DB, skip sync to disk.
+  // bool synced_with_disk_;              // Whether the table segment is synced with disk.
+  int64_t first_record_id_;             // The internal record id (node id) of the first record in the segment.
+  std::atomic<int64_t> record_number_;  // Currently how many records (nodes) in the segment.
   int64_t* offset_table_;              // The offset table for neighbor list for each node.
   int64_t* neighbor_list_;             // The neighbor list for each node consecutively stored.
   int64_t navigation_point_;           // The navigation point for the starting search.
