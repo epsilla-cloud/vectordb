@@ -27,6 +27,8 @@ class Json {
   Json GetObject(const std::string& key) const;                      // Get nested object
   size_t GetArraySize(const std::string& key) const;
   Json GetArrayElement(const std::string& key, size_t index) const;  // Get specific element from array
+  Json GetArray(const std::string& key) const;  // Get specific element from array
+  Json GetArrayElement(size_t index) const;  // Get specific element from array
   bool HasMember(const std::string& key) const;
 
   void SetString(const std::string& key, const std::string& value);
@@ -40,7 +42,11 @@ class Json {
   void AddDoubleToArray(const std::string& key, double value);
   void AddBoolToArray(const std::string& key, bool value);
   void AddObjectToArray(const std::string& key, const Json& object);
-
+  void AddStringToArray(const std::string& value);
+  void AddIntToArray(int64_t value);
+  void AddDoubleToArray(double value);
+  void AddBoolToArray(bool value);
+  void AddObjectToArray(const Json& object);
  private:
   std::unique_ptr<rapidjson::Document> doc_;
   rapidjson::Value* val_;  // Pointer to a value within the document (for nested objects)

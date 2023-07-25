@@ -4,6 +4,8 @@
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
 
+#include <iostream>
+
 namespace vectordb {
 namespace engine {
 namespace meta {
@@ -153,6 +155,17 @@ Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
   return server::CommonUtil::AtomicWriteToFile(file_path, json_string);
 }
 
+int64_t GetNewTableId(const DatabaseSchema& db) {
+  int64_t max_id = -1;
+  for (const auto& table : db.tables_) {
+    std::cout << table.id_ << " " << table.name_ << std::endl;
+    if (table.id_ > max_id) {
+      max_id = table.id_;
+    }
+  }
+  return max_id + 1;
+}
+
 }  // namespace
 
 BasicMetaImpl::BasicMetaImpl() {
@@ -169,6 +182,8 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
   }
 
   DatabaseSchema db_schema;
+  db_schema.name_ = db_name;
+  db_schema.path_ = db_catalog_path;
   if (server::CommonUtil::IsFileExist(db_catalog_path)) {
     std::string json_content = server::CommonUtil::ReadContentFromFile(db_catalog_path + "/" + DB_CATALOG_FILE_NAME);
     Json json;
@@ -178,8 +193,6 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
 
     // Load the actual database schema from the JSON data.
     db_schema.id_ = json.GetInt("id");
-    db_schema.name_ = db_name;
-    db_schema.path_ = db_catalog_path;
     // Load tables
     size_t tables_size = json.GetArraySize(TABLES);
     for (size_t i = 0; i < tables_size; ++i) {
@@ -243,7 +256,7 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
   return Status::OK();
 }
 
-Status BasicMetaImpl::CreateTable(std::string& db_name, TableSchema& table_schema) {
+Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema) {
   // Table name cannot be duplicated.
   bool has_table = false;
   auto status = HasTable(db_name, table_schema.name_, has_table);
@@ -257,6 +270,11 @@ Status BasicMetaImpl::CreateTable(std::string& db_name, TableSchema& table_schem
   // TODO: Validate the table schema.
 
   auto& db = databases_.find(db_name)->second;
+  
+  // TODO: a better way to assign table id.
+  table_schema.id_ = GetNewTableId(db);
+  std::cout << "table id: " << table_schema.id_ << std::endl;
+
   db.tables_.push_back(table_schema);
   // Flush the change of the database schema to disk.
   status = SaveDBToFile(db, db.path_ + "/" + DB_CATALOG_FILE_NAME);
