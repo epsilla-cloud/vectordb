@@ -1,4 +1,5 @@
 #include "db/db_mvp.hpp"
+#include "utils/common_util.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -25,13 +26,20 @@ Status DBMVP::CreateTable(meta::TableSchema& table_schema) {
 }
 
 Status DBMVP::DeleteTable(const std::string& table_name) {
-  // TODO: delete the table from disk
+  auto table_id = GetTable(table_name)->table_schema_.id_;
+
   auto it = table_name_to_id_map_.find(table_name);
   if (it == table_name_to_id_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
   tables_[it->second] = nullptr;  // Set the shared_ptr to null
   table_name_to_id_map_.erase(it);
+
+  // Delete table from disk.
+  // TODO: verify if rebuild will have conflict on disk file in 2 threads.
+  std::string table_path = db_catalog_path_ + "/" + std::to_string(table_id);
+  server::CommonUtil::DeleteDirectory(table_path);  // Completely remove the table.
+
   return Status::OK();
 }
 
