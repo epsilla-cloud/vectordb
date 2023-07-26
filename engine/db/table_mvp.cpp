@@ -36,7 +36,7 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
       // Construct the executor.
       l2space_.push_back(std::make_shared<vectordb::L2Space>(table_schema_.fields_[i].vector_dimension_));
       executor_.push_back(std::make_shared<execution::VecSearchExecutor>(
-          ann_graph_segment_->record_number_,
+          ann_graph_segment_.back()->record_number_,
           table_schema_.fields_[i].vector_dimension_,
           ann_graph_segment_.back()->navigation_point_,
           ann_graph_segment_.back()->offset_table_,
