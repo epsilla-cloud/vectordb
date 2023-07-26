@@ -37,6 +37,7 @@ class TableMVP {
   ~TableMVP();
 
  public:
+  std::string db_catalog_path_;
   // The table schema.
   meta::TableSchema table_schema_;
   // Map from field name to field type.

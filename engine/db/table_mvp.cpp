@@ -17,6 +17,7 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
     : table_schema_(table_schema),
       // executors_num_(executors_num),
       table_segment_(nullptr) {
+  db_catalog_path_ = db_catalog_path;
   // Construct field name to field type map.
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     field_name_type_map_[table_schema_.fields_[i].name_] = table_schema_.fields_[i].field_type_;
