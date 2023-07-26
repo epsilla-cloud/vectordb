@@ -419,7 +419,7 @@ class WebController : public oatpp::web::server::api::ApiController {
 
         vectordb::Json result;
         vectordb::Status search_status = db_server->Search(
-            db_name, table_name, field_name, query_fields, query_vector, limit, result
+            db_name, table_name, field_name, query_fields, vector_size, query_vector, limit, result
         );
         // std::cout << result.DumpToString() << std::endl;
         if (!search_status.ok()) {

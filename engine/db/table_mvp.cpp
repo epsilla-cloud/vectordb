@@ -117,6 +117,7 @@ Status TableMVP::Insert(vectordb::Json& record) {
 Status TableMVP::Search(
     const std::string& field_name,
     std::vector<std::string>& query_fields,
+    int64_t query_dimension,
     const float* query_data,
     const int64_t K,
     vectordb::Json& result) {
@@ -139,6 +140,12 @@ Status TableMVP::Search(
   int64_t field_offset = table_segment_->field_name_mem_offset_map_[field_name];
   // Get the executor.
   std::shared_ptr<execution::VecSearchExecutor> executor = executor_[field_offset];
+
+  // The query dimension needs to match the vector dimension.
+  if (query_dimension != executor->dimension_) {
+    return Status(DB_UNEXPECTED_ERROR, "Query dimension doesn't match the vector field dimension.");
+  }
+
   // Search.
   int64_t result_num = 0;
   executor->Search(query_data, K, table_segment_->record_number_, result_num);
