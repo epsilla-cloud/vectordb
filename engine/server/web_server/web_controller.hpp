@@ -43,6 +43,7 @@ class WebController : public oatpp::web::server::api::ApiController {
   }
 
   std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
+    vectordb::query::expr::ExprPtr expr_ptr = std::make_shared<vectordb::query::expr::Expr>();
   // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
 
 /**
@@ -576,17 +577,52 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     ADD_CORS(TestExrParser)
 
-    ENDPOINT("POST", "/api/expr/test", TestExrParser, BODY_STRING(String, body)) {
+    ENDPOINT("POST", "/api/expr/test/{db_name}/{table_name}", TestExrParser,
+        PATH(String, db_name, "db_name"),
+        PATH(String, table_name, "table_name"),
+        BODY_STRING(String, body)) {
+
+        auto dto = StatusDto::createShared();
+
+        // vectordb::engine::meta::DatabaseSchema db_schema;
+        // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
+        // if (!db_status.ok()) {
+        //     dto->statusCode = Status::CODE_500.code;
+        //     dto->message = db_status.message();
+        //     return createDtoResponse(Status::CODE_500, dto);
+        // }
+
+        // vectordb::engine::meta::TableSchema table_schema;
+        // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
+        // if (!table_status.ok()) {
+        //     dto->statusCode = Status::CODE_500.code;
+        //     dto->message = table_status.message();
+        //     return createDtoResponse(Status::CODE_500, dto);
+        // }
+
         vectordb::Json parsedBody;
         parsedBody.LoadFromString(body);
         std::string expr = parsedBody.GetString("expr");
-        vectordb::query::expr::ExprPtr expr_ptr = std::make_shared<vectordb::query::expr::Expr>();
-        vectordb::query::expr::ExprNodePtr node = expr_ptr->ParseFromStr(expr);
-        if (!node) {
-            return createResponse(Status::CODE_400, "Expression not valid.");
+        std::cout << expr << std::endl;
+
+        // vectordb::query::expr::ExprNodePtr node = std::make_shared<vectordb::query::expr::ExprNode>();
+        std::vector<vectordb::query::expr::ExprNodePtr> nodes;
+
+        vectordb::Status status = expr_ptr->ParseNodeFromStr(expr, nodes);
+        if (!status.ok()) {
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_400, dto);
         }
 
-        return createResponse(Status::CODE_200, "Expr value: " + std::to_string(node->value.intValue));
+        auto res_dto = SearchRespDto::createShared();
+        res_dto->statusCode = Status::CODE_200.code;
+        res_dto->message = "Get root node successfully.";
+        vectordb::Json result;
+        auto res_status = expr_ptr->DumpToJson(nodes[nodes.size() - 1], result);
+        oatpp::parser::json::mapping::ObjectMapper mapper;
+        res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
+        return createDtoResponse(Status::CODE_200, res_dto);
     }
 
 /**

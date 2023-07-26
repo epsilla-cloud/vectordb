@@ -8,11 +8,11 @@ namespace query {
 namespace expr {
 
     enum class ArithmeticOperator {
-        Addition,
-        Subtraction,
-        Multiplication,
-        Division,
-        Modulo
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Module
     };
 
     enum class CompareOperator {
@@ -31,33 +31,85 @@ namespace expr {
         NOT
     };
 
+    enum class NodeType {
+        Invalid,
+        IntConst,
+        StringConst,
+        DoubleConst,
+        BoolConst,
+        IntAttr,
+        StringAttr,
+        DoubleAttr,
+        BoolAttr,
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Module,
+        LT,
+        LTE,
+        EQ,
+        GT,
+        GTE,
+        NE,
+        AND,
+        OR,
+        NOT
+    };
+
+    const std::unordered_map<std::string, NodeType> OperatorNodeTypeMap = {
+      {"+", NodeType::Add},
+      {"-", NodeType::Subtract},
+      {"*", NodeType::Multiply},
+      {"/", NodeType::Divide},
+      {"%", NodeType::Module},
+      {">", NodeType::GT},
+      {">=", NodeType::GTE},
+      {"==", NodeType::EQ},
+      {"<=", NodeType::LTE},
+      {"<", NodeType::LT},
+      {"!=", NodeType::NE},
+      {"AND", NodeType::AND},
+      {"OR", NodeType::OR},
+      {"NOT", NodeType::NOT}
+    };
+
+    enum class ValueType {
+        STRING,
+        INT,
+        DOUBLE,
+        BOOL
+    };
+
     union NodeDataType {
         std::string strValue;
         int intValue;
         double doubleValue;
-        float floatValue;
         bool boolValue;
 
         NodeDataType(): strValue("") {}
         ~NodeDataType() {}
     };
 
-    union NodeOperatorType {
-        ArithmeticOperator arithmetic;
-        CompareOperator compare;
-        LogicalOperator logical;
+    // union NodeOperatorType {
+    //     ArithmeticOperator arithmetic;
+    //     CompareOperator compare;
+    //     LogicalOperator logical;
 
-        NodeOperatorType(ArithmeticOperator op): arithmetic(op) {}
-        NodeOperatorType(CompareOperator op): compare(op) {}
-        NodeOperatorType(LogicalOperator op): logical(op) {}
-        NodeOperatorType(): logical(LogicalOperator::INVALID) {}
-        ~NodeOperatorType() {}
-    };
+    //     NodeOperatorType(ArithmeticOperator op): arithmetic(op) {}
+    //     NodeOperatorType(CompareOperator op): compare(op) {}
+    //     NodeOperatorType(LogicalOperator op): logical(op) {}
+    //     NodeOperatorType(): logical(LogicalOperator::INVALID) {}
+    //     ~NodeOperatorType() {}
+    // };
 
     struct ExprNode {
+        ValueType value_type;
+        NodeType node_type;
         NodeDataType value;
-        NodeOperatorType op;
-        std::vector<ExprNode> children;
+        std::string field_name; // Only attribute has it.
+        size_t left;
+        size_t right;
     };
     using ExprNodePtr = std::shared_ptr<ExprNode>;
 
