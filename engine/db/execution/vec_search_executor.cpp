@@ -734,6 +734,7 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
         K2);
       result_size = K < total ? K : total;
       // TODO: exclude deleted and not passing filter records.
+#pragma omp parallel for
       for (int64_t k_i = 0; k_i < result_size; ++k_i) {
         search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
       }
