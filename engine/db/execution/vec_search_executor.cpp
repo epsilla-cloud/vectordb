@@ -1,4 +1,5 @@
 #include "db/execution/vec_search_executor.hpp"
+#include "utils/atomic_counter.hpp"
 
 #include <omp.h>
 
@@ -26,6 +27,7 @@ VecSearchExecutor::VecSearchExecutor(
     const int64_t ntotal,
     const int64_t dimension,
     const int64_t start_search_point,
+    std::shared_ptr<ANNGraphSegment> ann_index,
     int64_t *offset_table,
     int64_t *neighbor_list,
     float *vector_table,
@@ -55,6 +57,7 @@ VecSearchExecutor::VecSearchExecutor(
       local_queues_starts_(num_threads),
       brute_force_search_(ntotal < BruteforceThreshold),
       brute_force_queue_(BruteforceThreshold) {
+  ann_index_ = ann_index;
   for (int q_i = 0; q_i < num_threads; ++q_i) {
     local_queues_starts_[q_i] = q_i * L_local;
   }
@@ -495,6 +498,8 @@ void VecSearchExecutor::SearchImpl(
     std::vector<int64_t> &local_queues_sizes,  // Sizes of local queue
     boost::dynamic_bitset<> &is_visited,
     const int64_t subsearch_iterations) {
+  // Set thread parallel.
+  omp_set_num_threads(num_threads_);
   // const int64_t index_threshold) { // AUP optimization.
   const int64_t master_queue_start = local_queues_starts[num_threads_ - 1];
   int64_t &master_queue_size = local_queues_sizes[num_threads_ - 1];
@@ -577,10 +582,11 @@ void VecSearchExecutor::SearchImpl(
         break;
       }
       float dist_thresh = last_dist;
-
+      AtomicCounter thread_counter;
+      thread_counter.SetValue(0);
 #pragma omp parallel reduction(+ : tmp_count_computation)
       {
-        int w_i = omp_get_thread_num();
+        int w_i = thread_counter.GetAndIncrement();
         const int64_t local_queue_start = local_queues_starts[w_i];
         int64_t &local_queue_size = local_queues_sizes[w_i];
         const int64_t queue_capacity = local_queue_capacity;

@@ -8,6 +8,19 @@ namespace engine {
 DBServer::DBServer() {
   // Initialize the meta database
   meta_ = std::make_shared<meta::BasicMetaImpl>();
+
+  // Start the thread to periodically call Rebuild
+  rebuild_thread_ = std::thread(&DBServer::RebuildPeriodically, this);
+}
+
+DBServer::~DBServer() {
+  // Set the stop_rebuild_thread_ flag to true to stop the periodic rebuild
+  stop_rebuild_thread_ = true;
+
+  // Wait for the rebuild_thread_ to finish and join before destruction
+  if (rebuild_thread_.joinable()) {
+      rebuild_thread_.join();
+  }
 }
 
 Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path) {
@@ -101,12 +114,12 @@ Status DBServer::Insert(const std::string& db_name, const std::string& table_nam
 
 Status DBServer::Search(
   const std::string& db_name,
-  const std::string& table_name, 
+  const std::string& table_name,
   std::string& field_name,
-  std::vector<std::string>& query_fields, 
+  std::vector<std::string>& query_fields,
   int64_t query_dimension,
-  const float* query_data, 
-  const int64_t K, 
+  const float* query_data,
+  const int64_t K,
   vectordb::Json& result
 ) {
   auto db = GetDB(db_name);

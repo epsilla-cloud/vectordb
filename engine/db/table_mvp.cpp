@@ -1,6 +1,7 @@
 #include "db/table_mvp.hpp"
 
 #include <numeric>
+#include <omp.h>
 
 #include "db/catalog/meta_types.hpp"
 
@@ -12,6 +13,8 @@ constexpr const int MasterQueueSize = 500;
 constexpr const int LocalQueueSize = 500;
 constexpr const int GlobalSyncInterval = 15;
 constexpr const int MinimalGraphSize = 100;
+
+constexpr const int RebuildThreads = 4;
 
 TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path)
     : table_schema_(table_schema),
@@ -40,6 +43,7 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
           ann_graph_segment_.back()->record_number_,
           table_schema_.fields_[i].vector_dimension_,
           ann_graph_segment_.back()->navigation_point_,
+          ann_graph_segment_.back(),
           ann_graph_segment_.back()->offset_table_,
           ann_graph_segment_.back()->neighbor_list_,
           table_segment_->vector_tables_[table_segment_->field_name_mem_offset_map_[table_schema_.fields_[i].name_]],
@@ -54,6 +58,9 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
 }
 
 Status TableMVP::Rebuild(const std::string& db_catalog_path) {
+  // Limit how many threads rebuild takes.
+  omp_set_num_threads(RebuildThreads);
+
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
 
@@ -92,6 +99,7 @@ Status TableMVP::Rebuild(const std::string& db_catalog_path) {
           table_segment_->record_number_,
           table_schema_.fields_[i].vector_dimension_,
           ann_graph_segment_[index]->navigation_point_,
+          ann_graph_segment_[index],
           ann_graph_segment_[index]->offset_table_,
           ann_graph_segment_[index]->neighbor_list_,
           table_segment_->vector_tables_[table_segment_->field_name_mem_offset_map_[table_schema_.fields_[i].name_]],

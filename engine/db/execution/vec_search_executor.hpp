@@ -13,6 +13,7 @@
 
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
+#include "db/ann_graph_segment.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
@@ -23,6 +24,7 @@ constexpr const int BruteforceThreshold = 512;
 
 class VecSearchExecutor {
  public:
+  std::shared_ptr<ANNGraphSegment> ann_index_; // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
   int64_t ntotal_ = 0;      // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
@@ -53,6 +55,7 @@ class VecSearchExecutor {
       const int64_t ntotal,
       const int64_t dimension,
       const int64_t start_search_point,
+      std::shared_ptr<ANNGraphSegment> ann_index,
       int64_t* offset_table,
       int64_t* neighbor_list,
       float* vector_table,
