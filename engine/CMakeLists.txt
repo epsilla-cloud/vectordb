@@ -52,7 +52,9 @@ list(APPEND SOURCE_FILES ${DB_SERVER_FILES})
 file(GLOB_RECURSE WEB_SERVER_FILES "server/web_server/*")
 list(APPEND SOURCE_FILES ${WEB_SERVER_FILES})
 
-
+# Add source files in logger directory
+file(GLOB LOGGER_FILES "logger/*.cpp")
+list(APPEND SOURCE_FILES ${LOGGER_FILES})
 
 add_executable(vectordb ${SOURCE_FILES})
 
