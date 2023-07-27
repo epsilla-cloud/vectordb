@@ -1,6 +1,8 @@
 #include "db/ann_graph_segment.hpp"
 
 #include <iostream>
+#include <cstdio>
+#include <unistd.h> 
 
 #include "db/index/knn/knn.hpp"
 #include "db/index/nsg/nsg.hpp"
@@ -100,6 +102,52 @@ ANNGraphSegment::ANNGraphSegment(int64_t size_limit)
   // TODO: Create an in-memory segment
 }
 
+// Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id) {
+//   if (skip_sync_disk_) {
+//     return Status::OK();
+//   }
+
+//   // Construct the file path
+//   std::string path = db_catalog_path + "/" + std::to_string(table_id) + "/ann_graph_" + std::to_string(field_id) + ".bin";
+//   std::string tmp_path = path + ".tmp";
+
+//   std::ofstream file(tmp_path, std::ios::binary);
+//   if (!file) {
+//     return Status(DB_UNEXPECTED_ERROR, "Cannot open file: " + path);
+//   }
+
+//   // Write the number of records and the first record id
+//   file.write(reinterpret_cast<const char*>(&record_number_), sizeof(record_number_));
+//   file.write(reinterpret_cast<const char*>(&first_record_id_), sizeof(first_record_id_));
+
+//   // Write the offset table
+//   file.write(reinterpret_cast<const char*>(offset_table_), sizeof(int64_t) * (record_number_ + 1));
+
+//   // Get the total number of edges from the last element of offset_table_
+//   int64_t total_edges = offset_table_[record_number_];
+
+//   // Write the neighbor list
+//   file.write(reinterpret_cast<const char*>(neighbor_list_), sizeof(int64_t) * total_edges);
+
+//   // Write the navigation point
+//   file.write(reinterpret_cast<const char*>(&navigation_point_), sizeof(navigation_point_));
+
+//   // Close the file
+//   fsync(fileno(file));
+//   file.close();
+
+//   if (!file) {
+//     return Status(DB_UNEXPECTED_ERROR, "Failed to write to file: " + path);
+//   }
+
+//   if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
+//     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
+//     return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + tmp_path + " to " + path);
+//   }
+
+//   return Status::OK();
+// }
+
 Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id) {
   if (skip_sync_disk_) {
     return Status::OK();
@@ -109,33 +157,33 @@ Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t
   std::string path = db_catalog_path + "/" + std::to_string(table_id) + "/ann_graph_" + std::to_string(field_id) + ".bin";
   std::string tmp_path = path + ".tmp";
 
-  std::ofstream file(tmp_path, std::ios::binary);
+  FILE* file = fopen(tmp_path.c_str(), "wb");
   if (!file) {
     return Status(DB_UNEXPECTED_ERROR, "Cannot open file: " + path);
   }
 
   // Write the number of records and the first record id
-  file.write(reinterpret_cast<const char*>(&record_number_), sizeof(record_number_));
-  file.write(reinterpret_cast<const char*>(&first_record_id_), sizeof(first_record_id_));
+  fwrite(&record_number_, sizeof(record_number_), 1, file);
+  fwrite(&first_record_id_, sizeof(first_record_id_), 1, file);
 
   // Write the offset table
-  file.write(reinterpret_cast<const char*>(offset_table_), sizeof(int64_t) * (record_number_ + 1));
+  fwrite(offset_table_, sizeof(int64_t), record_number_ + 1, file);
 
   // Get the total number of edges from the last element of offset_table_
   int64_t total_edges = offset_table_[record_number_];
 
   // Write the neighbor list
-  file.write(reinterpret_cast<const char*>(neighbor_list_), sizeof(int64_t) * total_edges);
+  fwrite(neighbor_list_, sizeof(int64_t), total_edges, file);
 
   // Write the navigation point
-  file.write(reinterpret_cast<const char*>(&navigation_point_), sizeof(navigation_point_));
+  fwrite(&navigation_point_, sizeof(navigation_point_), 1, file);
+
+  // Flush changes to disk
+  fflush(file);
+  fsync(fileno(file));
 
   // Close the file
-  file.close();
-
-  if (!file) {
-    return Status(DB_UNEXPECTED_ERROR, "Failed to write to file: " + path);
-  }
+  fclose(file);
 
   if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;

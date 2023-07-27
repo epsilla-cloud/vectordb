@@ -31,6 +31,7 @@ class DBServer {
     const std::string& table_name, 
     std::string& field_name,
     std::vector<std::string>& query_fields, 
+    int64_t query_dimension,
     const float* query_data, 
     const int64_t K, 
     vectordb::Json& result

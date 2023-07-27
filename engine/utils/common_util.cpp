@@ -10,6 +10,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <cstdio>
 #include <thread>
 #include <vector>
 
@@ -196,16 +197,42 @@ std::string CommonUtil::ReadContentFromFile(const std::string& file_path) {
   return content;
 }
 
+// Status CommonUtil::AtomicWriteToFile(const std::string& path, const std::string& content) {
+//   std::string temp_path = path + ".tmp";
+//   std::ofstream ofs(temp_path);
+//   if (!ofs.is_open()) {
+//     // LOG_SERVER_ERROR_ << "Failed to open temp file: " << temp_path;
+//     return Status(INFRA_UNEXPECTED_ERROR, "Failed to open temp file: " + temp_path);
+//   }
+
+//   ofs << content;
+//   ofs.close();
+
+//   if (std::rename(temp_path.c_str(), path.c_str()) != 0) {
+//     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
+//     return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + temp_path + " to " + path);
+//   }
+
+//   return Status::OK();
+// }
+
 Status CommonUtil::AtomicWriteToFile(const std::string& path, const std::string& content) {
   std::string temp_path = path + ".tmp";
-  std::ofstream ofs(temp_path);
-  if (!ofs.is_open()) {
+  FILE* file = fopen(temp_path.c_str(), "w");
+  if (file == nullptr) {
     // LOG_SERVER_ERROR_ << "Failed to open temp file: " << temp_path;
     return Status(INFRA_UNEXPECTED_ERROR, "Failed to open temp file: " + temp_path);
   }
 
-  ofs << content;
-  ofs.close();
+  size_t num_written = fwrite(content.c_str(), 1, content.size(), file);
+  if (num_written != content.size()) {
+    // TODO: Handle error...
+  }
+
+  fflush(file);  // Ensures the data is written to OS buffers
+  fsync(fileno(file));  // Ensures the data is written to the disk
+
+  fclose(file);
 
   if (std::rename(temp_path.c_str(), path.c_str()) != 0) {
     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
