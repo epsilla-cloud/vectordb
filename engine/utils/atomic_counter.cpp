@@ -9,6 +9,10 @@ int AtomicCounter::IncrementAndGet() {
   // return ++counter_;
 }
 
+int AtomicCounter::GetAndIncrement() {
+  return counter_.fetch_add(1);
+}
+
 void AtomicCounter::SetValue(int value) {
   counter_.store(value);
 }
