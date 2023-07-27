@@ -11,6 +11,8 @@ class AtomicCounter {
 
   int IncrementAndGet();
 
+  int GetAndIncrement();
+
   void SetValue(int value);
 
  private:
