@@ -33,7 +33,7 @@ jobs:
         docker build --pull -t epsilla/vectordb:latest .
         docker push epsilla/vectordb:latest
         #docker build --pull -t epsilla/vectordb:${SHA_TAG} .
-        echo ${step.date.output}
+        echo {{ steps.date.outputs.date }}
 
 
         
