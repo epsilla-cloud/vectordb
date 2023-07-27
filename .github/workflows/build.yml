@@ -13,7 +13,13 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@v3
-      
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
     - name: Get Current Date 
       id: date
       run: echo "::set-output name=date::$(date +'%Y%m%d%H%M%S')"
@@ -24,6 +30,9 @@ jobs:
       run: |
         echo "SHA: ${SHA_TAG}"
         cd ./engine
-        docker build --pull -t epsilla/vectordb:${SHA_TAG} .
+        docker build --pull -t epsilla/vectordb:latest .
+        docker push epsilla/vectordb:latest
+        #docker build --pull -t epsilla/vectordb:${SHA_TAG} .
+
 
         
