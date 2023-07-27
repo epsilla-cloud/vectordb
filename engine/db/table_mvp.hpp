@@ -29,6 +29,7 @@ class TableMVP {
   Status Search(
     const std::string& field_name,
     std::vector<std::string>& query_fields, 
+    int64_t query_dimension,
     const float* query_data, 
     const int64_t K, 
     vectordb::Json& result
@@ -37,6 +38,7 @@ class TableMVP {
   ~TableMVP();
 
  public:
+  std::string db_catalog_path_;
   // The table schema.
   meta::TableSchema table_schema_;
   // Map from field name to field type.

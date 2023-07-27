@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <iostream>
+#include <cstdio>
+#include <unistd.h> 
 
 #include "utils/common_util.hpp"
 
@@ -297,6 +299,67 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records) {
   return Status::OK();
 }
 
+// Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
+//   if (skip_sync_disk_) {
+//     return Status::OK();
+//   }
+
+//   // Construct the file path
+//   std::string path = db_catalog_path + "/" + std::to_string(table_schema.id_) + "/data_mvp.bin";
+//   std::string tmp_path = path + ".tmp";
+
+//   std::ofstream file(tmp_path, std::ios::binary);
+//   if (!file) {
+//     return Status(DB_UNEXPECTED_ERROR, "Cannot open file: " + path);
+//   }
+
+//   // Write the number of records and the first record id
+//   file.write(reinterpret_cast<const char*>(&record_number_), sizeof(record_number_));
+//   file.write(reinterpret_cast<const char*>(&first_record_id_), sizeof(first_record_id_));
+
+//   // Write the biset
+//   int64_t bitset_size = deleted_->size();
+//   const uint8_t* bitset_data = deleted_->data();
+//   file.write(reinterpret_cast<const char*>(&bitset_size), sizeof(bitset_size));
+//   file.write(reinterpret_cast<const char*>(bitset_data), bitset_size);
+
+//   // // Write the attribute table.
+//   file.write(attribute_table_, record_number_ * primitive_offset_);
+
+//   // Write the string table.
+//   for (auto i = 0; i < record_number_; ++i) {
+//     for (auto j = 0; j < string_num_; ++j) {
+//       int64_t offset = i * string_num_ + j;
+//       int64_t string_length = string_table_[offset].size();
+//       file.write(reinterpret_cast<const char*>(&string_length), sizeof(string_length));
+//       file.write(string_table_[offset].c_str(), string_length);
+//     }
+//   }
+
+//   // Write the vector table.
+//   for (auto i = 0; i < vector_num_; ++i) {
+//     file.write(reinterpret_cast<const char*>(vector_tables_[i]), sizeof(float) * record_number_ * vector_dims_[i]);
+//   }
+
+//   // Flush change to disk and close the file
+//   fsync(fileno(file));
+//   file.close();
+
+//   if (!file) {
+//     return Status(DB_UNEXPECTED_ERROR, "Failed to write to file: " + path);
+//   }
+
+//   if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
+//     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
+//     return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + tmp_path + " to " + path);
+//   }
+
+//   // Skip next time until the segment is modified.
+//   skip_sync_disk_ = true;
+
+//   return Status::OK();
+// }
+
 Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
   if (skip_sync_disk_) {
     return Status::OK();
@@ -306,45 +369,45 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   std::string path = db_catalog_path + "/" + std::to_string(table_schema.id_) + "/data_mvp.bin";
   std::string tmp_path = path + ".tmp";
 
-  std::ofstream file(tmp_path, std::ios::binary);
+  FILE* file = fopen(tmp_path.c_str(), "wb");
   if (!file) {
     return Status(DB_UNEXPECTED_ERROR, "Cannot open file: " + path);
   }
 
   // Write the number of records and the first record id
-  file.write(reinterpret_cast<const char*>(&record_number_), sizeof(record_number_));
-  file.write(reinterpret_cast<const char*>(&first_record_id_), sizeof(first_record_id_));
+  fwrite(&record_number_, sizeof(record_number_), 1, file);
+  fwrite(&first_record_id_, sizeof(first_record_id_), 1, file);
 
-  // Write the biset
+  // Write the bitset
   int64_t bitset_size = deleted_->size();
   const uint8_t* bitset_data = deleted_->data();
-  file.write(reinterpret_cast<const char*>(&bitset_size), sizeof(bitset_size));
-  file.write(reinterpret_cast<const char*>(bitset_data), bitset_size);
+  fwrite(&bitset_size, sizeof(bitset_size), 1, file);
+  fwrite(bitset_data, bitset_size, 1, file);
 
-  // // Write the attribute table.
-  file.write(attribute_table_, record_number_ * primitive_offset_);
+  // Write the attribute table.
+  fwrite(attribute_table_, record_number_ * primitive_offset_, 1, file);
 
   // Write the string table.
   for (auto i = 0; i < record_number_; ++i) {
     for (auto j = 0; j < string_num_; ++j) {
       int64_t offset = i * string_num_ + j;
       int64_t string_length = string_table_[offset].size();
-      file.write(reinterpret_cast<const char*>(&string_length), sizeof(string_length));
-      file.write(string_table_[offset].c_str(), string_length);
+      fwrite(&string_length, sizeof(string_length), 1, file);
+      fwrite(string_table_[offset].c_str(), string_length, 1, file);
     }
   }
 
   // Write the vector table.
   for (auto i = 0; i < vector_num_; ++i) {
-    file.write(reinterpret_cast<const char*>(vector_tables_[i]), sizeof(float) * record_number_ * vector_dims_[i]);
+    fwrite(vector_tables_[i], sizeof(float) * record_number_ * vector_dims_[i], 1, file);
   }
+
+  // Flush changes to disk
+  fflush(file);
+  fsync(fileno(file));
 
   // Close the file
-  file.close();
-
-  if (!file) {
-    return Status(DB_UNEXPECTED_ERROR, "Failed to write to file: " + path);
-  }
+  fclose(file);
 
   if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
     // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
