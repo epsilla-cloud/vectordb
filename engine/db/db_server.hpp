@@ -14,6 +14,8 @@
 namespace vectordb {
 namespace engine {
 
+constexpr const long RebuildInterval = 60000;
+
 class DBServer {
  public:
   DBServer();
@@ -48,7 +50,7 @@ class DBServer {
 
   // periodically in a separate thread
   void RebuildPeriodically() {
-    const std::chrono::milliseconds rebuild_interval(60000); // TODO:: to be decided.
+    const std::chrono::milliseconds rebuild_interval(RebuildInterval); // TODO:: to be decided.
 
     while (!stop_rebuild_thread_) {
       Rebuild(); // Call the Rebuild function
