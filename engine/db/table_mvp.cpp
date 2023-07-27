@@ -1,6 +1,7 @@
 #include "db/table_mvp.hpp"
 
 #include <numeric>
+#include <omp.h>
 
 #include "db/catalog/meta_types.hpp"
 
@@ -12,6 +13,8 @@ constexpr const int MasterQueueSize = 500;
 constexpr const int LocalQueueSize = 500;
 constexpr const int GlobalSyncInterval = 15;
 constexpr const int MinimalGraphSize = 100;
+
+constexpr const int RebuildThreads = 4;
 
 TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path)
     : table_schema_(table_schema),
@@ -55,6 +58,9 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
 }
 
 Status TableMVP::Rebuild(const std::string& db_catalog_path) {
+  // Limit how many threads rebuild takes.
+  omp_set_num_threads(RebuildThreads);
+
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
 

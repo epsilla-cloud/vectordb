@@ -498,6 +498,8 @@ void VecSearchExecutor::SearchImpl(
     std::vector<int64_t> &local_queues_sizes,  // Sizes of local queue
     boost::dynamic_bitset<> &is_visited,
     const int64_t subsearch_iterations) {
+  // Set thread parallel.
+  omp_set_num_threads(num_threads_);
   // const int64_t index_threshold) { // AUP optimization.
   const int64_t master_queue_start = local_queues_starts[num_threads_ - 1];
   int64_t &master_queue_size = local_queues_sizes[num_threads_ - 1];
