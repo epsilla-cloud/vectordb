@@ -1,8 +1,9 @@
 #include <chrono>
 #include <oatpp/network/Server.hpp>
 
-#include "server/web_server/web_server.hpp"
-#include "server/web_server/web_controller.hpp"
+#include "web_server.hpp"
+#include "web_controller.hpp"
+#include "request_interceptor.hpp"
 
 namespace vectordb {
 namespace server {
@@ -37,10 +38,10 @@ WebServer::StartService() {
         auto user_controller = WebController::createShared();
         auto router = components.http_router.getObject();
         router->addController(user_controller);
-        // user_controller->addEndpointsToRouter(router);
 
         /* Get connection handler component */
-        auto connection_handler = components.server_connection_handler.getObject();
+        auto connection_handler = oatpp::web::server::HttpConnectionHandler::createShared(router);
+        connection_handler->addRequestInterceptor(std::make_shared<EpsillaRequestInterceptor>());
 
         /* Get connection provider component */
         auto connection_provider = components.server_connection_provider.getObject();
