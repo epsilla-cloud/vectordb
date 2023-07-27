@@ -36,6 +36,7 @@ class TableSegmentMVP {
   Status DoubleSize();
 
   Status Insert(meta::TableSchema& table_schema, Json& records);
+  Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
 
   // Save the table segment to disk.
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
@@ -52,6 +53,7 @@ class TableSegmentMVP {
   std::unordered_map<std::string, size_t> field_name_mem_offset_map_;  // The offset of each attribute in attribute table.
   std::unordered_map<size_t, size_t> field_id_mem_offset_map_;         // The offset of each attribute in attribute table.
                                                                        // Constructed from schema.
+  std::atomic<int64_t> wal_global_id_;                                 // The consumed global wal id.
   int64_t primitive_num_;
   int64_t primitive_offset_;
   int64_t string_num_;

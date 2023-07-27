@@ -7,16 +7,16 @@ class AtomicCounter {
  public:
   AtomicCounter();
 
-  int Get();
+  int64_t Get();
 
-  int IncrementAndGet();
+  int64_t IncrementAndGet();
 
-  int GetAndIncrement();
+  int64_t GetAndIncrement();
 
-  void SetValue(int value);
+  void SetValue(int64_t value);
 
  private:
-  std::atomic<int> counter_;
+  std::atomic<int64_t> counter_;
 };
 
 }  // namespace vectordb
