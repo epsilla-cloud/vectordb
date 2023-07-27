@@ -14,7 +14,7 @@ void print_help(const std::string &app_name) {
             << std::endl;
   std::cout << "  Options:" << std::endl;
   std::cout << "   -h --help                 Print this help." << std::endl;
-  std::cout << "   -c --conf_file filename   Read configuration from the file." << std::endl;
+  // std::cout << "   -c --conf_file filename   Read configuration from the file." << std::endl;
   std::cout << std::endl;
 }
 
