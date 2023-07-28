@@ -39,12 +39,13 @@ class WebController : public oatpp::web::server::api::ApiController {
         return std::make_shared<WebController>(objectMapper);
     }
 
+    std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
+    // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
+
 /**
  *  Begin ENDPOINTs generation ('ApiController' codegen)
  */
 #include OATPP_CODEGEN_BEGIN(ApiController)
-    std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
-    // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
 
     ADD_CORS(root)
 
@@ -421,7 +422,6 @@ class WebController : public oatpp::web::server::api::ApiController {
         vectordb::Status search_status = db_server->Search(
             db_name, table_name, field_name, query_fields, vector_size, query_vector, limit, result
         );
-        // std::cout << result.DumpToString() << std::endl;
         if (!search_status.ok()) {
             status_dto->statusCode = Status::CODE_500.code;
             status_dto->message = search_status.message();
