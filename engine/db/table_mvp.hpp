@@ -13,6 +13,7 @@
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/status.hpp"
 #include "db/index/space_l2.hpp"
+#include "db/wal/write_ahead_log.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -49,6 +50,9 @@ class TableMVP {
   std::vector<std::shared_ptr<execution::VecSearchExecutor>> executor_;  // The executor for vector search.
   std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;      // The ann graph segment for each vector field.
   std::vector<std::shared_ptr<vectordb::L2Space>> l2space_;              // The l2 space for each vector field.
+
+  // One write ahead log per table.
+  std::shared_ptr<WriteAheadLog> wal_;
 };
 
 }  // namespace engine

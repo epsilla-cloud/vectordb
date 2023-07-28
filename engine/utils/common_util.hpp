@@ -19,6 +19,7 @@ class CommonUtil {
   static bool IsDirectoryExist(const std::string& path);
   static Status CreateDirectory(const std::string& path);
   static Status DeleteDirectory(const std::string& path);
+  static Status RemoveFile(const std::string& path);
 
   static std::string GetFileName(const std::string& filename);
   static std::string GetExePath();

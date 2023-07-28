@@ -29,6 +29,10 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
   // Load the table data from disk.
   table_segment_ = std::make_shared<TableSegmentMVP>(table_schema, db_catalog_path);
 
+  // Replay operations in write ahead log.
+  wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_);
+  wal_->Replay(table_schema, table_segment_);
+
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     if (table_schema_.fields_[i].field_type_ == meta::FieldType::VECTOR_FLOAT ||
         table_schema_.fields_[i].field_type_ == meta::FieldType::VECTOR_DOUBLE) {
@@ -67,6 +71,9 @@ Status TableMVP::Rebuild(const std::string& db_catalog_path) {
   // Write the table data to disk.
   std::cout << "Save table segment." << std::endl;
   table_segment_->SaveTableSegment(table_schema_, db_catalog_path);
+
+  // Clean up old WAL files.
+  wal_->CleanUpOldFiles();
 
   int64_t index = 0;
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
@@ -119,7 +126,8 @@ Status TableMVP::Rebuild(const std::string& db_catalog_path) {
 }
 
 Status TableMVP::Insert(vectordb::Json& record) {
-  return table_segment_->Insert(table_schema_, record);
+  int64_t wal_id = wal_->WriteEntry(LogEntryType::INSERT, record.DumpToString());
+  return table_segment_->Insert(table_schema_, record, wal_id);
 }
 
 Status TableMVP::Search(

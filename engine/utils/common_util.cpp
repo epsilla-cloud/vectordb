@@ -148,6 +148,18 @@ Status CommonUtil::DeleteDirectory(const std::string& path) {
   return Status::OK();
 }
 
+Status CommonUtil::RemoveFile(const std::string& path) {
+  if (path.empty()) {
+    return Status::OK();
+  }
+
+  if(remove(path.c_str()) != 0) {
+    return Status(INFRA_UNEXPECTED_ERROR, "Failed to remove file: " + path);
+  } else {
+    return Status::OK();
+  }
+}
+
 bool CommonUtil::IsFileExist(const std::string& path) {
   return (access(path.c_str(), F_OK) == 0);
 }

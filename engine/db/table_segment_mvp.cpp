@@ -109,7 +109,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       primitive_num_(0),
       string_num_(0),
       vector_num_(0),
-      vector_dims_(0) {
+      vector_dims_(0),
+      wal_global_id_(-1) {
   // Init the containers.
   Init(table_schema, InitTableSize);
   std::string path = db_catalog_path + "/" + std::to_string(table_schema.id_) + "/data_mvp.bin";
@@ -148,6 +149,9 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     for (auto i = 0; i < vector_num_; ++i) {
       file.read(reinterpret_cast<char*>(vector_tables_[i]), sizeof(float) * record_number_ * vector_dims_[i]);
     }
+
+    // Last, read the global wal id.
+    file.read(reinterpret_cast<char*>(&wal_global_id_), sizeof(wal_global_id_));
 
     // Close the file
     file.close();
@@ -198,8 +202,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
 
 //   return Status::OK();
 // }
-
-Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records) {
+Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id) {
+  wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
     std::cout << "No records to insert." << std::endl;
@@ -401,6 +405,9 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   for (auto i = 0; i < vector_num_; ++i) {
     fwrite(vector_tables_[i], sizeof(float) * record_number_ * vector_dims_[i], 1, file);
   }
+
+  // Last, write the global wal id.
+  fwrite(&wal_global_id_, sizeof(wal_global_id_), 1, file);
 
   // Flush changes to disk
   fflush(file);
