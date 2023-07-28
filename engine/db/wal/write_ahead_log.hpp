@@ -1,17 +1,23 @@
+#include <unistd.h>
+
+#include <boost/filesystem.hpp>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <unistd.h>
-#include <boost/filesystem.hpp>
-#include "db/table_segment_mvp.hpp"
-#include "utils/json.hpp"
-#include "utils/common_util.hpp"
+
 #include "db/catalog/meta_types.hpp"
+#include "db/table_segment_mvp.hpp"
+#include "utils/common_util.hpp"
+#include "utils/json.hpp"
 
 namespace vectordb {
 namespace engine {
-const std::chrono::minutes ROTATION_INTERVAL(1);
+// const std::chrono::minutes ROTATION_INTERVAL(10);
+// const std::chrono::days LOG_RETENTION(7);
+const std::chrono::seconds ROTATION_INTERVAL(600);
+const std::chrono::seconds LOG_RETENTION(3600 * 24 * 7);
+
 
 enum LogEntryType {
   INSERT = 1,
@@ -23,7 +29,14 @@ class WriteAheadLog {
   WriteAheadLog(std::string base_path, int64_t table_id)
       : logs_folder_(base_path + "/" + std::to_string(table_id) + "/wal/"),
         last_rotation_time_(std::chrono::system_clock::now()) {
-    global_counter_.SetValue(0);
+    // Load the last ID from the disk
+    std::ifstream id_file(logs_folder_ + "/last_id.txt");
+    if (id_file.is_open()) {
+      int64_t last_global_id;
+      id_file >> last_global_id;
+      global_counter_.SetValue(last_global_id);
+      id_file.close();
+    }
     server::CommonUtil::CreateDirectory(logs_folder_);
     RotateFile();
   }
@@ -32,6 +45,10 @@ class WriteAheadLog {
     if (file_ != nullptr) {
       fclose(file_);
     }
+    // Save the last ID to the disk
+    std::ofstream id_file(logs_folder_ + "/last_id.txt");
+    id_file << global_counter_.Get();
+    id_file.close();
   }
 
   int64_t WriteEntry(LogEntryType type, const std::string& entry) {
@@ -50,18 +67,23 @@ class WriteAheadLog {
   void Replay(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment) {
     std::vector<boost::filesystem::path> files;
     GetSortedLogFiles(files);
-    for (const auto& file : files) {
+    for (auto pt = 0; pt < files.size(); ++pt) {
+      auto file = files[pt];
+      bool update = false;
       std::ifstream in(file.string());
       std::string line;
       while (std::getline(in, line)) {
         // Entry ID
         size_t first_space = line.find(' ');
         int64_t global_id = std::stoll(line.substr(0, first_space));
+        if (global_counter_.Get() < global_id) {
+          global_counter_.SetValue(global_id);
+        }
         // If the entry ID is less than or equal to the consumed ID, ignore it
         if (global_id <= segment->wal_global_id_) {
           continue;
         }
-
+        update = true;
         // Entry type
         size_t second_space = line.find(' ', first_space + 1);
         LogEntryType type = static_cast<LogEntryType>(std::stoi(line.substr(first_space + 1, second_space - first_space - 1)));
@@ -70,13 +92,50 @@ class WriteAheadLog {
 
         // Otherwise, replay the entry
         ApplyEntry(table_schema, segment, global_id, type, content);
-
-        global_counter_.SetValue(global_id);
       }
       // Close the file.
       in.close();
+      // Delete the file if the whole file is already in table.
+      if (!update && pt < files.size() - 1) {
+        server::CommonUtil::RemoveFile(file.string());
+      }
     }
+    // Save the last ID to the disk
+    std::ofstream id_file(logs_folder_ + "/last_id.txt");
+    id_file << global_counter_.Get();
+    id_file.close();
   }
+
+  void CleanUpOldFiles() {
+    // Get the current time
+    auto now = std::chrono::system_clock::now();
+    // Convert LOG_RETENTION to seconds for comparison
+    auto retention_period_seconds = std::chrono::duration_cast<std::chrono::seconds>(LOG_RETENTION).count();
+
+    // Get all log files
+    std::vector<boost::filesystem::path> files;
+    GetSortedLogFiles(files);
+
+    for (const auto& file : files) {
+        // Extract the timestamp from the filename
+        auto filename = file.filename().string();
+        auto pos = filename.find_last_of('.');
+        auto timestamp_str = filename.substr(0, pos);
+        auto timestamp = std::stoll(timestamp_str);
+
+        // Convert now to seconds since epoch
+        auto now_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+
+        // If the file is older than LOG_RETENTION, delete it
+        if (now_in_seconds - timestamp > retention_period_seconds) {
+            server::CommonUtil::RemoveFile(file.string());
+        } else {
+            // Since the files are sorted, we can break as soon as we encounter a file that's not old enough to be deleted
+            break;
+        }
+    }
+}
+
 
  private:
   void ApplyEntry(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment, int64_t global_id, LogEntryType& type, std::string& content) {
@@ -103,7 +162,7 @@ class WriteAheadLog {
   }
 
   void GetSortedLogFiles(std::vector<boost::filesystem::path>& files) {
-    boost::filesystem::directory_iterator end_itr; // Default ctor yields past-the-end
+    boost::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
     for (boost::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
       if (i->path().extension() == ".log") {
         files.push_back(i->path());

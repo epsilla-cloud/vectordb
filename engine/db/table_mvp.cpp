@@ -72,6 +72,9 @@ Status TableMVP::Rebuild(const std::string& db_catalog_path) {
   std::cout << "Save table segment." << std::endl;
   table_segment_->SaveTableSegment(table_schema_, db_catalog_path);
 
+  // Clean up old WAL files.
+  wal_->CleanUpOldFiles();
+
   int64_t index = 0;
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     if (table_schema_.fields_[i].field_type_ == meta::FieldType::VECTOR_FLOAT ||
