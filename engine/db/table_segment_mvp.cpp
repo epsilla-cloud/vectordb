@@ -42,7 +42,7 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
   }
 }
 
-constexpr const int64_t InitTableSize = 50000;
+constexpr const int64_t InitTableSize = 150000;
 
 Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   size_limit_ = size_limit;
