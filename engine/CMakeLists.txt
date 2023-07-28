@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
 
 # Find Boost
-find_package(Boost REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem)
 
 # Include Boost headers
 include_directories(${Boost_INCLUDE_DIRS})
@@ -43,6 +43,8 @@ file(GLOB UTILS_FILES "db/index/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/index/nsg/*.cpp")
 list(APPEND SOURCE_FILES ${UTILS_FILES})
+file(GLOB UTILS_FILES "db/wal/*.cpp")
+list(APPEND SOURCE_FILES ${UTILS_FILES})
 
 # Add source files in sub dir db_server
 file(GLOB_RECURSE DB_SERVER_FILES "server/db_server/*")
@@ -72,7 +74,7 @@ target_link_libraries(vectordb PUBLIC oatpp::oatpp)
 # add_executable(vectordb ${SOURCE_FILES})
 
 # Link Boost libraries
-target_link_libraries(vectordb ${Boost_LIBRARIES})
+target_link_libraries(vectordb PUBLIC ${Boost_LIBRARIES})
 
 if(APPLE)
     set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/Cellar/libomp/16.0.6/include")

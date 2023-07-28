@@ -4,20 +4,20 @@ namespace vectordb {
 
 AtomicCounter::AtomicCounter() : counter_(0) {}
 
-int AtomicCounter::IncrementAndGet() {
+int64_t AtomicCounter::IncrementAndGet() {
   return counter_.fetch_add(1) + 1;
   // return ++counter_;
 }
 
-int AtomicCounter::GetAndIncrement() {
+int64_t AtomicCounter::GetAndIncrement() {
   return counter_.fetch_add(1);
 }
 
-void AtomicCounter::SetValue(int value) {
+void AtomicCounter::SetValue(int64_t value) {
   counter_.store(value);
 }
 
-int AtomicCounter::Get() {
+int64_t AtomicCounter::Get() {
   return counter_.load();
 }
 
