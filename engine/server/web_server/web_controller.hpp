@@ -75,7 +75,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         std::string db_name = parsedBody.GetString("name");
         int64_t init_table_scale = InitTableScale;
         if (parsedBody.HasMember("vectorScale")) {
-            std::cout << "DB loaded with customized vector scale limit."std::endl;
+            std::cout << "DB loaded with customized vector scale limit." << std::endl;
             init_table_scale = parsedBody.GetInt("vectorScale");
             std::cout << "Vector scale limit: " << init_table_scale << std::endl;
         }
