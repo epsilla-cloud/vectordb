@@ -1,9 +1,10 @@
 #include "db/table_segment_mvp.hpp"
 
+#include <unistd.h>
+
+#include <cstdio>
 #include <fstream>
 #include <iostream>
-#include <cstdio>
-#include <unistd.h> 
 
 #include "utils/common_util.hpp"
 
@@ -42,8 +43,6 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
   }
 }
 
-constexpr const int64_t InitTableSize = 150000;
-
 Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   size_limit_ = size_limit;
   primitive_offset_ = 0;
@@ -71,7 +70,7 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   string_table_ = new std::string[size_limit * string_num_];
 
   attribute_table_ = new char[size_limit * primitive_offset_];
-    
+
   // attribute_table_ = std::shared_ptr<char[]>(new char[size_limit * primitive_offset], std::default_delete<char[]>());
   // attribute_table_ = std::shared_ptr<char*>(new char[size_limit * primitive_offset]);
   vector_tables_ = new float*[vector_num_];
@@ -85,9 +84,9 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   return Status::OK();
 }
 
-TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema)
+TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale)
     : skip_sync_disk_(false),
-      size_limit_(InitTableSize),
+      size_limit_(init_table_scale),
       first_record_id_(0),
       record_number_(0),
       field_name_mem_offset_map_(0),
@@ -96,12 +95,12 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema)
       string_num_(0),
       vector_num_(0),
       vector_dims_(0) {
-  Init(table_schema, InitTableSize);
+  Init(table_schema, init_table_scale);
 }
 
-TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path)
+TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale)
     : skip_sync_disk_(true),
-      size_limit_(InitTableSize),
+      size_limit_(init_table_scale),
       first_record_id_(0),
       record_number_(0),
       field_name_mem_offset_map_(0),
@@ -112,7 +111,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       vector_dims_(0),
       wal_global_id_(-1) {
   // Init the containers.
-  Init(table_schema, InitTableSize);
+  Init(table_schema, init_table_scale);
   std::string path = db_catalog_path + "/" + std::to_string(table_schema.id_) + "/data_mvp.bin";
   if (server::CommonUtil::IsFileExist(path)) {
     std::ifstream file(path, std::ios::binary);
@@ -123,6 +122,14 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     // Read the number of records and the first record id
     file.read(reinterpret_cast<char*>(&record_number_), sizeof(record_number_));
     file.read(reinterpret_cast<char*>(&first_record_id_), sizeof(first_record_id_));
+
+    // If the table contains more records than the size limit, throw to avoid future core dump.
+    if (record_number_ > init_table_scale) {
+      file.close();
+      throw std::runtime_error("The table contains " + std::to_string(record_number_) +
+                               " records, which is larger than provided vector scale " +
+                               std::to_string(init_table_scale));
+    }
 
     // Read the bitset
     int64_t bitset_size = 0;
@@ -231,7 +238,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   if (record_number_ + new_record_size >= size_limit_) {
     return Status(
         DB_UNEXPECTED_ERROR,
-        "For the MVP, each table will only support up to " + std::to_string(size_limit_) + " records. Please talk to richard@epsilla.com for your specific requirements.");
+        "Currently, each table in this database can hold up to " + std::to_string(size_limit_) + " records. " +
+            "To insert more records, please unload the database and reload with a larger vectorScale parameter.");
     // DoubleSize();
   }
 

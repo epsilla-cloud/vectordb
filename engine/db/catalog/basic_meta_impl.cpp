@@ -180,6 +180,9 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
   if (loaded_databases_paths_.find(db_catalog_path) != loaded_databases_paths_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Database catalog file is already loaded: " + db_catalog_path);
   }
+  if (databases_.find(db_name) != databases_.end()) {
+    return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
+  }
 
   DatabaseSchema db_schema;
   db_schema.name_ = db_name;

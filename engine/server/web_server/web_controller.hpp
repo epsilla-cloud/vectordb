@@ -71,7 +71,11 @@ class WebController : public oatpp::web::server::api::ApiController {
         parsedBody.LoadFromString(body);
         std::string db_path = parsedBody.GetString("path");
         std::string db_name = parsedBody.GetString("name");
-        vectordb::Status status = db_server->LoadDB(db_name, db_path);
+        int64_t init_table_scale = 150000;
+        if (parsedBody.HasMember("vectorScale")) {
+            init_table_scale = parsedBody.GetInt("vectorScale");
+        }
+        vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale);
 
         auto dto = StatusDto::createShared();
         if (!status.ok()) {

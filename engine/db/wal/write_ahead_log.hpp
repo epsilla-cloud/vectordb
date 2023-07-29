@@ -58,7 +58,7 @@ class WriteAheadLog {
       RotateFile();
     }
     int64_t next = global_counter_.IncrementAndGet();
-    fprintf(file_, "%ld %d %s\n", next, type, entry.c_str());
+    fprintf(file_, "%lld %d %s\n", next, type, entry.c_str());
     fflush(file_);
     // Tradeoff of data consistency. We use fflush for now.
     // fsync(fileno(file_));
@@ -66,7 +66,6 @@ class WriteAheadLog {
   }
 
   void Replay(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment) {
-    std::cout << "Executed here by thread: " << omp_get_thread_num() << std::endl;
     std::vector<boost::filesystem::path> files;
     GetSortedLogFiles(files);
     for (auto pt = 0; pt < files.size(); ++pt) {
