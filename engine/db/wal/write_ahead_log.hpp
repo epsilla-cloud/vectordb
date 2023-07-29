@@ -147,8 +147,6 @@ class WriteAheadLog {
         auto status = segment->Insert(table_schema, record, global_id);
         if (!status.ok()) {
           std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
-        } else {
-          std::cout << "Applied " << global_id << std::endl;
         }
         break;
       }

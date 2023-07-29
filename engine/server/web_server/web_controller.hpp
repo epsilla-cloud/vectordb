@@ -27,6 +27,8 @@ namespace vectordb {
 namespace server {
 namespace web {
 
+constexpr const int64_t InitTableScale = 150000;
+
 class WebController : public oatpp::web::server::api::ApiController {
  public:
     WebController(const std::shared_ptr<ObjectMapper>& objectMapper)
@@ -71,7 +73,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         parsedBody.LoadFromString(body);
         std::string db_path = parsedBody.GetString("path");
         std::string db_name = parsedBody.GetString("name");
-        int64_t init_table_scale = 150000;
+        int64_t init_table_scale = InitTableScale;
         if (parsedBody.HasMember("vectorScale")) {
             init_table_scale = parsedBody.GetInt("vectorScale");
         }
