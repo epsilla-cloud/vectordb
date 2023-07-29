@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <omp.h>
 
 #include "db/catalog/meta_types.hpp"
 #include "db/table_segment_mvp.hpp"
@@ -65,6 +66,7 @@ class WriteAheadLog {
   }
 
   void Replay(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment) {
+    std::cout << "Executed here by thread: " << omp_get_thread_num() << std::endl;
     std::vector<boost::filesystem::path> files;
     GetSortedLogFiles(files);
     for (auto pt = 0; pt < files.size(); ++pt) {
@@ -145,7 +147,7 @@ class WriteAheadLog {
         record.LoadFromString(content);
         auto status = segment->Insert(table_schema, record, global_id);
         if (!status.ok()) {
-          std::cout << "Fail to apply wal entry." << std::endl;
+          std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
         } else {
           std::cout << "Applied " << global_id << std::endl;
         }
@@ -161,13 +163,39 @@ class WriteAheadLog {
     }
   }
 
+  // void GetSortedLogFiles(std::vector<boost::filesystem::path>& files) {
+  //   std::cout << "Get shorted log files by thread: " << omp_get_thread_num() << std::endl;
+
+  //   boost::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
+  //   for (boost::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
+  //     if (i->path().extension() == ".log") {
+  //       files.push_back(i->path());
+  //     }
+  //   }
+  //   std::sort(files.begin(), files.end());
+  // }
+
   void GetSortedLogFiles(std::vector<boost::filesystem::path>& files) {
-    boost::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
-    for (boost::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
-      if (i->path().extension() == ".log") {
-        files.push_back(i->path());
-      }
+    // Check if logs_folder_ exists and is a directory.
+    if (!boost::filesystem::exists(logs_folder_) || !boost::filesystem::is_directory(logs_folder_)) {
+      std::cout << "Directory " << logs_folder_ << " does not exist or is not a directory.\n";
+      return;
     }
+
+    try {
+      boost::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
+      for (boost::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
+        // Print out the path of each file being processed.
+        std::cout << "Processing file: " << i->path().string() << std::endl;
+
+        if (i->path().extension() == ".log") {
+          files.push_back(i->path());
+        }
+      }
+    } catch (const boost::filesystem::filesystem_error& ex) {
+      std::cout << "Caught exception: " << ex.what() << '\n';
+    }
+
     std::sort(files.begin(), files.end());
   }
 

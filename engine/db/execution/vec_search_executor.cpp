@@ -685,6 +685,9 @@ void VecSearchExecutor::SearchImpl(
 }
 
 bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end) {
+  if (brute_force_queue_.size() < end - start) {
+    brute_force_queue_.resize(end - start);
+  }
 #pragma omp parallel for
   for (int64_t v_id = start; v_id < end; ++v_id) {
     float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);

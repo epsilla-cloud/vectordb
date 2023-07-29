@@ -231,7 +231,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   if (record_number_ + new_record_size >= size_limit_) {
     return Status(
         DB_UNEXPECTED_ERROR,
-        "For the MVP, each table will only support up to 50,000 records. Please talk to richard@epsilla.com for your specific requirements.");
+        "For the MVP, each table will only support up to " + std::to_string(size_limit_) + " records. Please talk to richard@epsilla.com for your specific requirements.");
     // DoubleSize();
   }
 
