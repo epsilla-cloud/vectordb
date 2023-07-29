@@ -4,14 +4,13 @@
 #include <string>
 #include <vector>
 
-#include "thirdparty/rapidjson/document.h"
+#include "thirdparty/nlohmann/json.hpp"
 
 namespace vectordb {
 
 class Json {
  public:
   Json();
-  Json(rapidjson::Value* value);  // Constructor for nested objects
 
   bool LoadFromString(const std::string& json_string);
   std::string DumpToString();
@@ -48,8 +47,7 @@ class Json {
   void AddBoolToArray(bool value);
   void AddObjectToArray(const Json& object);
  private:
-  std::unique_ptr<rapidjson::Document> doc_;
-  rapidjson::Value* val_;  // Pointer to a value within the document (for nested objects)
+  nlohmann::json doc_;
 };
 
 }  // namespace vectordb
