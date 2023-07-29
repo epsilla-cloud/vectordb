@@ -4,12 +4,13 @@
 namespace vectordb {
 namespace engine {
 
-DBMVP::DBMVP(meta::DatabaseSchema& database_schema) {
+DBMVP::DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale) {
   // Here you might want to initialize your database based on the provided schema
   // This may involve creating tables, loading data, etc.
+  init_table_scale_ = init_table_scale;
   db_catalog_path_ = database_schema.path_;
   for (int i = 0; i < database_schema.tables_.size(); ++i) {
-    auto table = std::make_shared<TableMVP>(database_schema.tables_[i], db_catalog_path_);
+    auto table = std::make_shared<TableMVP>(database_schema.tables_[i], db_catalog_path_, init_table_scale_);
     tables_.push_back(table);
     table_name_to_id_map_[database_schema.tables_[i].name_] = tables_.size() - 1;
   }
@@ -19,7 +20,7 @@ Status DBMVP::CreateTable(meta::TableSchema& table_schema) {
   if (table_name_to_id_map_.find(table_schema.name_) != table_name_to_id_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Table already exists: " + table_schema.name_);
   }
-  auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_);
+  auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_, init_table_scale_);
   tables_.push_back(table);
   table_name_to_id_map_[table_schema.name_] = tables_.size() - 1;
   return Status::OK();

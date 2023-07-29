@@ -20,7 +20,7 @@ namespace engine {
 
 class TableMVP {
  public:
-  explicit TableMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path /*, int64_t executors_num*/);
+  explicit TableMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale /*, int64_t executors_num*/);
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string& db_catalog_path);

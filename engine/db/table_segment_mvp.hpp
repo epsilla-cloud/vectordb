@@ -27,9 +27,9 @@ struct AttributeTable {
 class TableSegmentMVP {
  public:
   // Default constructor just for table level init.
-  explicit TableSegmentMVP(meta::TableSchema& table_schema);
+  explicit TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale);
   // Load segment from disk.
-  explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path);
+  explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale);
 
   Status Init(meta::TableSchema& table_schema, int64_t size_limit);
 

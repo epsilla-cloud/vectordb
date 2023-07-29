@@ -14,7 +14,7 @@ namespace engine {
 
 class DBMVP {
  public:
-  explicit DBMVP(meta::DatabaseSchema& database_schema);
+  explicit DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale);
 
   ~DBMVP() {}
 
@@ -28,6 +28,7 @@ class DBMVP {
   // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> table_name_to_id_map_;  // The table name to table id map.
   std::vector<std::shared_ptr<TableMVP>> tables_;                    // The tables in this database.
+  int64_t init_table_scale_;
 };
 
 using DBMVPPtr = std::shared_ptr<DBMVP>;

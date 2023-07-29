@@ -23,24 +23,28 @@ DBServer::~DBServer() {
   }
 }
 
-Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path) {
+Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale) {
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
     std::cout << status.message() << std::endl;
     return status;
   }
+  try {
+    meta::DatabaseSchema db_schema;
+    meta_->GetDatabase(db_name, db_schema);
+    if (db_name_to_id_map_.find(db_name) != db_name_to_id_map_.end()) {
+      return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
+    }
 
-  meta::DatabaseSchema db_schema;
-  meta_->GetDatabase(db_name, db_schema);
-  if (db_name_to_id_map_.find(db_name) != db_name_to_id_map_.end()) {
-    return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
+    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale);
+    dbs_.push_back(db);
+    db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
+    return Status::OK();
+  } catch (std::exception& ex) {
+    meta_->UnloadDatabase(db_name);
+    return Status(DB_UNEXPECTED_ERROR, std::string(ex.what()));
   }
-
-  auto db = std::make_shared<DBMVP>(db_schema);
-  dbs_.push_back(db);
-  db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
-  return Status::OK();
 }
 
 Status DBServer::UnloadDB(const std::string& db_name) {

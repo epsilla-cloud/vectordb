@@ -16,7 +16,7 @@ constexpr const int MinimalGraphSize = 100;
 
 constexpr const int RebuildThreads = 4;
 
-TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path)
+TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale)
     : table_schema_(table_schema),
       // executors_num_(executors_num),
       table_segment_(nullptr) {
@@ -27,7 +27,7 @@ TableMVP::TableMVP(meta::TableSchema& table_schema, const std::string& db_catalo
   }
 
   // Load the table data from disk.
-  table_segment_ = std::make_shared<TableSegmentMVP>(table_schema, db_catalog_path);
+  table_segment_ = std::make_shared<TableSegmentMVP>(table_schema, db_catalog_path, init_table_scale);
 
   // Replay operations in write ahead log.
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_);
