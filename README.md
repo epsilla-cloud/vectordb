@@ -27,13 +27,13 @@ Epsilla's core is written in C++ and leverages the advanced academic parallel gr
 
 ## Quick Start
 
-**1. Docker**
+**1. Run Backend in Docker**
 ```shell
 docker pull epsilla/vectordb
 docker run --pull=always -d -p 8888:8888 epsilla/vectordb
 ```
 
-**2. Python Client**
+**2. Interact with Python Client**
 ```shell
 pip install pyepsilla
 ```
