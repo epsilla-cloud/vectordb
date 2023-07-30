@@ -84,6 +84,7 @@ ANNGraphSegment::ANNGraphSegment(const std::string& db_catalog_path, int64_t tab
     std::string folder_path = db_catalog_path + "/" + std::to_string(table_id);
     server::CommonUtil::CreateDirectory(folder_path);
     offset_table_ = new int64_t[record_number_ + 1];
+    offset_table_[record_number_] = 0;
     neighbor_list_ = new int64_t[record_number_];
     auto status = SaveANNGraph(db_catalog_path, table_id, field_id);
     if (!status.ok()) {
