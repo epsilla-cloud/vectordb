@@ -142,6 +142,7 @@ void Json::SetObject(const std::string& key, const Json& object) {
 }
 
 void Json::SetArray(const std::string& key, const std::vector<Json>& array) {
+  doc_[key] = nlohmann::json::array();
   for (const auto& item : array) {
     doc_[key].push_back(item.doc_);
   }
