@@ -171,7 +171,9 @@ class WebController : public oatpp::web::server::api::ApiController {
             ) {
                 // TODO: after figuring out metric type other than EUCLIDEAN, need to check metric type as well.
                 if (!body_field.HasMember("dimensions")) {
-                    return createResponse(Status::CODE_400, "Vector field must have dimensions.");
+                    dto->statusCode = Status::CODE_400.code;
+                    dto->message = "Vector field must have dimensions.";
+                    return createDtoResponse(Status::CODE_400, dto);
                 }
             }
             if (body_field.HasMember("dimensions")) {
