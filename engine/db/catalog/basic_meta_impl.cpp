@@ -5,6 +5,7 @@
 #include "utils/json.hpp"
 
 #include <iostream>
+#include <regex>
 
 namespace vectordb {
 namespace engine {
@@ -125,7 +126,7 @@ void DumpDatabaseSchemaToJson(const DatabaseSchema& db_schema, vectordb::Json& j
   json.LoadFromString("{}");
   json.SetInt("id", db_schema.id_);
   // json.AddString("name", db_schema.name_);
-  
+
   // Initialize an empty array for tables
   std::vector<vectordb::Json> empty_array;
   json.SetArray(TABLES, empty_array);
@@ -259,6 +260,70 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
   return Status::OK();
 }
 
+Status ValidateSchema(TableSchema& table_schema) {
+  // 1. Check table name
+  std::regex pattern("[A-Za-z_][A-Za-z_0-9]*");
+  if (!std::regex_match(table_schema.name_, pattern)) {
+    return Status(DB_UNEXPECTED_ERROR, "Invalid table name.");
+  }
+
+  size_t size = sizeof(table_schema.fields_);
+
+  // 2. Check table fields duplication
+  std::unordered_set<std::string> seen_fields;
+  bool duplicate = false;
+
+  // 3. At least one vector field
+  bool has_vector_field = false;
+
+  // 4. Only 1 primary key field should apply
+  bool has_primary_key = false;
+
+  for (size_t i; i < size; i++) {
+    auto field = table_schema.fields_[i];
+    auto name = field.name_;
+    if (seen_fields.find(name) != seen_fields.end()) {
+      duplicate = true;
+      return;
+    } else {
+      seen_fields.insert(name);
+    }
+
+    // 5. Field type validation
+    if (field.field_type_ == FieldType::UNKNOWN) {
+      return Status(DB_UNEXPECTED_ERROR, "Type of " + field.name_ + " is not valid.");
+    }
+
+    if (field.field_type_ == FieldType::VECTOR_DOUBLE || field.field_type_ == FieldType::VECTOR_FLOAT) {
+      has_vector_field = true;
+      // 6. Vector fields must have dimension and metric
+      // 7. Dimension must be positive
+      if (field.vector_dimension_ <= 0) {
+        return Status(DB_UNEXPECTED_ERROR, "Vector dimension must be positive.");
+      }
+      if (field.metric_type_ == MetricType::UNKNOWN) {
+        return Status(DB_UNEXPECTED_ERROR, "Metric type of " + field.name_ + " is not valid.");
+      }
+    }
+
+    if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
+    if (has_primary_key && field.is_primary_key_) {
+      return Status(DB_UNEXPECTED_ERROR, "Cannot have more than 1 primary key field.");
+    }
+
+  }
+
+  if (duplicate) {
+    return Status(DB_UNEXPECTED_ERROR, "Field names can not be deplicated.");
+  }
+
+  if (!has_vector_field) {
+    return Status(DB_UNEXPECTED_ERROR, "At lease one vector field is required.");
+  }
+
+  return Status::OK();
+}
+
 Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema) {
   // Table name cannot be duplicated.
   bool has_table = false;
@@ -271,9 +336,13 @@ Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table
   }
 
   // TODO: Validate the table schema.
+  status = ValidateSchema(table_schema);
+  if (!status.ok()) {
+    return status;
+  }
 
   auto& db = databases_.find(db_name)->second;
-  
+
   // TODO: a better way to assign table id.
   table_schema.id_ = GetNewTableId(db);
   std::cout << "table id: " << table_schema.id_ << std::endl;

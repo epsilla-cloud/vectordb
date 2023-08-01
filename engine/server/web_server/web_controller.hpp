@@ -165,6 +165,15 @@ class WebController : public oatpp::web::server::api::ApiController {
                 std::string d_type;
                 field.field_type_ = WebUtil::GetFieldType(d_type.assign(body_field.GetString("dataType")));
             }
+            if (
+                field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
+                field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT
+            ) {
+                // TODO: after figuring out metric type other than EUCLIDEAN, need to check metric type as well.
+                if (!body_field.HasMember("dimensions")) {
+                    return createResponse(Status::CODE_400, "Vector field must have dimensions.");
+                }
+            }
             if (body_field.HasMember("dimensions")) {
                 field.vector_dimension_ = body_field.GetInt("dimensions");
             }
