@@ -31,6 +31,8 @@ class CommonUtil {
 
   static void ConvertTime(time_t time_integer, tm& time_struct);
   static void ConvertTime(tm time_struct, time_t& time_integer);
+
+  static bool IsValidName(const std::string& name);
 };
 
 }  // namespace server

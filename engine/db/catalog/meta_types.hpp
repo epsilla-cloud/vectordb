@@ -38,6 +38,7 @@ enum class MetricType {
   EUCLIDEAN = 1,
   COSINE = 2,
   DOT_PRODUCT = 3,
+  UNKNOWN = 999,
 };
 
 struct FieldSchema {
