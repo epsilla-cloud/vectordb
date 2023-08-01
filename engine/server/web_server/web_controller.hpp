@@ -135,16 +135,22 @@ class WebController : public oatpp::web::server::api::ApiController {
         PATH(String, db_name, "db_name"),
         BODY_STRING(String, body)) {
 
+        auto dto = StatusDto::createShared();
+
         vectordb::Json parsedBody;
         parsedBody.LoadFromString(body);
         vectordb::engine::meta::TableSchema table_schema;
         if (!parsedBody.HasMember("name")) {
-            return createResponse(Status::CODE_400, "Missing table name in your payload.");
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "Missing table name in your payload.";
+            return createDtoResponse(Status::CODE_400, dto);
         }
         table_schema.name_ = parsedBody.GetString("name");
 
         if (!parsedBody.HasMember("fields")) {
-            return createResponse(Status::CODE_400, "Missing fields in your payload.");
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "Missing fields in your payload.";
+            return createDtoResponse(Status::CODE_400, dto);
         }
         size_t fields_size = parsedBody.GetArraySize("fields");
         for (size_t i = 0; i < fields_size; i++) {
@@ -183,7 +189,6 @@ class WebController : public oatpp::web::server::api::ApiController {
 
         vectordb::Status status = db_server->CreateTable(db_name, table_schema);
 
-        auto dto = StatusDto::createShared();
         if (!status.ok()) {
             dto->statusCode = Status::CODE_500.code;
             dto->message = status.message();
@@ -215,7 +220,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, dto);
     }
 
-    // TODO: implement with actual funtion later.
+    // TODO: implement with corresponding funtion later.
     ADD_CORS(DescribeSchema)
 
     ENDPOINT("GET", "/api/{db_name}/schema/tables/{table_name}/describe", DescribeSchema,
@@ -234,7 +239,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, dto);
     }
 
-    // TODO: implement with actual function later.
+    // TODO: implement with corresponding function later.
     ADD_CORS(ListTables)
 
     ENDPOINT("GET", "/api/{db_name}/schema/tables/show", ListTables, PATH(String, db_name, "db_name")) {
@@ -306,40 +311,52 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, status_dto);
     }
 
+    // TODO: implement with corresponding function later.
     ADD_CORS(DeleteRecordsByID)
 
     ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByID,
         PATH(String, db_name, "db_name"),
         BODY_DTO(Object<DeleteRecordsReqDto>, body)) {
 
+        auto dto = StatusDto::createShared();
+
         if (!body->table) {
-            return createResponse(Status::CODE_400, "Missing table name in your payload.");
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "Missing table name in your payload.";
+            return createDtoResponse(Status::CODE_400, dto);
         }
         if (!body->ids) {
-            return createResponse(Status::CODE_400, "Missing ID list to delete in your payload.");
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "Missing ID list to delete in your payload.";
+            return createDtoResponse(Status::CODE_400, dto);
         }
 
         const auto& body_ids = body->ids;
         if (body_ids->size() == 0) {
-            return createResponse(Status::CODE_400, "No IDs to delete provided.");
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "No IDs to delete provided.";
+            return createDtoResponse(Status::CODE_400, dto);
         }
         std::vector<std::string> arr;
         for (size_t i = 0; i < body_ids->size(); i++) {
             arr.push_back(body_ids[i]);
         }
-        return createResponse(
-            Status::CODE_200,
-            "Deleted " + WebUtil::JoinStrs(arr, ", ") + " from " + body->table + " in " + db_name + " successfully."
-        );
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Deleted " + WebUtil::JoinStrs(arr, ", ") + " from " + body->table + " in " + db_name + " successfully.";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
+    // TODO: implement with corresponding function later.
     ADD_CORS(LoadCSV)
 
     ENDPOINT("POST", "/api/{db_name}/data/load", LoadCSV,
         PATH(String, db_name, "db_name"),
         BODY_STRING(String, body)) {
 
-        return createResponse(Status::CODE_200, "Loading csv to " + db_name + ".");
+        auto dto = StatusDto::createShared();
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Loading csv to " + db_name + ".";
+        return createDtoResponse(Status::CODE_200, dto);
     }
 
     ADD_CORS(Query)
