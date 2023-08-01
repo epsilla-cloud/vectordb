@@ -54,6 +54,7 @@ namespace web {
         return it->second;
     }
 
+    // TODO: need to return UNKNOWN after EUCLIDEAN support only.
     return vectordb::engine::meta::MetricType::EUCLIDEAN;
   }
 

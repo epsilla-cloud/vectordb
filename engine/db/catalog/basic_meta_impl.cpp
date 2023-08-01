@@ -125,7 +125,7 @@ void DumpDatabaseSchemaToJson(const DatabaseSchema& db_schema, vectordb::Json& j
   json.LoadFromString("{}");
   json.SetInt("id", db_schema.id_);
   // json.AddString("name", db_schema.name_);
-  
+
   // Initialize an empty array for tables
   std::vector<vectordb::Json> empty_array;
   json.SetArray(TABLES, empty_array);
@@ -182,6 +182,9 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
   }
   if (databases_.find(db_name) != databases_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
+  }
+  if (!server::CommonUtil::IsValidName(db_name)) {
+    return Status(DB_UNEXPECTED_ERROR, "DB name should start with a letter or '_' and can contain only letters, digits, and underscores.");
   }
 
   DatabaseSchema db_schema;
@@ -259,6 +262,76 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
   return Status::OK();
 }
 
+Status ValidateSchema(TableSchema& table_schema) {
+  // 1. Check table name
+  if (!server::CommonUtil::IsValidName(table_schema.name_)) {
+    return Status(DB_UNEXPECTED_ERROR, "Table name should start with a letter or '_' and can contain only letters, digits, and underscores.");
+  }
+
+  size_t size = table_schema.fields_.size();
+
+  // 2. Check table fields duplication
+  std::unordered_set<std::string> seen_fields;
+  bool duplicated = false;
+
+  // 3. At least one vector field
+  bool has_vector_field = false;
+
+  // 4. Only 1 primary key field should apply
+  bool has_primary_key = false;
+
+  for (size_t i = 0; i < size; i++) {
+    auto field = table_schema.fields_[i];
+    auto name = field.name_;
+    if (!server::CommonUtil::IsValidName(name)) {
+      return Status(DB_UNEXPECTED_ERROR, name + ": Field name should start with a letter or '_' and can contain only letters, digits, and underscores.");
+    }
+
+    if (seen_fields.find(name) != seen_fields.end()) {
+      duplicated = true;
+      break;
+    } else {
+      seen_fields.insert(name);
+    }
+
+    // 5. Field type validation
+    if (field.field_type_ == FieldType::UNKNOWN) {
+      return Status(DB_UNEXPECTED_ERROR, "Type of " + field.name_ + " is not valid.");
+    }
+
+    if (field.field_type_ == FieldType::VECTOR_DOUBLE || field.field_type_ == FieldType::VECTOR_FLOAT) {
+      has_vector_field = true;
+      // 6. Vector fields must have dimension and metric
+      // 7. Dimension must be positive
+      if (field.vector_dimension_ <= 0) {
+        return Status(DB_UNEXPECTED_ERROR, "Vector dimension must be positive.");
+      }
+      if (field.metric_type_ == MetricType::UNKNOWN) {
+        return Status(DB_UNEXPECTED_ERROR, "Metric type of " + field.name_ + " is not valid.");
+      }
+    }
+
+    if (has_primary_key && field.is_primary_key_) {
+      return Status(DB_UNEXPECTED_ERROR, "Cannot have more than 1 primary key fields.");
+    }
+    if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
+  }
+
+  std::cout << duplicated << std::endl;
+  std::cout << has_vector_field << std::endl;
+  std::cout << has_primary_key << std::endl;
+
+  if (duplicated) {
+    return Status(DB_UNEXPECTED_ERROR, "Field names can not be duplicated.");
+  }
+
+  if (!has_vector_field) {
+    return Status(DB_UNEXPECTED_ERROR, "At lease one vector field is required.");
+  }
+
+  return Status::OK();
+}
+
 Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema) {
   // Table name cannot be duplicated.
   bool has_table = false;
@@ -271,9 +344,13 @@ Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table
   }
 
   // TODO: Validate the table schema.
+  status = ValidateSchema(table_schema);
+  if (!status.ok()) {
+    return status;
+  }
 
   auto& db = databases_.find(db_name)->second;
-  
+
   // TODO: a better way to assign table id.
   table_schema.id_ = GetNewTableId(db);
   std::cout << "table id: " << table_schema.id_ << std::endl;

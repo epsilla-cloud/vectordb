@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <thread>
 #include <vector>
+#include <regex>
 
 #if defined(__x86_64__)
 #define THREAD_MULTIPLY_CPU 1
@@ -278,6 +279,11 @@ void CommonUtil::ConvertTime(time_t time_integer, tm& time_struct) {
 
 void CommonUtil::ConvertTime(tm time_struct, time_t& time_integer) {
   time_integer = mktime(&time_struct);
+}
+
+bool CommonUtil::IsValidName(const std::string& name) {
+  std::regex pattern("[A-Za-z_][A-Za-z_0-9]*");
+  return std::regex_match(name, pattern);
 }
 
 }  // namespace server
