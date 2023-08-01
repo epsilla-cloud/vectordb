@@ -267,7 +267,7 @@ Status ValidateSchema(TableSchema& table_schema) {
     return Status(DB_UNEXPECTED_ERROR, "Invalid table name.");
   }
 
-  size_t size = sizeof(table_schema.fields_);
+  size_t size = table_schema.fields_.size();
 
   // 2. Check table fields duplication
   std::unordered_set<std::string> seen_fields;
@@ -279,7 +279,7 @@ Status ValidateSchema(TableSchema& table_schema) {
   // 4. Only 1 primary key field should apply
   bool has_primary_key = false;
 
-  for (size_t i; i < size; i++) {
+  for (size_t i = 0; i < size; i++) {
     auto field = table_schema.fields_[i];
     auto name = field.name_;
     if (seen_fields.find(name) != seen_fields.end()) {
@@ -306,12 +306,15 @@ Status ValidateSchema(TableSchema& table_schema) {
       }
     }
 
-    if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
     if (has_primary_key && field.is_primary_key_) {
       return Status(DB_UNEXPECTED_ERROR, "Cannot have more than 1 primary key field.");
     }
-
+    if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
   }
+
+  std::cout << duplicate << std::endl;
+  std::cout << has_vector_field << std::endl;
+  std::cout << has_primary_key << std::endl;
 
   if (duplicate) {
     return Status(DB_UNEXPECTED_ERROR, "Field names can not be deplicated.");
