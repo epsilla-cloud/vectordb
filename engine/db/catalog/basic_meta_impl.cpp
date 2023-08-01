@@ -284,7 +284,7 @@ Status ValidateSchema(TableSchema& table_schema) {
     auto name = field.name_;
     if (seen_fields.find(name) != seen_fields.end()) {
       duplicate = true;
-      return;
+      break;
     } else {
       seen_fields.insert(name);
     }
