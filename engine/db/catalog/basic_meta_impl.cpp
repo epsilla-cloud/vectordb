@@ -5,7 +5,6 @@
 #include "utils/json.hpp"
 
 #include <iostream>
-#include <regex>
 
 namespace vectordb {
 namespace engine {
@@ -184,8 +183,7 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
   if (databases_.find(db_name) != databases_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
   }
-  std::regex pattern("[A-Za-z_][A-Za-z_0-9]*");
-  if (!std::regex_match(db_name, pattern)) {
+  if (!server::CommonUtil::IsValidName(db_name)) {
     return Status(DB_UNEXPECTED_ERROR, "DB name should start with a letter or '_' and can contain only letters, digits, and underscores.");
   }
 
@@ -266,8 +264,7 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
 
 Status ValidateSchema(TableSchema& table_schema) {
   // 1. Check table name
-  std::regex pattern("[A-Za-z_][A-Za-z_0-9]*");
-  if (!std::regex_match(table_schema.name_, pattern)) {
+  if (!server::CommonUtil::IsValidName(table_schema.name_)) {
     return Status(DB_UNEXPECTED_ERROR, "Table name should start with a letter or '_' and can contain only letters, digits, and underscores.");
   }
 
@@ -275,7 +272,7 @@ Status ValidateSchema(TableSchema& table_schema) {
 
   // 2. Check table fields duplication
   std::unordered_set<std::string> seen_fields;
-  bool duplicate = false;
+  bool duplicated = false;
 
   // 3. At least one vector field
   bool has_vector_field = false;
@@ -286,12 +283,12 @@ Status ValidateSchema(TableSchema& table_schema) {
   for (size_t i = 0; i < size; i++) {
     auto field = table_schema.fields_[i];
     auto name = field.name_;
-    if (!std::regex_match(name, pattern)) {
+    if (!server::CommonUtil::IsValidName(name)) {
       return Status(DB_UNEXPECTED_ERROR, name + ": Field name should start with a letter or '_' and can contain only letters, digits, and underscores.");
     }
 
     if (seen_fields.find(name) != seen_fields.end()) {
-      duplicate = true;
+      duplicated = true;
       break;
     } else {
       seen_fields.insert(name);
@@ -315,17 +312,17 @@ Status ValidateSchema(TableSchema& table_schema) {
     }
 
     if (has_primary_key && field.is_primary_key_) {
-      return Status(DB_UNEXPECTED_ERROR, "Cannot have more than 1 primary key field.");
+      return Status(DB_UNEXPECTED_ERROR, "Cannot have more than 1 primary key fields.");
     }
     if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
   }
 
-  std::cout << duplicate << std::endl;
+  std::cout << duplicated << std::endl;
   std::cout << has_vector_field << std::endl;
   std::cout << has_primary_key << std::endl;
 
-  if (duplicate) {
-    return Status(DB_UNEXPECTED_ERROR, "Field names can not be deplicated.");
+  if (duplicated) {
+    return Status(DB_UNEXPECTED_ERROR, "Field names can not be duplicated.");
   }
 
   if (!has_vector_field) {
