@@ -184,6 +184,10 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
   if (databases_.find(db_name) != databases_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
   }
+  std::regex pattern("[A-Za-z_][A-Za-z_0-9]*");
+  if (!std::regex_match(db_name, pattern)) {
+    return Status(DB_UNEXPECTED_ERROR, "DB name should start with a letter or '_' and can contain only letters, digits, and underscores.");
+  }
 
   DatabaseSchema db_schema;
   db_schema.name_ = db_name;
@@ -264,7 +268,7 @@ Status ValidateSchema(TableSchema& table_schema) {
   // 1. Check table name
   std::regex pattern("[A-Za-z_][A-Za-z_0-9]*");
   if (!std::regex_match(table_schema.name_, pattern)) {
-    return Status(DB_UNEXPECTED_ERROR, "Invalid table name.");
+    return Status(DB_UNEXPECTED_ERROR, "Table name should start with a letter or '_' and can contain only letters, digits, and underscores.");
   }
 
   size_t size = table_schema.fields_.size();
@@ -282,6 +286,10 @@ Status ValidateSchema(TableSchema& table_schema) {
   for (size_t i = 0; i < size; i++) {
     auto field = table_schema.fields_[i];
     auto name = field.name_;
+    if (!std::regex_match(name, pattern)) {
+      return Status(DB_UNEXPECTED_ERROR, name + ": Field name should start with a letter or '_' and can contain only letters, digits, and underscores.");
+    }
+
     if (seen_fields.find(name) != seen_fields.end()) {
       duplicate = true;
       break;
