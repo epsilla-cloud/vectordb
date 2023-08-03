@@ -1,7 +1,8 @@
 #include "db/table_mvp.hpp"
 
-#include <numeric>
 #include <omp.h>
+
+#include <numeric>
 
 #include "db/catalog/meta_types.hpp"
 
@@ -165,6 +166,14 @@ Status TableMVP::Search(
   // Search.
   int64_t result_num = 0;
   executor->Search(query_data, K, table_segment_->record_number_, result_num);
+  return Project(query_fields, result_num, executor->search_result_, result);
+}
+
+Status TableMVP::Project(
+    std::vector<std::string>& query_fields,
+    int64_t idlist_size,        // -1 means project all.
+    std::vector<int64_t>& ids,  // doesn't matter if idlist_size is -1.
+    vectordb::Json& result) {
   // Construct the result.
   result.LoadFromString("[]");
   // If query fields is empty, fill in with all fields.
@@ -173,8 +182,16 @@ Status TableMVP::Search(
       query_fields.push_back(table_schema_.fields_[i].name_);
     }
   }
-  for (auto i = 0; i < result_num; ++i) {
-    int64_t id = executor->search_result_[i];
+
+  // If idlist_size = -1, actually project everything from table.
+  bool from_id_list = true;
+  if (idlist_size == -1) {
+    idlist_size = table_segment_->record_number_.load();
+    from_id_list = false;
+  }
+
+  for (auto i = 0; i < idlist_size; ++i) {
+    int64_t id = from_id_list ? ids[i] : i;
     vectordb::Json record;
     record.LoadFromString("{}");
     for (auto field : query_fields) {

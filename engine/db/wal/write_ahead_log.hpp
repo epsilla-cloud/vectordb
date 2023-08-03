@@ -9,6 +9,7 @@
 
 #include "db/catalog/meta_types.hpp"
 #include "db/table_segment_mvp.hpp"
+#include "utils/atomic_counter.hpp"
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
 
