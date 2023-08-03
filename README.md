@@ -7,7 +7,6 @@
 
 <a href="https://epsilla-inc.gitbook.io/epsilladb/">Documentation</a> •
 <a href="https://discord.gg/cDaY2CxZc5">Discord</a> •
-<a href="https://join.slack.com/t/epsilla/shared_invite/zt-200jaksr5-6j1n7ll32dfM_9_Il3nVNA">Slack</a> •
 <a href="https://twitter.com/epsilla_inc">Twitter</a>
 
 </div>
