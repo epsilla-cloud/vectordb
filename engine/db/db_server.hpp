@@ -22,7 +22,7 @@ class DBServer {
 
   ~DBServer();
 
-  Status LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale);
+  Status LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled);
   Status UnloadDB(const std::string& db_name);
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema);
   Status DropTable(const std::string& db_name, const std::string& table_name);

@@ -1,3 +1,4 @@
+#include <omp.h>
 #include <unistd.h>
 
 #include <boost/filesystem.hpp>
@@ -5,7 +6,6 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
-#include <omp.h>
 
 #include "db/catalog/meta_types.hpp"
 #include "db/table_segment_mvp.hpp"
@@ -18,7 +18,6 @@ namespace engine {
 // const std::chrono::days LOG_RETENTION(7);
 const std::chrono::seconds ROTATION_INTERVAL(600);
 const std::chrono::seconds LOG_RETENTION(3600 * 24 * 7);
-
 
 enum LogEntryType {
   INSERT = 1,
@@ -53,6 +52,11 @@ class WriteAheadLog {
   }
 
   int64_t WriteEntry(LogEntryType type, const std::string& entry) {
+    // Skip WAL for realtime scenario
+    if (!enabled_) {
+      return global_counter_.Get();
+    }
+
     auto now = std::chrono::system_clock::now();
     if (now - last_rotation_time_ > ROTATION_INTERVAL) {
       RotateFile();
@@ -118,25 +122,28 @@ class WriteAheadLog {
     GetSortedLogFiles(files);
 
     for (const auto& file : files) {
-        // Extract the timestamp from the filename
-        auto filename = file.filename().string();
-        auto pos = filename.find_last_of('.');
-        auto timestamp_str = filename.substr(0, pos);
-        auto timestamp = std::stoll(timestamp_str);
+      // Extract the timestamp from the filename
+      auto filename = file.filename().string();
+      auto pos = filename.find_last_of('.');
+      auto timestamp_str = filename.substr(0, pos);
+      auto timestamp = std::stoll(timestamp_str);
 
-        // Convert now to seconds since epoch
-        auto now_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+      // Convert now to seconds since epoch
+      auto now_in_seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
 
-        // If the file is older than LOG_RETENTION, delete it
-        if (now_in_seconds - timestamp > retention_period_seconds) {
-            server::CommonUtil::RemoveFile(file.string());
-        } else {
-            // Since the files are sorted, we can break as soon as we encounter a file that's not old enough to be deleted
-            break;
-        }
+      // If the file is older than LOG_RETENTION, delete it
+      if (now_in_seconds - timestamp > retention_period_seconds) {
+        server::CommonUtil::RemoveFile(file.string());
+      } else {
+        // Since the files are sorted, we can break as soon as we encounter a file that's not old enough to be deleted
+        break;
+      }
     }
-}
+  }
 
+  void SetEnabled(bool enabled) {
+    enabled_ = enabled;
+  }
 
  private:
   void ApplyEntry(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment, int64_t global_id, LogEntryType& type, std::string& content) {
@@ -213,6 +220,7 @@ class WriteAheadLog {
   std::chrono::time_point<std::chrono::system_clock> last_rotation_time_;
   FILE* file_ = nullptr;
   AtomicCounter global_counter_;
+  bool enabled_;
 };
 }  // namespace engine
 }  // namespace vectordb
