@@ -138,5 +138,23 @@ Status DBServer::Search(
   return table->Search(field_name, query_fields, query_dimension, query_data, K, result);
 }
 
+Status DBServer::Project(
+  const std::string& db_name,
+  const std::string& table_name,
+  std::vector<std::string>& query_fields,
+  vectordb::Json& result
+) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  std::vector<int64_t> ids;
+  return table->Project(query_fields, -1, ids, result);
+}
+
 }  // namespace engine
 }  // namespace vectordb

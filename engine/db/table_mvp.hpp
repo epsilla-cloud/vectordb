@@ -7,13 +7,13 @@
 #include "db/ann_graph_segment.hpp"
 #include "db/catalog/meta.hpp"
 #include "db/execution/vec_search_executor.hpp"
+#include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
+#include "db/wal/write_ahead_log.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/status.hpp"
-#include "db/index/space_l2.hpp"
-#include "db/wal/write_ahead_log.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -28,13 +28,18 @@ class TableMVP {
   Status Insert(vectordb::Json& records);
 
   Status Search(
-    const std::string& field_name,
-    std::vector<std::string>& query_fields, 
-    int64_t query_dimension,
-    const float* query_data, 
-    const int64_t K, 
-    vectordb::Json& result
-  );
+      const std::string& field_name,
+      std::vector<std::string>& query_fields,
+      int64_t query_dimension,
+      const float* query_data,
+      const int64_t K,
+      vectordb::Json& result);
+
+  Status Project(
+      std::vector<std::string>& query_fields,
+      int64_t idlist_size,        // -1 means project all.
+      std::vector<int64_t>& ids,  // doesn't matter if idlist_size is -1.
+      vectordb::Json& result);
 
   void SetWALEnabled(bool enabled) {
     wal_->SetEnabled(enabled);

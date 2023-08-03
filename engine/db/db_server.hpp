@@ -40,6 +40,13 @@ class DBServer {
     vectordb::Json& result
   );
 
+  Status Project(
+    const std::string& db_name,
+    const std::string& table_name,
+    std::vector<std::string>& query_fields,
+    vectordb::Json& result
+  );
+
  private:
   std::shared_ptr<meta::Meta> meta_;                           // The db meta.
   // TODO: change to concurrent version.

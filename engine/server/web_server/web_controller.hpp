@@ -474,6 +474,58 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, res_dto);
     }
 
+    ADD_CORS(Project)
+
+    ENDPOINT("POST", "/api/{db_name}/data/get", Project,
+        PATH(String, db_name, "db_name"),
+        BODY_STRING(String, body)) {
+
+        auto status_dto = StatusDto::createShared();
+
+        vectordb::Json parsedBody;
+        auto valid = parsedBody.LoadFromString(body);
+        if (!valid) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "Invalid payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("table")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "table is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        std::string table_name = parsedBody.GetString("table");
+        std::vector<std::string> query_fields;
+        if (parsedBody.HasMember("response")) {
+            size_t field_size = parsedBody.GetArraySize("response");
+            for (size_t i = 0; i < field_size; i++) {
+                auto field = parsedBody.GetArrayElement("response", i);
+                query_fields.push_back(field.GetString());
+            }
+        }
+
+        // TODO: support provide id list.
+
+        vectordb::Json result;
+        vectordb::Status get_status = db_server->Project(
+            db_name, table_name, query_fields, result
+        );
+        if (!get_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = get_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        auto res_dto = SearchRespDto::createShared();
+        res_dto->statusCode = Status::CODE_200.code;
+        res_dto->message = "Query get successfully.";
+        oatpp::parser::json::mapping::ObjectMapper mapper;
+        res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
+        return createDtoResponse(Status::CODE_200, res_dto);
+    }
+
 /**
  *  Finish ENDPOINTs generation ('ApiController' codegen)
  */
