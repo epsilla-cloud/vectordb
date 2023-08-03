@@ -23,6 +23,12 @@ class DBMVP {
   std::shared_ptr<TableMVP> GetTable(const std::string& table_name);
   Status Rebuild();
 
+  void SetWALEnabled(bool enabled) {
+    for (auto table : tables_) {
+      table->SetWALEnabled(enabled);
+    }
+  }
+
  public:
   std::string db_catalog_path_;                                   // The path to the db catalog.
   // TODO: change to concurrent version.

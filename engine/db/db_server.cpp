@@ -23,7 +23,7 @@ DBServer::~DBServer() {
   }
 }
 
-Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale) {
+Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled) {
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
@@ -38,6 +38,7 @@ Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path
     }
 
     auto db = std::make_shared<DBMVP>(db_schema, init_table_scale);
+    db->SetWALEnabled(wal_enabled);
     dbs_.push_back(db);
     db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
     return Status::OK();

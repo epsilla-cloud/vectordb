@@ -36,6 +36,10 @@ class TableMVP {
     vectordb::Json& result
   );
 
+  void SetWALEnabled(bool enabled) {
+    wal_->SetEnabled(enabled);
+  }
+
   ~TableMVP();
 
  public:
