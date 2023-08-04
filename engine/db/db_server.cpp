@@ -125,7 +125,8 @@ Status DBServer::Search(
   int64_t query_dimension,
   const float* query_data,
   const int64_t K,
-  vectordb::Json& result
+  vectordb::Json& result,
+  bool with_distance
 ) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
@@ -135,7 +136,7 @@ Status DBServer::Search(
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  return table->Search(field_name, query_fields, query_dimension, query_data, K, result);
+  return table->Search(field_name, query_fields, query_dimension, query_data, K, result, with_distance);
 }
 
 Status DBServer::Project(
@@ -153,7 +154,8 @@ Status DBServer::Project(
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
   std::vector<int64_t> ids;
-  return table->Project(query_fields, -1, ids, result);
+  std::vector<double> distances;
+  return table->Project(query_fields, -1, ids, result, false, distances);
 }
 
 }  // namespace engine

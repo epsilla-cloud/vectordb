@@ -33,13 +33,16 @@ class TableMVP {
       int64_t query_dimension,
       const float* query_data,
       const int64_t K,
-      vectordb::Json& result);
+      vectordb::Json& result,
+      bool with_distance);
 
   Status Project(
       std::vector<std::string>& query_fields,
       int64_t idlist_size,        // -1 means project all.
       std::vector<int64_t>& ids,  // doesn't matter if idlist_size is -1.
-      vectordb::Json& result);
+      vectordb::Json& result,
+      bool with_distance,
+      std::vector<double>& distances);
 
   void SetWALEnabled(bool enabled) {
     wal_->SetEnabled(enabled);

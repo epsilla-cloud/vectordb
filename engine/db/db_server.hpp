@@ -37,7 +37,8 @@ class DBServer {
     int64_t query_dimension,
     const float* query_data,
     const int64_t K,
-    vectordb::Json& result
+    vectordb::Json& result,
+    bool with_distance
   );
 
   Status Project(
