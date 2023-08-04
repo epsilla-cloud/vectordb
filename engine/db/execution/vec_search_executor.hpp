@@ -43,6 +43,7 @@ class VecSearchExecutor {
   int64_t L_local_;               // = 100;
   int64_t subsearch_iterations_;  // = 15;
   std::vector<int64_t> search_result_;
+  std::vector<double> distance_;
   std::vector<int64_t> init_ids_;
   boost::dynamic_bitset<> is_visited_;
   std::vector<Candidate> set_L_;

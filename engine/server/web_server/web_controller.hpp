@@ -456,9 +456,14 @@ class WebController : public oatpp::web::server::api::ApiController {
 
         int64_t limit = parsedBody.GetInt("limit");
 
+        bool with_distance = false;
+        if (parsedBody.HasMember("withDistance")) {
+            with_distance = parsedBody.GetBool("withDistance");
+        }
+
         vectordb::Json result;
         vectordb::Status search_status = db_server->Search(
-            db_name, table_name, field_name, query_fields, vector_size, query_vector, limit, result
+            db_name, table_name, field_name, query_fields, vector_size, query_vector, limit, result, with_distance
         );
         if (!search_status.ok()) {
             status_dto->statusCode = Status::CODE_500.code;
