@@ -50,6 +50,7 @@ VecSearchExecutor::VecSearchExecutor(
       L_local_(L_local),
       subsearch_iterations_(subsearch_iterations),
       search_result_(L_master),
+      distance_(L_master),
       init_ids_(L_master),
       is_visited_(ntotal),
       set_L_((num_threads - 1) * L_local + L_master),
@@ -710,6 +711,7 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
     // TODO: exclude deleted and not passing filter records.
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
+      distance_[k_i] = brute_force_queue_[k_i].distance_;
       // std::cout << brute_force_queue_[k_i].distance_ << " " << std::endl;
     }
     // std::cout << std::endl;
@@ -746,6 +748,7 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
 #pragma omp parallel for
       for (int64_t k_i = 0; k_i < result_size; ++k_i) {
         search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
+        distance_[k_i] = set_L_[k_i + master_queue_start].distance_;
       }
     } else {
       result_size = K1;
@@ -754,6 +757,7 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
       // TODO: exclude deleted and not passing filter records.
       for (int64_t k_i = 0; k_i < K1; ++k_i) {
         search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
+        distance_[k_i] = set_L_[k_i + master_queue_start].distance_;
       }
     }
   }
