@@ -137,7 +137,8 @@ Status TableMVP::Search(
     int64_t query_dimension,
     const float* query_data,
     const int64_t K,
-    vectordb::Json& result) {
+    vectordb::Json& result,
+    bool with_distance) {
   // Check if field_name exists.
   if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
@@ -166,14 +167,20 @@ Status TableMVP::Search(
   // Search.
   int64_t result_num = 0;
   executor->Search(query_data, K, table_segment_->record_number_, result_num);
-  return Project(query_fields, result_num, executor->search_result_, result);
+  auto status = Project(query_fields, result_num, executor->search_result_, result, with_distance, executor->distance_);
+  if (!status.ok()) {
+    return status;
+  }
+  return Status::OK();
 }
 
 Status TableMVP::Project(
     std::vector<std::string>& query_fields,
     int64_t idlist_size,        // -1 means project all.
     std::vector<int64_t>& ids,  // doesn't matter if idlist_size is -1.
-    vectordb::Json& result) {
+    vectordb::Json& result,
+    bool with_distance,
+    std::vector<double>& distances) {
   // Construct the result.
   result.LoadFromString("[]");
   // If query fields is empty, fill in with all fields.
@@ -254,6 +261,10 @@ Status TableMVP::Project(
             return Status(DB_UNEXPECTED_ERROR, "Unknown field type.");
         }
       }
+    }
+    // Add distance if needed.
+    if (with_distance) {
+      record.SetDouble("@distance", distances[i]);
     }
     result.AddObjectToArray(record);
   }
