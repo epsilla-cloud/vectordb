@@ -13,35 +13,37 @@ namespace server {
 namespace web {
 
 class WebServer {
-  private:
-    std::atomic_bool try_stop_;
-    std::shared_ptr<std::thread> thread_ptr_;
+ private:
+  std::atomic_bool try_stop_;
+  std::shared_ptr<std::thread> thread_ptr_;
+  uint16_t port_;
 
-  private:
-    WebServer() {
-        try_stop_.store(false);
-    }
+ private:
+  WebServer() {
+    try_stop_.store(false);
+  }
 
-    ~WebServer() = default;
+  ~WebServer() = default;
 
-    Status
-    StartService();
-    Status
-    StopService();
+  Status
+  StartService();
+  Status
+  StopService();
 
-  public:
-    static WebServer&
-    GetInstance() {
-      static WebServer web_server;
-      return web_server;
-    }
+ public:
+  static WebServer& GetInstance() {
+    static WebServer web_server;
+    return web_server;
+  }
 
-    void
-    Start();
+  void Start();
 
-    void
-    Stop();
-  };
-}
-}
-}
+  void Stop();
+
+  void SetPort(uint16_t port) {
+    port_ = port;
+  }
+};
+}  // namespace web
+}  // namespace server
+}  // namespace vectordb

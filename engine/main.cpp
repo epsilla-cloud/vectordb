@@ -14,6 +14,7 @@ void print_help(const std::string &app_name) {
             << std::endl;
   std::cout << "  Options:" << std::endl;
   std::cout << "   -h --help                 Print this help." << std::endl;
+  std::cout << "   -p --port port_number     Specify the server port." << std::endl;
   // std::cout << "   -c --conf_file filename   Read configuration from the file." << std::endl;
   std::cout << std::endl;
 }
@@ -29,6 +30,7 @@ int main(int argc, char *argv[]) {
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
+                                         {"port", required_argument, 0, 'p'},
                                          {nullptr, 0, nullptr, 0}};
 
   int option_index = 0;
@@ -45,13 +47,20 @@ int main(int argc, char *argv[]) {
   // }
 
   int value;
-  while ((value = getopt_long(argc, argv, "c:dh", long_options, &option_index)) != -1) {
+  uint16_t port = 8888;
+  while ((value = getopt_long(argc, argv, "c:p:h", long_options, &option_index)) != -1) {
     switch (value) {
       case 'c': {
         char *config_filename_ptr = strdup(optarg);
         config_filename = config_filename_ptr;
         free(config_filename_ptr);
         std::cout << "Loading configuration from: " << config_filename << std::endl;
+        break;
+      }
+      case 'p': {
+        std::string server_port = optarg;
+        std::cout << "Server port: " << server_port << std::endl;
+        port = (uint16_t)(stoi(server_port));
         break;
       }
       case 'h':
@@ -65,7 +74,7 @@ int main(int argc, char *argv[]) {
 
   server.Init(config_filename);
 
-  status = server.Start();
+  status = server.Start(port);
   if (status.ok()) {
     std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
   } else {

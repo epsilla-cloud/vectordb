@@ -18,16 +18,16 @@ namespace web {
 class WebComponent {
 
   public:
-    explicit WebComponent(int port): port_(port) {}
+    explicit WebComponent(uint16_t port): port_(port) {}
 
   private:
-    const int port_;
+    const uint16_t port_;
 
   public:
     OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, server_connection_provider)
     ([this] {
       try {
-        return oatpp::network::tcp::server::ConnectionProvider::createShared({"0.0.0.0", 8888, oatpp::network::Address::IP_4});
+        return oatpp::network::tcp::server::ConnectionProvider::createShared({"0.0.0.0", this->port_, oatpp::network::Address::IP_4});
       } catch (std::exception& e) {
         std::string error_msg = "Cannot bind http port " + std::to_string(this->port_) + ". " + e.what() +
           "(errno: " + std::to_string(errno) + ", details: " + strerror(errno) + ")";
@@ -38,7 +38,7 @@ class WebComponent {
 
     OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ClientConnectionProvider>, client_connection_provider)
     ([this] {
-      return oatpp::network::tcp::client::ConnectionProvider::createShared({"0.0.0.0", 8888, oatpp::network::Address::IP_4});
+      return oatpp::network::tcp::client::ConnectionProvider::createShared({"0.0.0.0", this->port_, oatpp::network::Address::IP_4});
     }());
 
     OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::web::server::HttpRouter>, http_router)([] {
