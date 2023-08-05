@@ -59,7 +59,6 @@ int main(int argc, char *argv[]) {
       }
       case 'p': {
         std::string server_port = optarg;
-        std::cout << "Server port: " << server_port << std::endl;
         port = (uint16_t)(stoi(server_port));
         break;
       }
@@ -77,6 +76,7 @@ int main(int argc, char *argv[]) {
   status = server.Start(port);
   if (status.ok()) {
     std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
+    std::cout << "Server running on http://localhost:" << port << std::endl;
   } else {
     std::cout << status.message() << std::endl;
     goto FAIL;
