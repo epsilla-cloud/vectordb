@@ -12,7 +12,7 @@ class Server {
 
   void Init(const std::string& config_filename);
 
-  Status Start();
+  Status Start(uint16_t port);
   void Stop();
 
  private:

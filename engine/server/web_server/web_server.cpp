@@ -32,7 +32,7 @@ WebServer::StartService() {
     oatpp::base::Environment::init();
     {
         std::cout << "web server started!" << std::endl;
-        WebComponent components = WebComponent(std::stoi("8888"));
+        WebComponent components = WebComponent(port_);
 
         /* create ApiControllers and add endpoints to router */
         auto user_controller = WebController::createShared();
