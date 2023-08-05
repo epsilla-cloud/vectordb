@@ -31,7 +31,6 @@ Status
 WebServer::StartService() {
     oatpp::base::Environment::init();
     {
-        std::cout << "web server started!" << std::endl;
         WebComponent components = WebComponent(port_);
 
         /* create ApiControllers and add endpoints to router */
