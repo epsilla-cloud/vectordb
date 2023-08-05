@@ -18,8 +18,9 @@ void Server::Init(const std::string& config_filename) {
   config_filename_ = config_filename;
 }
 
-Status Server::Start() {
+Status Server::Start(uint16_t port) {
   try {
+    web::WebServer::GetInstance().SetPort(port);
     return StartService();
   } catch (std::exception& ex) {
     std::string str = "Epsilla VectorDB server encounter exception: " + std::string(ex.what());
