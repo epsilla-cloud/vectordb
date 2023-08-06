@@ -1,3 +1,3 @@
 #!/bin/bash
-apt update
-apt install -y python3-devel 
+apt-get update
+apt-get install -y libpython3-dev
