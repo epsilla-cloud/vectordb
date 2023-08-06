@@ -5,7 +5,6 @@
 #include "db/db_server.hpp"
 static PyObject *EpsillaError;
 
-static PyObject *spam_system(PyObject *self, PyObject *args);
 static PyObject *load_db(PyObject *self, PyObject *args);
 static PyObject *use_db(PyObject *self, PyObject *args);
 static PyObject *create_table(PyObject *self, PyObject *args);
@@ -16,9 +15,11 @@ static std::string db_name;
 static vectordb::engine::DBServer *db;
 
 static PyMethodDef EpsillaMethods[] = {
-    {"system", spam_system, METH_VARARGS, "Execute a shell command."},
     {"load_db", load_db, METH_VARARGS, "Load the database"},
     {"use_db", use_db, METH_VARARGS, "Use the database"},
+    {"create_table", create_table, METH_VARARGS, "Use create the table"},
+    {"insert", insert, METH_VARARGS, "insert record into the database"},
+    {"query", query, METH_VARARGS, "query the database"},
     {NULL, NULL, 0, NULL} /* Sentinel */
 };
 
