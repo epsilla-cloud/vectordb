@@ -56,7 +56,12 @@ static PyObject *load_db(PyObject *self, PyObject *args, PyObject *kwargs)
     return NULL;
   }
 
-  auto status = db->LoadDB(name, path, vectordb::server::web::InitTableScale);
+  auto status = db->LoadDB(
+      name,
+      path,
+      vectordb::server::web::InitTableScale,
+      // TODO: make it variable
+      true);
   return PyLong_FromLong(status.code());
 }
 
@@ -257,7 +262,17 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs)
     Py_DecRef(elem);
   }
   auto result = vectordb::Json();
-  auto status = db->Search(db_name, tableName, queryField, queryFields, queryVectorSize, vectorArr.get(), limit, result);
+  auto status = db->Search(
+      db_name,
+      tableName,
+      queryField,
+      queryFields,
+      queryVectorSize,
+      vectorArr.get(),
+      limit,
+      result,
+      // TODO: make it variable
+      true);
   if (!status.ok())
   {
     PyErr_SetString(PyExc_Exception, status.message().c_str());

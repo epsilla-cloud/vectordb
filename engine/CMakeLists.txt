@@ -57,7 +57,7 @@ list(APPEND LIB_FILES ${LOGGER_FILES})
 find_package(PythonLibs REQUIRED)
 # add third-party dependencies
 # oatpp
-find_package(oatpp 1.3.0 REQUIRED)
+find_package(oatpp 1.3.0 REQUIRED PATHS "build/dependencies")
 
 
 add_library(vectordb_lib ${LIB_FILES})
