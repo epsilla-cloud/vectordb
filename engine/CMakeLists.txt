@@ -84,6 +84,7 @@ set_target_properties(pybinding PROPERTIES
     OUTPUT_NAME "epsilla"
 )
 target_link_libraries(pybinding PUBLIC vectordb_dylib)
+target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})
 
 
 
