@@ -22,10 +22,10 @@ if [[ "$PLATFORM" == "Darwin" ]]; then
     export CC=gcc-13
     export CXX=g++-13
     N_PROCESSOR="$(sysctl -n hw.ncpu)"
-    sudo apt-get update
-    sudo apt-get install -y python3 python3-pip git cmake build-essential libboost-all-dev
 elif [[ "$PLATFORM" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"
+    sudo apt-get update
+    sudo apt-get install -y python3 python3-pip git cmake build-essential libboost-all-dev
 else
     echo "Unknown platform: $PLATFORM"
 fi
