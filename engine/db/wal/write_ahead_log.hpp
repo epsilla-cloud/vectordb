@@ -63,7 +63,7 @@ class WriteAheadLog {
       RotateFile();
     }
     int64_t next = global_counter_.IncrementAndGet();
-    fprintf(file_, "%ld %d %s\n", next, type, entry.c_str());
+    fprintf(file_, "%I64d %d %s\n", next, type, entry.c_str());
     fflush(file_);
     // Tradeoff of data consistency. We use fflush for now.
     // fsync(fileno(file_));
