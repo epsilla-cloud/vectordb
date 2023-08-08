@@ -10,9 +10,9 @@ mkdir -p "${INSTALL_PATH}"
 
 working_dir="$(mktemp -d)"
 cd "${working_dir}"
-git clone --depth=1 https://github.com/oatpp/$MODULE_NAME
-
+git clone https://github.com/oatpp/$MODULE_NAME
 cd $MODULE_NAME
+git checkout tags/1.3.0
 mkdir build
 cd build
 

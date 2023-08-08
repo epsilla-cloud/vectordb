@@ -71,6 +71,7 @@ target_link_libraries(vectordb_dylib PUBLIC oatpp::oatpp)
 target_link_libraries(vectordb_dylib PUBLIC ${Boost_LIBRARIES})
 
 add_executable(vectordb cmd/main.cpp)
+target_link_libraries(vectordb PUBLIC oatpp::oatpp)
 target_link_libraries(vectordb PUBLIC vectordb_lib)
 
 
