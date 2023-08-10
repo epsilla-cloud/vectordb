@@ -16,8 +16,9 @@ cd $MODULE_NAME
 mkdir build
 cd build
 
-cmake -DOATPP_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release ..
-make install -j 6
+cmake -DOATPP_BUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_BUILD_TYPE=Release ..
+make -j $(nproc)
+sudo make install
 
 cd ../../
 

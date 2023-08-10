@@ -1,15 +1,14 @@
 FROM ubuntu:22.04 as builder
 
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip git cmake build-essential libboost-all-dev && \
-    git clone https://github.com/oatpp/oatpp.git && \
-    cd oatpp && git checkout tags/1.3.0 && \
-    mkdir build && cd build && \
-    cmake -DOATPP_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make install && \
-    cd ../.. && rm -rf oatpp && \
-    apt-get autoremove && apt-get clean
+    apt-get install -y python3 python3-pip git cmake build-essential libboost-all-dev sudo
 ADD ./ /vectordb
-RUN mkdir /vectordb/build && cd /vectordb/build && cmake .. && make -j $(nproc) && chmod +x vectordb
+
+WORKDIR /vectordb
+ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
+RUN scripts/install_oatpp_modules.sh
+RUN scripts/setup-dev.sh
+RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(nproc) && chmod +x vectordb
 
 FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y libgomp1 libboost-all-dev
