@@ -55,28 +55,31 @@ list(APPEND LIB_FILES ${LOGGER_FILES})
 
 # used by PyBinding
 find_package(PythonLibs REQUIRED)
-# add third-party dependencies
-# oatpp
-find_package(oatpp 1.3.0 REQUIRED PATHS "build/dependencies")
 
+add_library(oatpp STATIC IMPORTED)
+set_target_properties(oatpp PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/build/dependencies/lib/oatpp-1.3.0/liboatpp.a"
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/build/dependencies/include/oatpp-1.3.0/oatpp/"
+)
 
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
 find_package(Boost REQUIRED COMPONENTS filesystem)
 target_include_directories(vectordb_lib PUBLIC ${Boost_INCLUDE_DIRS})
-target_link_libraries(vectordb_lib PUBLIC oatpp::oatpp)
+target_link_libraries(vectordb_lib PUBLIC oatpp)
 target_link_libraries(vectordb_lib PUBLIC ${Boost_LIBRARIES})
 target_include_directories(vectordb_dylib PUBLIC ${Boost_INCLUDE_DIRS})
-target_link_libraries(vectordb_dylib PUBLIC oatpp::oatpp)
 target_link_libraries(vectordb_dylib PUBLIC ${Boost_LIBRARIES})
+target_link_libraries(vectordb_dylib PUBLIC oatpp)
 
 add_executable(vectordb cmd/main.cpp)
-target_link_libraries(vectordb PUBLIC oatpp::oatpp)
 target_link_libraries(vectordb PUBLIC vectordb_lib)
+target_link_libraries(vectordb PUBLIC oatpp)
 
 
 
 add_library(pybinding SHARED bindings/python/interface.cpp)
+
 target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
 # the binding library name must match the module name
 set_target_properties(pybinding PROPERTIES 

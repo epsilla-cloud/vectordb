@@ -3,11 +3,10 @@
 ## install oatpp
 
 MODULE_NAME="oatpp"
-echo $(realpath "$0")
-INSTALL_PATH="$(realpath $(dirname "$(realpath "$0")")/../build/dependencies)"
+CURRENT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+INSTALL_PATH="$CURRENT_DIR/../build/dependencies"
 echo "installing to: $INSTALL_PATH"
 mkdir -p "${INSTALL_PATH}"
-
 working_dir="$(mktemp -d)"
 cd "${working_dir}"
 git clone https://github.com/oatpp/$MODULE_NAME
