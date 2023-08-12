@@ -136,6 +136,27 @@ Status DBServer::Search(
   return table->Search(field_name, query_fields, query_dimension, query_data, K, result, with_distance);
 }
 
+Status DBServer::CalcDistance(
+  const std::string& db_name,
+  const std::string& table_name,
+  std::string& field_name,
+  int64_t query_dimension,
+  const float* query_data,
+  int64_t id_list_size,
+  const int64_t* id_list,
+  vectordb::Json& result
+) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  return table->CalcDistance(field_name, query_dimension, query_data, id_list_size, id_list, result);
+}
+
 Status DBServer::Project(
   const std::string& db_name,
   const std::string& table_name,
