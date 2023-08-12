@@ -27,7 +27,6 @@ class DBServer {
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema);
   Status DropTable(const std::string& db_name, const std::string& table_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
-  Status Rebuild();
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
   Status Search(
     const std::string& db_name,
@@ -48,6 +47,25 @@ class DBServer {
     vectordb::Json& result
   );
 
+  void StartRebuild() {
+    if (rebuild_started_) {
+      return;
+    }
+    rebuild_started_ = true;
+    // Start the thread to periodically call Rebuild
+    rebuild_thread_ = std::thread(&DBServer::RebuildPeriodically, this);
+  }
+
+  Status RebuildOndemand() {
+    if (rebuild_started_) {
+      return Status(DB_UNEXPECTED_ERROR, "Auto rebuild is enabled. Cannot conduct on-demand rebuild.");
+    }
+    rebuild_started_ = true;
+    Rebuild();
+    rebuild_started_ = false;
+    return Status::OK();
+  }
+
  private:
   std::shared_ptr<meta::Meta> meta_;                           // The db meta.
   // TODO: change to concurrent version.
@@ -55,6 +73,7 @@ class DBServer {
   std::vector<std::shared_ptr<DBMVP>> dbs_;                    // The dbs.
   std::thread rebuild_thread_;
   bool stop_rebuild_thread_ = false;
+  bool rebuild_started_ = false;
 
   // periodically in a separate thread
   void RebuildPeriodically() {
@@ -67,6 +86,8 @@ class DBServer {
       std::this_thread::sleep_for(rebuild_interval);
     }
   };
+
+  Status Rebuild();
 };
 
 
