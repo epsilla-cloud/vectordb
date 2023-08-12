@@ -14,7 +14,7 @@
 namespace vectordb {
 namespace engine {
 
-constexpr const long RebuildInterval = 6; // TODO:: to be config.
+constexpr const long RebuildInterval = 60000; // TODO:: to be config.
 
 class DBServer {
  public:
