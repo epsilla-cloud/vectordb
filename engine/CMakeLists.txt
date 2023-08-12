@@ -76,10 +76,6 @@ add_executable(vectordb cmd/server/main.cpp)
 target_link_libraries(vectordb PUBLIC vectordb_lib)
 target_link_libraries(vectordb PUBLIC oatpp)
 
-# add_executable(test cmd/test/main.cpp)
-# target_link_libraries(test PUBLIC vectordb_lib)
-# target_link_libraries(test PUBLIC oatpp)
-
 add_library(pybinding SHARED bindings/python/interface.cpp)
 
 target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
