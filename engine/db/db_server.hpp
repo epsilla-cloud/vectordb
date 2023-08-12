@@ -39,7 +39,16 @@ class DBServer {
     vectordb::Json& result,
     bool with_distance
   );
-
+  Status CalcDistance(
+    const std::string& db_name,
+    const std::string& table_name,
+    std::string& field_name,
+    int64_t query_dimension,
+    const float* query_data,
+    int64_t id_list_size,
+    const int64_t* id_list,
+    vectordb::Json& result
+  );
   Status Project(
     const std::string& db_name,
     const std::string& table_name,

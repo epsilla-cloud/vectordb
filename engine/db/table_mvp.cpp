@@ -271,6 +271,50 @@ Status TableMVP::Project(
   return Status::OK();
 }
 
+Status TableMVP::CalcDistance(
+  std::string& field_name,
+  int64_t query_dimension,
+  const float* query_data,
+  int64_t id_list_size,
+  const int64_t* id_list,
+  vectordb::Json& result
+) {
+  // Check if field_name exists.
+  if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
+    return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
+  }
+  // Get the field data type. If the type is not VECTOR, return error.
+  meta::FieldType field_type = field_name_type_map_[field_name];
+  if (field_type != meta::FieldType::VECTOR_FLOAT && field_type != meta::FieldType::VECTOR_DOUBLE) {
+    return Status(DB_UNEXPECTED_ERROR, "Field type is not vector.");
+  }
+  // Get the field offset in the vector table.
+  int64_t field_offset = table_segment_->field_name_mem_offset_map_[field_name];
+  // Get the distance space.
+  auto dist_func = l2space_[field_offset]->get_dist_func();
+  auto dist_param = l2space_[field_offset]->get_dist_func_param();
+
+  // The query dimension needs to match the vector dimension.
+  if (query_dimension != table_segment_->vector_dims_[field_offset]) {
+    return Status(DB_UNEXPECTED_ERROR, "Query dimension doesn't match the vector field dimension.");
+  }
+  auto vector_table = table_segment_->vector_tables_[field_offset];
+
+  // Calculate distance and put in result.
+  for (auto i = 0; i < id_list_size; i++) {
+    int64_t id = id_list[i];
+    if (id >= table_segment_->record_number_) {
+      return Status(DB_UNEXPECTED_ERROR, "Invalid id: " + std::to_string(id));
+    }
+    vectordb::Json record;
+    record.LoadFromString("{}");
+    record.SetInt("id", id);
+    record.SetDouble("@distance", dist_func(vector_table + query_dimension * id, query_data, dist_param));
+    result.AddObjectToArray(record);
+  }
+  return Status::OK();
+}
+
 TableMVP::~TableMVP() {
 }
 

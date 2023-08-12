@@ -44,6 +44,15 @@ class TableMVP {
       bool with_distance,
       std::vector<double>& distances);
 
+  Status CalcDistance(
+    std::string& field_name,
+    int64_t query_dimension,
+    const float* query_data,
+    int64_t id_list_size,
+    const int64_t* id_list,
+    vectordb::Json& result
+  );
+
   void SetWALEnabled(bool enabled) {
     wal_->SetEnabled(enabled);
   }

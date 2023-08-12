@@ -531,6 +531,76 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, res_dto);
     }
 
+    ADD_CORS(CalcDistance)
+
+    ENDPOINT("POST", "/api/{db_name}/data/distance", CalcDistance,
+        PATH(String, db_name, "db_name"),
+        BODY_STRING(String, body)) {
+
+        auto status_dto = StatusDto::createShared();
+
+        vectordb::Json parsedBody;
+        auto valid = parsedBody.LoadFromString(body);
+        if (!valid) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "Invalid payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("table")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "table is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("idList")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "idList is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        if (!parsedBody.HasMember("queryVector")) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "queryVector is missing in your payload.";
+            return createDtoResponse(Status::CODE_400, status_dto);
+        }
+
+        std::string table_name = parsedBody.GetString("table");
+
+        size_t vector_size = parsedBody.GetArraySize("queryVector");
+        float query_vector[vector_size];
+        for (size_t i = 0; i < vector_size; i++) {
+            auto vector = parsedBody.GetArrayElement("queryVector", i);
+            query_vector[i] = (float)vector.GetDouble();
+        }
+
+        size_t id_list_size = parsedBody.GetArraySize("idList");
+        int64_t id_list[id_list_size];
+        for (size_t i = 0; i < id_list_size; i++) {
+            auto id = parsedBody.GetArrayElement("idList", i);
+            id_list[i] = id.GetInt();
+        }
+
+        std::string field_name = parsedBody.GetString("queryField");
+
+        vectordb::Json result;
+        vectordb::Status calc_distance_status = db_server->CalcDistance(
+            db_name, table_name, field_name, vector_size, query_vector, id_list_size, id_list, result
+        );
+        if (!calc_distance_status.ok()) {
+            status_dto->statusCode = Status::CODE_500.code;
+            status_dto->message = calc_distance_status.message();
+            return createDtoResponse(Status::CODE_500, status_dto);
+        }
+
+        auto res_dto = SearchRespDto::createShared();
+        res_dto->statusCode = Status::CODE_200.code;
+        res_dto->message = "Calculate distance successfully.";
+        oatpp::parser::json::mapping::ObjectMapper mapper;
+        res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
+        return createDtoResponse(Status::CODE_200, res_dto);
+    }
+
     ADD_CORS(Rebuild)
 
     ENDPOINT("POST", "/api/rebuild", Rebuild) {
