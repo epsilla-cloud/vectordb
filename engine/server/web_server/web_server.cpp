@@ -35,6 +35,10 @@ WebServer::StartService() {
 
         /* create ApiControllers and add endpoints to router */
         auto user_controller = WebController::createShared();
+        // Start rebuild thread
+        if (rebuild_) {
+            user_controller->db_server->StartRebuild();
+        }
         auto router = components.http_router.getObject();
         router->addController(user_controller);
 

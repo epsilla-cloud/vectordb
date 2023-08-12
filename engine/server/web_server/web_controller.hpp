@@ -531,6 +531,23 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, res_dto);
     }
 
+    ADD_CORS(Rebuild)
+
+    ENDPOINT("POST", "/api/rebuild", Rebuild) {
+        vectordb::Status status = db_server->RebuildOndemand();
+
+        auto dto = StatusDto::createShared();
+        if (!status.ok()) {
+            dto->statusCode = Status::CODE_500.code;
+            dto->message = status.message();
+            return createDtoResponse(Status::CODE_500, dto);
+        }
+
+        dto->statusCode = Status::CODE_200.code;
+        dto->message = "Rebuild finished!";
+        return createDtoResponse(Status::CODE_200, dto);
+    }
+
 /**
  *  Finish ENDPOINTs generation ('ApiController' codegen)
  */
