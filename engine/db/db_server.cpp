@@ -8,9 +8,6 @@ namespace engine {
 DBServer::DBServer() {
   // Initialize the meta database
   meta_ = std::make_shared<meta::BasicMetaImpl>();
-
-  // Start the thread to periodically call Rebuild
-  rebuild_thread_ = std::thread(&DBServer::RebuildPeriodically, this);
 }
 
 DBServer::~DBServer() {

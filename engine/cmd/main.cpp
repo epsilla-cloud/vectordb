@@ -31,6 +31,7 @@ int main(int argc, char *argv[]) {
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
                                          {"port", required_argument, 0, 'p'},
+                                         {"rebuild", required_argument, 0, 'r'},
                                          {nullptr, 0, nullptr, 0}};
 
   int option_index = 0;
@@ -48,7 +49,8 @@ int main(int argc, char *argv[]) {
 
   int value;
   uint16_t port = 8888;
-  while ((value = getopt_long(argc, argv, "c:p:h", long_options, &option_index)) != -1) {
+  bool rebuild = true;
+  while ((value = getopt_long(argc, argv, "c:p:r:h", long_options, &option_index)) != -1) {
     switch (value) {
       case 'c': {
         char *config_filename_ptr = strdup(optarg);
@@ -62,6 +64,11 @@ int main(int argc, char *argv[]) {
         port = (uint16_t)(stoi(server_port));
         break;
       }
+      case 'r': {
+        std::string start_rebuild = optarg;
+        rebuild = start_rebuild[0] == 't' || start_rebuild[0] == 'T';
+        break;
+      }
       case 'h':
         print_help(app_name);
         return EXIT_SUCCESS;
@@ -73,7 +80,7 @@ int main(int argc, char *argv[]) {
 
   server.Init(config_filename);
 
-  status = server.Start(port);
+  status = server.Start(port, rebuild);
   if (status.ok()) {
     std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
     std::cout << "Server running on http://localhost:" << port << std::endl;

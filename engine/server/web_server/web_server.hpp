@@ -17,6 +17,7 @@ class WebServer {
   std::atomic_bool try_stop_;
   std::shared_ptr<std::thread> thread_ptr_;
   uint16_t port_;
+  bool rebuild_;
 
  private:
   WebServer() {
@@ -25,10 +26,8 @@ class WebServer {
 
   ~WebServer() = default;
 
-  Status
-  StartService();
-  Status
-  StopService();
+  Status StartService();
+  Status StopService();
 
  public:
   static WebServer& GetInstance() {
@@ -42,6 +41,10 @@ class WebServer {
 
   void SetPort(uint16_t port) {
     port_ = port;
+  }
+
+  void SetRebuild(bool rebuild) {
+    rebuild_ = rebuild;
   }
 };
 }  // namespace web
