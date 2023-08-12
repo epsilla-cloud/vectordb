@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
   // }
 
   int value;
-  uint16_t port = 9999;
+  uint16_t port = 8888;
   bool rebuild = true;
   while ((value = getopt_long(argc, argv, "c:p:r:h", long_options, &option_index)) != -1)
   {

@@ -4,7 +4,7 @@ from pyepsilla import vectordb
 # connect to vectordb
 client = vectordb.Client(
     host='localhost',
-    port='9999'
+    port='8888'
 )
 
 # load and use a database
