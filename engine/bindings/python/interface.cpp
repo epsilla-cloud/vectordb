@@ -26,7 +26,7 @@ PyInit_epsilla(void)
   {
     Py_XDECREF(EpsillaError);
     Py_CLEAR(EpsillaError);
-    Py_DECREF(m);
+    Py_XDECREF(m);
     return NULL;
   }
 
@@ -249,18 +249,20 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs)
   {
     return NULL;
   }
+  Py_XINCREF(queryVector);
   auto queryFields = std::vector<std::string>();
 
   Py_ssize_t queryVectorSize = PyList_Size(queryVector);
-
   std::string tableName = tableNamePtr, queryField = queryFieldPtr;
-  std::unique_ptr<float[]> vectorArr(new float[queryVectorSize]);
+  auto vectorArr = std::make_unique<float[]>(new float[queryVectorSize]);
   for (Py_ssize_t i = 0; i < queryVectorSize; ++i)
   {
     PyObject *elem = PyList_GetItem(queryVector, i);
+    Py_XINCREF(elem);
     vectorArr[i] = PyFloat_AsDouble(elem);
-    Py_DecRef(elem);
+    Py_XDECREF(elem);
   }
+  Py_XDECREF(queryVector);
   auto result = vectordb::Json();
   auto status = db->Search(
       db_name,
@@ -268,7 +270,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs)
       queryField,
       queryFields,
       queryVectorSize,
-      vectorArr.get(),
+      vectorArr,
       limit,
       result,
       // TODO: make it variable
@@ -301,9 +303,9 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs)
 
   PyObject *response = PyObject_Call(loads_func, args_tuple, kwargs_dict);
 
-  Py_DECREF(loads_func);
-  Py_DECREF(args_tuple);
-  Py_DECREF(kwargs_dict);
+  Py_XDECREF(loads_func);
+  Py_XDECREF(args_tuple);
+  Py_XDECREF(kwargs_dict);
 
   if (response == NULL)
   {
