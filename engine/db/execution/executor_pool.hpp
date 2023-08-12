@@ -2,6 +2,7 @@
 #include <queue>
 #include <shared_mutex>
 
+#include "db/execution/vec_search_executor.hpp"
 namespace vectordb {
 namespace engine {
 namespace execution {
