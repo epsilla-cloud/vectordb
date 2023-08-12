@@ -140,7 +140,7 @@ namespace vectordb
                 GlobalSyncInterval));
           }
           std::unique_lock<std::mutex> lock(executor_pool_mutex_);
-          executor_pool_[index] = pool;
+          executor_pool_.set(index, pool);
           lock.unlock();
 
           ++index;
@@ -193,7 +193,7 @@ namespace vectordb
       // because the value of executor_pool_[field_offset] could be different when evaluating twice, which will
       // result in memory leak or core dump
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
-      auto pool = executor_pool_[field_offset];
+      auto pool = executor_pool_.at(field_offset);
       auto executor = execution::RAIIVecSearchExecutor(pool, pool->acquire());
       lock.unlock();
 

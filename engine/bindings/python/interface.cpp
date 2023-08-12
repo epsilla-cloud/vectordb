@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <Python.h>
+#include <memory>
 #include "bindings/python/interface.h"
 #include "db/db_server.hpp"
 #include "server/web_server/web_controller.hpp"
@@ -254,7 +255,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs)
 
   Py_ssize_t queryVectorSize = PyList_Size(queryVector);
   std::string tableName = tableNamePtr, queryField = queryFieldPtr;
-  auto vectorArr = std::make_unique<float[]>(new float[queryVectorSize]);
+  auto vectorArr = std::make_unique<float[]>(queryVectorSize);
   for (Py_ssize_t i = 0; i < queryVectorSize; ++i)
   {
     PyObject *elem = PyList_GetItem(queryVector, i);
@@ -270,7 +271,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs)
       queryField,
       queryFields,
       queryVectorSize,
-      vectorArr,
+      vectorArr.get(),
       limit,
       result,
       // TODO: make it variable
