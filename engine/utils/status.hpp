@@ -24,13 +24,9 @@ class Status {
 
   Status& operator=(Status&& s);
 
-  static Status OK() {
-    return Status();
-  }
+  static Status OK() { return Status(); }
 
-  bool ok() const {
-    return code() == 0;
-  }
+  bool ok() const { return code() == 0; }
 
   StatusCode code() const {
     return (state_ == nullptr) ? 0 : *(StatusCode*)(state_);
