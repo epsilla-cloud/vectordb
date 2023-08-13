@@ -1,6 +1,8 @@
 #include "db/db_server.hpp"
-#include "db/catalog/basic_meta_impl.hpp"
+
 #include <iostream>
+
+#include "db/catalog/basic_meta_impl.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -16,11 +18,13 @@ DBServer::~DBServer() {
 
   // Wait for the rebuild_thread_ to finish and join before destruction
   if (rebuild_thread_.joinable()) {
-      rebuild_thread_.join();
+    rebuild_thread_.join();
   }
 }
 
-Status DBServer::LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled) {
+Status DBServer::LoadDB(const std::string& db_name,
+                        std::string& db_catalog_path, int64_t init_table_scale,
+                        bool wal_enabled) {
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
@@ -65,12 +69,14 @@ Status DBServer::UnloadDB(const std::string& db_name) {
 std::shared_ptr<DBMVP> DBServer::GetDB(const std::string& db_name) {
   auto it = db_name_to_id_map_.find(db_name);
   if (it == db_name_to_id_map_.end()) {
-    return nullptr;  // Or throw an exception or return an error status, depending on your error handling strategy
+    return nullptr;  // Or throw an exception or return an error status,
+                     // depending on your error handling strategy
   }
   return dbs_[it->second];
 }
 
-Status DBServer::CreateTable(const std::string& db_name, meta::TableSchema& table_schema) {
+Status DBServer::CreateTable(const std::string& db_name,
+                             meta::TableSchema& table_schema) {
   // Create table in meta.
   vectordb::Status status = meta_->CreateTable(db_name, table_schema);
   if (!status.ok()) {
@@ -79,7 +85,8 @@ Status DBServer::CreateTable(const std::string& db_name, meta::TableSchema& tabl
   return GetDB(db_name)->CreateTable(table_schema);
 }
 
-Status DBServer::DropTable(const std::string& db_name, const std::string& table_name) {
+Status DBServer::DropTable(const std::string& db_name,
+                           const std::string& table_name) {
   // Drop table from meta.
   vectordb::Status status = meta_->DropTable(db_name, table_name);
   if (!status.ok()) {
@@ -95,14 +102,17 @@ Status DBServer::Rebuild() {
     if (db != nullptr) {
       auto status = db->Rebuild();
       if (!status.ok()) {
-        std::cout << "Rebuild db to " << db->db_catalog_path_ << " failed." << std::endl;
+        std::cout << "Rebuild db to " << db->db_catalog_path_ << " failed."
+                  << std::endl;
       }
     }
   }
   return Status::OK();
 }
 
-Status DBServer::Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records) {
+Status DBServer::Insert(const std::string& db_name,
+                        const std::string& table_name,
+                        vectordb::Json& records) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -114,17 +124,12 @@ Status DBServer::Insert(const std::string& db_name, const std::string& table_nam
   return table->Insert(records);
 }
 
-Status DBServer::Search(
-  const std::string& db_name,
-  const std::string& table_name,
-  std::string& field_name,
-  std::vector<std::string>& query_fields,
-  int64_t query_dimension,
-  const float* query_data,
-  const int64_t K,
-  vectordb::Json& result,
-  bool with_distance
-) {
+Status DBServer::Search(const std::string& db_name,
+                        const std::string& table_name, std::string& field_name,
+                        std::vector<std::string>& query_fields,
+                        int64_t query_dimension, const float* query_data,
+                        const int64_t K, vectordb::Json& result,
+                        bool with_distance) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -133,15 +138,14 @@ Status DBServer::Search(
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  return table->Search(field_name, query_fields, query_dimension, query_data, K, result, with_distance);
+  return table->Search(field_name, query_fields, query_dimension, query_data, K,
+                       result, with_distance);
 }
 
-Status DBServer::Project(
-  const std::string& db_name,
-  const std::string& table_name,
-  std::vector<std::string>& query_fields,
-  vectordb::Json& result
-) {
+Status DBServer::Project(const std::string& db_name,
+                         const std::string& table_name,
+                         std::vector<std::string>& query_fields,
+                         vectordb::Json& result) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);

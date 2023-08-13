@@ -1,7 +1,9 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include <string>
+
 #include <memory>
+#include <string>
+
 #include "db/db_server.hpp"
 static PyObject *EpsillaError;
 
