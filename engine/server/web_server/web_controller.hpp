@@ -203,7 +203,11 @@ class WebController : public oatpp::web::server::api::ApiController {
         vectordb::Status status = db_server->CreateTable(db_name, table_schema);
 
         if (!status.ok()) {
-            dto->statusCode = Status::CODE_500.code;
+            if (status.code() == TABLE_ALREADY_EXISTS) {
+                dto->statusCode = Status::CODE_409.code;
+            } else {
+                dto->statusCode = Status::CODE_500.code;
+            }
             dto->message = status.message();
             return createDtoResponse(Status::CODE_500, dto);
         }

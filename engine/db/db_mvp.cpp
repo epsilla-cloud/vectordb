@@ -18,7 +18,7 @@ DBMVP::DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale) {
 
 Status DBMVP::CreateTable(meta::TableSchema& table_schema) {
   if (table_name_to_id_map_.find(table_schema.name_) != table_name_to_id_map_.end()) {
-    return Status(DB_UNEXPECTED_ERROR, "Table already exists: " + table_schema.name_);
+    return Status(TABLE_ALREADY_EXISTS, "Table already exists: " + table_schema.name_);
   }
   auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_, init_table_scale_);
   tables_.push_back(table);
