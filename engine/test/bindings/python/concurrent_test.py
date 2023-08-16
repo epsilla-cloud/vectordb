@@ -1,3 +1,4 @@
+import threading
 import epsilla
 import os
 test_db_path = os.environ.get("DB_PATH")
@@ -24,13 +25,23 @@ epsilla.insert(
     ]
 )
 
-(code, response) = epsilla.query(
-    table_name="MyTable",
-    query_field="Embedding",
-    query_vector=[0.35, 0.55, 0.47, 0.94],
-    limit=2
-)
-print(code, response)
+
+def run_task():
+    (code, response) = epsilla.query(
+        table_name="MyTable",
+        query_field="Embedding",
+        query_vector=[0.35, 0.55, 0.47, 0.94],
+        limit=2
+    )
+    print(code, response)
+
+
+for _ in range(10):
+    threads = [threading.Thread(target=run_task) for i in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
 
 epsilla.drop_table("MyTable")
 

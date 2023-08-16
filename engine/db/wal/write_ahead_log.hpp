@@ -52,7 +52,7 @@ class WriteAheadLog {
     id_file.close();
   }
 
-  int64_t WriteEntry(LogEntryType type, const std::string& entry) {
+  int64_t WriteEntry(LogEntryType type, const std::string &entry) {
     // Skip WAL for realtime scenario
     if (!enabled_) {
       return global_counter_.Get();
@@ -63,14 +63,18 @@ class WriteAheadLog {
       RotateFile();
     }
     int64_t next = global_counter_.IncrementAndGet();
-    fprintf(file_, "%I64d %d %s\n", next, type, entry.c_str());
+#ifdef __APPLE__
+    fprintf(file_, "%lld %d %s\n", next, type, entry.c_str());
+#else
+    fprintf(file_, "%ld %d %s\n", next, type, entry.c_str());
+#endif
     fflush(file_);
     // Tradeoff of data consistency. We use fflush for now.
     // fsync(fileno(file_));
     return next;
   }
 
-  void Replay(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment) {
+  void Replay(meta::TableSchema &table_schema, std::shared_ptr<TableSegmentMVP> segment) {
     std::vector<boost::filesystem::path> files;
     GetSortedLogFiles(files);
     for (auto pt = 0; pt < files.size(); ++pt) {
@@ -122,7 +126,7 @@ class WriteAheadLog {
     std::vector<boost::filesystem::path> files;
     GetSortedLogFiles(files);
 
-    for (const auto& file : files) {
+    for (const auto &file : files) {
       // Extract the timestamp from the filename
       auto filename = file.filename().string();
       auto pos = filename.find_last_of('.');
@@ -147,7 +151,7 @@ class WriteAheadLog {
   }
 
  private:
-  void ApplyEntry(meta::TableSchema& table_schema, std::shared_ptr<TableSegmentMVP> segment, int64_t global_id, LogEntryType& type, std::string& content) {
+  void ApplyEntry(meta::TableSchema &table_schema, std::shared_ptr<TableSegmentMVP> segment, int64_t global_id, LogEntryType &type, std::string &content) {
     switch (type) {
       case LogEntryType::INSERT: {
         Json record;
@@ -180,7 +184,7 @@ class WriteAheadLog {
   //   std::sort(files.begin(), files.end());
   // }
 
-  void GetSortedLogFiles(std::vector<boost::filesystem::path>& files) {
+  void GetSortedLogFiles(std::vector<boost::filesystem::path> &files) {
     // Check if logs_folder_ exists and is a directory.
     if (!boost::filesystem::exists(logs_folder_) || !boost::filesystem::is_directory(logs_folder_)) {
       std::cout << "Directory " << logs_folder_ << " does not exist or is not a directory.\n";
@@ -197,7 +201,7 @@ class WriteAheadLog {
           files.push_back(i->path());
         }
       }
-    } catch (const boost::filesystem::filesystem_error& ex) {
+    } catch (const boost::filesystem::filesystem_error &ex) {
       std::cout << "Caught exception: " << ex.what() << '\n';
     }
 
@@ -219,7 +223,7 @@ class WriteAheadLog {
 
   std::string logs_folder_;
   std::chrono::time_point<std::chrono::system_clock> last_rotation_time_;
-  FILE* file_ = nullptr;
+  FILE *file_ = nullptr;
   AtomicCounter global_counter_;
   bool enabled_;
 };

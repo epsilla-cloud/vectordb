@@ -72,11 +72,9 @@ target_include_directories(vectordb_dylib PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(vectordb_dylib PUBLIC ${Boost_LIBRARIES})
 target_link_libraries(vectordb_dylib PUBLIC oatpp)
 
-add_executable(vectordb cmd/main.cpp)
+add_executable(vectordb cmd/server/main.cpp)
 target_link_libraries(vectordb PUBLIC vectordb_lib)
 target_link_libraries(vectordb PUBLIC oatpp)
-
-
 
 add_library(pybinding SHARED bindings/python/interface.cpp)
 
