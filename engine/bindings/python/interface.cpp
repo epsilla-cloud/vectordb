@@ -202,7 +202,6 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   // Convert the PyObject to a C-style string (UTF-8)
   const char *utf8_str = PyUnicode_AsUTF8(json_str);
-  Py_DECREF(json_str);
 
   if (utf8_str == NULL) {
     return NULL;
@@ -210,6 +209,8 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
 
   auto records = vectordb::Json();
   records.LoadFromString(std::string(utf8_str));
+  Py_DECREF(json_str);
+
   auto status = db->Insert(db_name, tableName, records);
   return PyLong_FromLong(int(status.code()));
 }
