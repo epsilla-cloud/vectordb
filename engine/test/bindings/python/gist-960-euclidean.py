@@ -8,7 +8,7 @@ import epsilla as client
 import h5py, datetime
 
 ## Connect to Epsilla vector database
-client.load_db(db_name="benchmark", db_path="/tmp/epsilla", vector_scale=1000000, wal_enabled=False) ## pay attention to change db_path to persistent volume for production environment
+client.load_db(db_name="benchmark", db_path="/tmp/epsilla")
 client.use_db(db_name="benchmark")
 
 ## Read gist-960-euclidean data from hdf5
