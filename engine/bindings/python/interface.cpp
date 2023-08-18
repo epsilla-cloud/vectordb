@@ -207,10 +207,6 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
   auto records = vectordb::Json();
   records.LoadFromString(std::string(utf8_str));
   Py_DECREF(json_str);
-  std::cout << "inserting records to "
-            << db_name << " "
-            << tableName << " "
-            << records.DumpToString() << std::endl;
 
   auto status = db->Insert(db_name, tableName, records);
   return PyLong_FromLong(int(status.code()));
@@ -226,8 +222,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       "with_distance",
       NULL};
   const char *tableNamePtr, *queryFieldPtr;
-  int limit;
-  bool withDistance;
+  int limit, withDistance;
   PyObject *queryVector, *responseFields;
 
   if (!PyArg_ParseTupleAndKeywords(
@@ -276,6 +271,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       limit,
       result,
       withDistance);
+
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
     return NULL;
