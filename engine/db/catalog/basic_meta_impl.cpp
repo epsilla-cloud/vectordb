@@ -1,10 +1,10 @@
 // basic_meta_impl.cpp
 #include "db/catalog/basic_meta_impl.hpp"
 
+#include <iostream>
+
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
-
-#include <iostream>
 
 namespace vectordb {
 namespace engine {
@@ -150,7 +150,6 @@ Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
 
   // Write the Json object to a string
   std::string json_string = json.DumpToString();
-
   // Write the string to the file
   return server::CommonUtil::AtomicWriteToFile(file_path, json_string);
 }
