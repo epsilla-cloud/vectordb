@@ -88,7 +88,6 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
 
   // Iterate through the list and extract dictionaries
   Py_ssize_t list_size = PyList_Size(tableFieldsListPtr);
-
   for (Py_ssize_t i = 0; i < list_size; ++i) {
     PyObject *dict_obj = PyList_GetItem(tableFieldsListPtr, i);
     vectordb::engine::meta::FieldSchema field;
@@ -108,7 +107,6 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
       PyErr_SetString(PyExc_TypeError, "invalid content: ID is not valid UTF8 string");
       return NULL;
     }
-
     Py_DECREF(nameKey);
     Py_DECREF(nameValue);
 
@@ -144,15 +142,14 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
       }
       Py_DECREF(dimensionsKey);
       Py_DECREF(dimensionsValue);
-      schema.fields_.push_back(field);
     }
+    schema.fields_.push_back(field);
     Py_DECREF(dict_obj);
   }
 
   Py_DECREF(tableFieldsListPtr);
 
   // TODO: add auto embedding here
-
   auto status = db->CreateTable(db_name, schema);
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
@@ -210,21 +207,44 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
   auto records = vectordb::Json();
   records.LoadFromString(std::string(utf8_str));
   Py_DECREF(json_str);
+  std::cout << "inserting records to "
+            << db_name << " "
+            << tableName << " "
+            << records.DumpToString() << std::endl;
 
   auto status = db->Insert(db_name, tableName, records);
   return PyLong_FromLong(int(status.code()));
 }
 
 static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
-  static const char *keywords[] = {"table_name", "query_field", "query_vector", "limit", NULL};
+  static const char *keywords[] = {
+      "table_name",
+      "query_field",
+      "query_vector",
+      "response_fields",
+      "limit",
+      "with_distance",
+      NULL};
   const char *tableNamePtr, *queryFieldPtr;
   int limit;
-  PyObject *queryVector;
+  bool withDistance;
+  PyObject *queryVector, *responseFields;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ssOi", (char **)keywords, &tableNamePtr, &queryFieldPtr, &queryVector, &limit)) {
+  if (!PyArg_ParseTupleAndKeywords(
+          args,
+          kwargs,
+          "ssOOip",
+          (char **)keywords,
+          &tableNamePtr,
+          &queryFieldPtr,
+          &queryVector,
+          &responseFields,
+          &limit,
+          &withDistance)) {
     return NULL;
   }
   Py_XINCREF(queryVector);
+  Py_XINCREF(responseFields);
   auto queryFields = std::vector<std::string>();
 
   Py_ssize_t queryVectorSize = PyList_Size(queryVector);
@@ -235,6 +255,14 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
     Py_XINCREF(elem);
     vectorArr[i] = PyFloat_AsDouble(elem);
     Py_XDECREF(elem);
+  }
+  Py_ssize_t responseFieldsSize = PyList_Size(responseFields);
+  for (Py_ssize_t i = 0; i < responseFieldsSize; ++i) {
+    PyObject *elem = PyObject_Str(PyList_GetItem(responseFields, i));
+    Py_XINCREF(elem);
+    std::string field = PyUnicode_AsUTF8(elem);
+    Py_XDECREF(elem);
+    queryFields.push_back(field);
   }
   Py_XDECREF(queryVector);
   auto result = vectordb::Json();
@@ -247,8 +275,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       vectorArr.get(),
       limit,
       result,
-      // TODO: make it variable
-      true);
+      withDistance);
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
     return NULL;

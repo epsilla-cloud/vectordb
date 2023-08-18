@@ -27,8 +27,10 @@ epsilla.insert(
 (code, response) = epsilla.query(
     table_name="MyTable",
     query_field="Embedding",
+    response_fields=["ID", "Doc", "Embedding"],
     query_vector=[0.35, 0.55, 0.47, 0.94],
-    limit=2
+    limit=2,
+    with_distance=True
 )
 print(code, response)
 
