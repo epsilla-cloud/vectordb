@@ -82,7 +82,7 @@ bash build.sh
 ls -lh build/*.so
 ```
 
-**2. Run test with python bindings lib "epsilla.so" "libvectordb_dylib.so in the folder "build" built in the previous step
+**2. Run test with python bindings lib "epsilla.so" "libvectordb_dylib.so in the folder "build" built in the previous step**
 ```shell
 cd engine
 export PYTHONPATH=./build/
