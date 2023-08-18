@@ -73,16 +73,16 @@ status_code, response = client.query(
 )
 ```
 
-## Quick Start with Epsilla Lib, without launching epsilla vector database
+## Quick Start with Epsilla Python Bindings Lib, without launching epsilla vector database
 
-**1. Build Epsilla lib package**
+**1. Build Epsilla Python Bindings lib package**
 ```shell
 cd engine
 bash build.sh
 ls -lh build/*.so
 ```
 
-**2. Run test with Python lib "epsilla.so" "libvectordb_dylib.so in the folder "build" built in the previous step
+**2. Run test with python bindings lib "epsilla.so" "libvectordb_dylib.so in the folder "build" built in the previous step
 ```shell
 cd engine
 export PYTHONPATH=./build/
