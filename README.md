@@ -25,7 +25,7 @@ The key features of Epsilla include:
 
 Epsilla's core is written in C++ and leverages the advanced academic parallel graph traversal techniques for vector indexing, achieving 10 times faster vector search than HNSW while maintaining precision levels of over 99.9%.
 
-## Quick Start
+## Quick Start with Epsilla Vector Database in Docker
 
 **1. Run Backend in Docker**
 ```shell
@@ -72,3 +72,21 @@ status_code, response = client.query(
   limit=2
 )
 ```
+
+## Quick Start with Epsilla Python Bindings Lib, without launching epsilla vector database
+
+**1. Build Epsilla Python Bindings lib package**
+```shell
+cd engine
+bash build.sh
+ls -lh build/*.so
+```
+
+**2. Run test with python bindings lib "epsilla.so" "libvectordb_dylib.so in the folder "build" built in the previous step
+```shell
+cd engine
+export PYTHONPATH=./build/
+export DB_PATH=/tmp/db33
+python3 test/bindings/python/test.py
+```
+

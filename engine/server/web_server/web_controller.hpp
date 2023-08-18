@@ -70,6 +70,7 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     ENDPOINT("POST", "/api/load", LoadDB, BODY_STRING(String, body)) {
         vectordb::Json parsedBody;
+        auto dto = StatusDto::createShared();
         auto valid = parsedBody.LoadFromString(body);
         if (!valid) {
             dto->statusCode = Status::CODE_400.code;
@@ -89,7 +90,6 @@ class WebController : public oatpp::web::server::api::ApiController {
         }
         vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale, wal_enabled);
 
-        auto dto = StatusDto::createShared();
         if (!status.ok()) {
             dto->statusCode = Status::CODE_500.code;
             dto->message = status.message();
