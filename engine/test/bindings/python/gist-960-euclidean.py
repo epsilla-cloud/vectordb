@@ -31,7 +31,7 @@ records_num, dimensions = training_data.shape
 id_field = {"name": "id", "dataType": "INT"}
 vec_field = {"name": "vector", "dataType": "VECTOR_FLOAT", "dimensions": dimensions}
 fields = [id_field, vec_field]
-status_code, response = client.create_table(table_name="benchmark", table_fields=fields)
+response = client.create_table(table_name="benchmark", table_fields=fields)
 
 ## Insert 20000 data into table
 # records_data = [ {"id": i, "vector": training_data[i].tolist()} for i in range(20000)]
@@ -39,6 +39,7 @@ status_code, response = client.create_table(table_name="benchmark", table_fields
 
 ## Insert all data into table
 indexs = [ i for i in range(0, records_num+10000, 50000)]
+print("Begin to insert all gist data into table ...")
 for i in range(len(indexs)-1):
     print("-"*20)
     start=datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
