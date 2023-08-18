@@ -70,7 +70,13 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     ENDPOINT("POST", "/api/load", LoadDB, BODY_STRING(String, body)) {
         vectordb::Json parsedBody;
-        parsedBody.LoadFromString(body);
+        auto valid = parsedBody.LoadFromString(body);
+        if (!valid) {
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "Invalid payload.";
+            return createDtoResponse(Status::CODE_400, dto);
+        }
+
         std::string db_path = parsedBody.GetString("path");
         std::string db_name = parsedBody.GetString("name");
         int64_t init_table_scale = InitTableScale;
@@ -140,7 +146,13 @@ class WebController : public oatpp::web::server::api::ApiController {
         auto dto = StatusDto::createShared();
 
         vectordb::Json parsedBody;
-        parsedBody.LoadFromString(body);
+        auto valid = parsedBody.LoadFromString(body);
+        if (!valid) {
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "Invalid payload.";
+            return createDtoResponse(Status::CODE_400, dto);
+        }
+
         vectordb::engine::meta::TableSchema table_schema;
         if (!parsedBody.HasMember("name")) {
             dto->statusCode = Status::CODE_400.code;
