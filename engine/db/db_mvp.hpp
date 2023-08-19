@@ -20,6 +20,7 @@ class DBMVP {
 
   Status CreateTable(meta::TableSchema& table_schema);
   Status DeleteTable(const std::string& table_name);
+  std::vector<std::string> GetTables();
   std::shared_ptr<TableMVP> GetTable(const std::string& table_name);
   Status Rebuild();
 
