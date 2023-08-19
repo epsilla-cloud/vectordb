@@ -269,7 +269,6 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(Status::CODE_200, dto);
     }
 
-    // TODO: implement with corresponding function later.
     ADD_CORS(ListTables)
 
     ENDPOINT("GET", "/api/{db_name}/schema/tables/show", ListTables,
