@@ -396,10 +396,13 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     // nothing should be done at the end of block
   }
   record_number_.store(cursor);
-  auto msg = std::string("loading done. added entries: " +
+  auto msg = std::string("successfully inserted " +
                          std::to_string(new_record_size - skipped_entry) +
-                         ", skipped entries: " +
-                         std::to_string(skipped_entry));
+                         " records.");
+  if (skipped_entry > 0) {
+    msg += "Skipped " +
+           std::to_string(skipped_entry) + "records with primary key values that already exist.";
+  }
   std::cerr << msg << std::endl;
   return Status(DB_SUCCESS, msg);
 }
