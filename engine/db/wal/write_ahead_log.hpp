@@ -1,7 +1,6 @@
 #include <omp.h>
 #include <unistd.h>
 
-#include <boost/filesystem.hpp>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -75,7 +74,7 @@ class WriteAheadLog {
   }
 
   void Replay(meta::TableSchema &table_schema, std::shared_ptr<TableSegmentMVP> segment) {
-    std::vector<boost::filesystem::path> files;
+    std::vector<std::filesystem::path> files;
     GetSortedLogFiles(files);
     for (auto pt = 0; pt < files.size(); ++pt) {
       auto file = files[pt];
@@ -123,7 +122,7 @@ class WriteAheadLog {
     auto retention_period_seconds = std::chrono::duration_cast<std::chrono::seconds>(LOG_RETENTION).count();
 
     // Get all log files
-    std::vector<boost::filesystem::path> files;
+    std::vector<std::filesystem::path> files;
     GetSortedLogFiles(files);
 
     for (const auto &file : files) {
@@ -172,11 +171,11 @@ class WriteAheadLog {
     }
   }
 
-  // void GetSortedLogFiles(std::vector<boost::filesystem::path>& files) {
+  // void GetSortedLogFiles(std::vector<std::filesystem::path>& files) {
   //   std::cout << "Get shorted log files by thread: " << omp_get_thread_num() << std::endl;
 
-  //   boost::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
-  //   for (boost::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
+  //   std::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
+  //   for (std::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
   //     if (i->path().extension() == ".log") {
   //       files.push_back(i->path());
   //     }
@@ -184,16 +183,16 @@ class WriteAheadLog {
   //   std::sort(files.begin(), files.end());
   // }
 
-  void GetSortedLogFiles(std::vector<boost::filesystem::path> &files) {
+  void GetSortedLogFiles(std::vector<std::filesystem::path> &files) {
     // Check if logs_folder_ exists and is a directory.
-    if (!boost::filesystem::exists(logs_folder_) || !boost::filesystem::is_directory(logs_folder_)) {
+    if (!std::filesystem::exists(logs_folder_) || !std::filesystem::is_directory(logs_folder_)) {
       std::cout << "Directory " << logs_folder_ << " does not exist or is not a directory.\n";
       return;
     }
 
     try {
-      boost::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
-      for (boost::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
+      std::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
+      for (std::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
         // Print out the path of each file being processed.
         std::cout << "Processing file: " << i->path().string() << std::endl;
 
@@ -201,7 +200,7 @@ class WriteAheadLog {
           files.push_back(i->path());
         }
       }
-    } catch (const boost::filesystem::filesystem_error &ex) {
+    } catch (const std::filesystem::filesystem_error &ex) {
       std::cout << "Caught exception: " << ex.what() << '\n';
     }
 
