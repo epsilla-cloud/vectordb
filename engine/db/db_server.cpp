@@ -110,6 +110,15 @@ Status DBServer::Rebuild() {
   return Status::OK();
 }
 
+Status DBServer::ListTables(const std::string& db_name, std::vector<std::string>& table_names) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  table_names = db->GetTables();
+  return Status::OK();
+}
+
 Status DBServer::Insert(const std::string& db_name,
                         const std::string& table_name,
                         vectordb::Json& records) {

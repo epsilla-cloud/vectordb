@@ -44,6 +44,14 @@ Status DBMVP::DeleteTable(const std::string& table_name) {
   return Status::OK();
 }
 
+std::vector<std::string> DBMVP::GetTables() {
+  std::vector<std::string> table_names;
+  for (const auto& entry : table_name_to_id_map_) {
+    table_names.push_back(entry.first);
+  }
+  return table_names;
+}
+
 std::shared_ptr<TableMVP> DBMVP::GetTable(const std::string& table_name) {
   auto it = table_name_to_id_map_.find(table_name);
   if (it == table_name_to_id_map_.end()) {

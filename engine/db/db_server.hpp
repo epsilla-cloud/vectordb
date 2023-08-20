@@ -27,6 +27,7 @@ class DBServer {
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema);
   Status DropTable(const std::string& db_name, const std::string& table_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
+  Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
   Status Search(
     const std::string& db_name,

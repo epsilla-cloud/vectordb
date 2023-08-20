@@ -24,6 +24,7 @@ class StatusDto: public oatpp::DTO {
 class SchemaInfoDto: public oatpp::DTO {
     DTO_INIT(SchemaInfoDto, DTO)
 
+    DTO_FIELD(Int32, statusCode);
     DTO_FIELD(String, message);
     // DTO_FIELD(Object<vectordb::engine::meta::TableSchema>, result);
 };
@@ -31,6 +32,7 @@ class SchemaInfoDto: public oatpp::DTO {
 class TableListDto : public oatpp::DTO {
     DTO_INIT(TableListDto, DTO)
 
+    DTO_FIELD(Int32, statusCode);
     DTO_FIELD(String, message);
     DTO_FIELD(List<String>, result);
 };
