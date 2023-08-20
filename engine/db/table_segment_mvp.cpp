@@ -198,8 +198,6 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
           default:
             break;
         }
-
-        // attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[*primitive_pk_field_id_]];
       }
     }
 
