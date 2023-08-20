@@ -52,6 +52,9 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
     if (field_schema.field_type_ == meta::FieldType::STRING) {
       field_id_mem_offset_map_[field_schema.id_] = string_num_;
       field_name_mem_offset_map_[field_schema.name_] = string_num_;
+      if (field_schema.is_primary_key_) {
+        string_pk_offset_ = std::make_unique<int64_t>(string_num_);
+      }
       ++string_num_;
     } else if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
@@ -63,6 +66,9 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       field_id_mem_offset_map_[field_schema.id_] = primitive_offset_;
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
       primitive_offset_ += FieldTypeSizeMVP(field_schema.field_type_);
+      if (field_schema.is_primary_key_) {
+        primitive_pk_field_id_ = std::make_unique<int64_t>(field_schema.id_);
+      }
       ++primitive_num_;
     }
   }
@@ -122,7 +128,6 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     // Read the number of records and the first record id
     file.read(reinterpret_cast<char*>(&record_number_), sizeof(record_number_));
     file.read(reinterpret_cast<char*>(&first_record_id_), sizeof(first_record_id_));
-
     // If the table contains more records than the size limit, throw to avoid future core dump.
     if (record_number_ > init_table_scale) {
       file.close();
@@ -140,6 +145,46 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     // Read the attribute table
     file.read(attribute_table_, record_number_ * primitive_offset_);
 
+    // add pk into set
+    if (primitive_pk_field_id_) {
+      auto field = table_schema.fields_[*primitive_pk_field_id_];
+      for (auto rIdx = 0; rIdx < record_number_; rIdx++) {
+        switch (field.field_type_) {
+          case meta::FieldType::INT1: {
+            int8_t value = 0;
+            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
+            // do not check existance to avoid overhead
+            primary_key_.addKeyIfNotExist(value, rIdx);
+            break;
+          }
+          case meta::FieldType::INT2: {
+            int16_t value = 0;
+            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
+            // do not check existance to avoid overhead
+            primary_key_.addKeyIfNotExist(value, rIdx);
+            break;
+          }
+          case meta::FieldType::INT4: {
+            int32_t value = 0;
+            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
+            // do not check existance to avoid overhead
+            primary_key_.addKeyIfNotExist(value, rIdx);
+            break;
+          }
+          case meta::FieldType::INT8: {
+            int64_t value = 0;
+            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
+            // do not check existance to avoid overhead
+            primary_key_.addKeyIfNotExist(value, rIdx);
+            break;
+          }
+          default:
+            // other types cannot be PK, do nothing
+            break;
+        }
+      }
+    }
+
     // Read the string table
     for (auto i = 0; i < record_number_; ++i) {
       for (auto j = 0; j < string_num_; ++j) {
@@ -149,6 +194,12 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
         std::string str(string_length, '\0');
         file.read(&str[0], string_length);
         string_table_[offset] = str;
+
+        // add pk into set
+        if (string_pk_offset_ && *string_pk_offset_ == j) {
+          // do not check existance to avoid additional overhead
+          primary_key_.addKeyIfNotExist(str, i);
+        }
       }
     }
 
@@ -245,6 +296,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
   // Segment is modified.
   skip_sync_disk_.store(false);
+  size_t skipped_entry = 0;
 
   // Process the insert.
   size_t cursor = record_number_;
@@ -253,7 +305,16 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     for (auto& field : table_schema.fields_) {
       if (field.field_type_ == meta::FieldType::STRING) {
         // Insert string attribute.
-        string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = record.GetString(field.name_);
+        auto value = record.GetString(field.name_);
+        if (field.is_primary_key_) {
+          auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+          if (exist) {
+            std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+            skipped_entry++;
+            continue;
+          }
+        }
+        string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = value;
       } else if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.
@@ -267,21 +328,45 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = static_cast<int8_t>((int8_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value = static_cast<int16_t>((int16_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value = static_cast<int64_t>((int64_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
             break;
           }
@@ -306,9 +391,20 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       }
     }
     ++cursor;
+
+  LOOP_END : {}
+    // nothing should be done at the end of block
   }
   record_number_.store(cursor);
-  return Status::OK();
+  auto msg = std::string("successfully inserted " +
+                         std::to_string(new_record_size - skipped_entry) +
+                         " records. ");
+  if (skipped_entry > 0) {
+    msg += "skipped " +
+           std::to_string(skipped_entry) + " records with primary key values that already exist.";
+  }
+  std::cerr << msg << std::endl;
+  return Status(DB_SUCCESS, msg);
 }
 
 // Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
