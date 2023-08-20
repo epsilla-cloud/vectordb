@@ -72,17 +72,17 @@ class UniqueKey {
     return int64_set_.erase(k) == 1;
   }
 
-  bool hasKey(std::string k) {
+  bool hasKey(const std::string &k) {
     std::shared_lock<std::shared_timed_mutex> l(mutex_);
     return string_set_.find(k) != string_set_.end();
   }
 
-  bool addKeyIfNotExist(std::string k) {
+  bool addKeyIfNotExist(const std::string &k) {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     return string_set_.insert(k).second;
   }
 
-  bool removeKey(std::string k) {
+  bool removeKey(const std::string &k) {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     return string_set_.erase(k) == 1;
   }
