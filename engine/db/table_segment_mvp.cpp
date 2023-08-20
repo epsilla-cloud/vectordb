@@ -53,7 +53,6 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       field_id_mem_offset_map_[field_schema.id_] = string_num_;
       field_name_mem_offset_map_[field_schema.name_] = string_num_;
       if (field_schema.is_primary_key_) {
-        assert(!primitive_pk_field_id_);  // only one pk allowed
         string_pk_offset_ = std::make_unique<int64_t>(string_num_);
       }
       ++string_num_;
@@ -68,7 +67,6 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
       primitive_offset_ += FieldTypeSizeMVP(field_schema.field_type_);
       if (field_schema.is_primary_key_) {
-        assert(!string_pk_offset_);  // only one pk allowed
         primitive_pk_field_id_ = std::make_unique<int64_t>(field_schema.id_);
       }
       ++primitive_num_;
