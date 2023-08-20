@@ -152,28 +152,28 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = 0;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
+            std::memcpy(&value, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int8_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value = 0;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
+            std::memcpy(&value, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int16_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value = 0;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
+            std::memcpy(&value, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int32_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value = 0;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
+            std::memcpy(&value, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int64_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
@@ -311,7 +311,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           if (exist) {
             std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
             skipped_entry++;
-            continue;
+            goto LOOP_END;
           }
         }
         string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = value;
