@@ -312,7 +312,18 @@ Status ValidateSchema(TableSchema& table_schema) {
     if (has_primary_key && field.is_primary_key_) {
       return Status(DB_UNEXPECTED_ERROR, "Cannot have more than 1 primary key fields.");
     }
-    if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
+    if (!has_primary_key && field.is_primary_key_) {
+      if (
+        field.field_type_ != FieldType::INT1 &&
+        field.field_type_ != FieldType::INT2 &&
+        field.field_type_ != FieldType::INT4 &&
+        field.field_type_ != FieldType::INT8 &&
+        field.field_type_ != FieldType::STRING
+      ) {
+        return Status(DB_UNEXPECTED_ERROR, "Primary key can only be set to a field with type TINYINT, SMALLINT, INT, BIGINT, or STRING.");
+      }
+      has_primary_key = true;
+    }
   }
 
   if (duplicated) {
