@@ -20,6 +20,7 @@ namespace web {
       {"DOUBLE", vectordb::engine::meta::FieldType::DOUBLE},
       {"STRING", vectordb::engine::meta::FieldType::STRING},
       {"BOOL", vectordb::engine::meta::FieldType::BOOL},
+      {"JSON", vectordb::engine::meta::FieldType::JSON},
       {"VECTOR_FLOAT", vectordb::engine::meta::FieldType::VECTOR_FLOAT},
       {"VECTOR_DOUBLE", vectordb::engine::meta::FieldType::VECTOR_DOUBLE},
       {"UNKNOWN", vectordb::engine::meta::FieldType::UNKNOWN}

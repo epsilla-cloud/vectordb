@@ -24,6 +24,7 @@ class Json {
   bool GetBool() const;
   size_t GetSize() const;
   Json GetObject(const std::string& key) const;                      // Get nested object
+  Json Get(const std::string& key) const;                      // Get nested json
   size_t GetArraySize(const std::string& key) const;
   Json GetArrayElement(const std::string& key, size_t index) const;  // Get specific element from array
   Json GetArray(const std::string& key) const;  // Get specific element from array

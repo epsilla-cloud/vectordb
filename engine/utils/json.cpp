@@ -84,6 +84,15 @@ Json Json::GetObject(const std::string& key) const {
   return Json();
 }
 
+Json Json::Get(const std::string& key) const {
+  if (doc_.contains(key)) {
+    Json json;
+    json.doc_ = doc_[key];
+    return json;
+  }
+  return Json();
+}
+
 size_t Json::GetArraySize(const std::string& key) const {
   if (doc_[key].is_array()) {
     return doc_[key].size();
