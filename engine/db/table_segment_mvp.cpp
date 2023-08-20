@@ -180,22 +180,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
             primary_key_.addKeyIfNotExist(value);
             break;
           }
-          case meta::FieldType::FLOAT: {
-            float value = 0;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(float));
-            break;
-          }
-          case meta::FieldType::DOUBLE: {
-            double value = 0;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(double));
-            break;
-          }
-          case meta::FieldType::BOOL: {
-            bool value = false;
-            std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(bool));
-            break;
-          }
           default:
+            // other types cannot be PK, do nothing
             break;
         }
       }
