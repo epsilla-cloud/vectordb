@@ -157,7 +157,6 @@ Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
 int64_t GetNewTableId(const DatabaseSchema& db) {
   int64_t max_id = -1;
   for (const auto& table : db.tables_) {
-    std::cout << table.id_ << " " << table.name_ << std::endl;
     if (table.id_ > max_id) {
       max_id = table.id_;
     }
@@ -316,10 +315,6 @@ Status ValidateSchema(TableSchema& table_schema) {
     if (!has_primary_key && field.is_primary_key_) has_primary_key = true;
   }
 
-  std::cout << duplicated << std::endl;
-  std::cout << has_vector_field << std::endl;
-  std::cout << has_primary_key << std::endl;
-
   if (duplicated) {
     return Status(DB_UNEXPECTED_ERROR, "Field names can not be duplicated.");
   }
@@ -352,7 +347,6 @@ Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table
 
   // TODO: a better way to assign table id.
   table_schema.id_ = GetNewTableId(db);
-  std::cout << "table id: " << table_schema.id_ << std::endl;
 
   db.tables_.push_back(table_schema);
   // Flush the change of the database schema to disk.
