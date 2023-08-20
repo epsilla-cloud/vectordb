@@ -156,28 +156,28 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
             int8_t value = 0;
             std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
             // do not check existance to avoid overhead
-            primary_key_.addKeyIfNotExist(value);
+            primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value = 0;
             std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
             // do not check existance to avoid overhead
-            primary_key_.addKeyIfNotExist(value);
+            primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value = 0;
             std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
             // do not check existance to avoid overhead
-            primary_key_.addKeyIfNotExist(value);
+            primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value = 0;
             std::memcpy(&(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
             // do not check existance to avoid overhead
-            primary_key_.addKeyIfNotExist(value);
+            primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           default:
@@ -200,7 +200,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
         // add pk into set
         if (string_pk_offset_ && *string_pk_offset_ == j) {
           // do not check existance to avoid additional overhead
-          primary_key_.addKeyIfNotExist(str);
+          primary_key_.addKeyIfNotExist(str, i);
         }
       }
     }
@@ -309,7 +309,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         // Insert string attribute.
         auto value = record.GetString(field.name_);
         if (field.is_primary_key_) {
-          auto exist = !primary_key_.addKeyIfNotExist(value);
+          auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
           if (exist) {
             std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
             skipped_entry++;
@@ -330,7 +330,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = static_cast<int8_t>((int8_t)(record.GetInt(field.name_)));
-            auto exist = !primary_key_.addKeyIfNotExist(value);
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
               std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
               skipped_entry++;
@@ -341,7 +341,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           }
           case meta::FieldType::INT2: {
             int16_t value = static_cast<int16_t>((int16_t)(record.GetInt(field.name_)));
-            auto exist = !primary_key_.addKeyIfNotExist(value);
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
               std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
               skipped_entry++;
@@ -352,7 +352,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           }
           case meta::FieldType::INT4: {
             int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
-            auto exist = !primary_key_.addKeyIfNotExist(value);
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
               std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
               skipped_entry++;
@@ -363,7 +363,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           }
           case meta::FieldType::INT8: {
             int64_t value = static_cast<int64_t>((int64_t)(record.GetInt(field.name_)));
-            auto exist = !primary_key_.addKeyIfNotExist(value);
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
               std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
               skipped_entry++;
