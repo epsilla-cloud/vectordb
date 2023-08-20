@@ -224,7 +224,7 @@ class WriteAheadLog {
   std::chrono::time_point<std::chrono::system_clock> last_rotation_time_;
   FILE *file_ = nullptr;
   AtomicCounter global_counter_;
-  bool enabled_;
+  bool enabled_ = true;
 };
 }  // namespace engine
 }  // namespace vectordb
