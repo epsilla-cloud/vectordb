@@ -155,7 +155,6 @@ class WriteAheadLog {
       case LogEntryType::INSERT: {
         Json record;
         record.LoadFromString(content);
-        // std::cout << record.DumpToString() << std::endl;
         auto status = segment->Insert(table_schema, record, global_id);
         if (!status.ok()) {
           std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
