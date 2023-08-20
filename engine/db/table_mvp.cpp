@@ -300,6 +300,15 @@ Status TableMVP::Project(
                              table_segment_->string_table_[string_offset]);
             break;
           }
+          case meta::FieldType::JSON: {
+            auto json_offset =
+                table_segment_->field_name_mem_offset_map_[field] +
+                id * table_segment_->string_num_;
+            vectordb::Json json;
+            json.LoadFromString(table_segment_->string_table_[json_offset]);
+            record.SetObject(field, json);
+            break;
+          }
           default:
             return Status(DB_UNEXPECTED_ERROR, "Unknown field type.");
         }

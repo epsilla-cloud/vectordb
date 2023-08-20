@@ -28,6 +28,8 @@ enum class FieldType {
 
   BOOL = 30,
 
+  JSON = 31,
+
   VECTOR_FLOAT = 40,
   VECTOR_DOUBLE = 41,
 

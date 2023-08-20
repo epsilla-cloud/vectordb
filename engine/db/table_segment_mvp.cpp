@@ -28,7 +28,8 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
     case meta::FieldType::BOOL:
       return 1;
     case meta::FieldType::STRING:
-      // String attribute requires a 8-byte pointer to the string table.
+    case meta::FieldType::JSON:
+      // String or json attribute requires a 8-byte pointer to the string table.
       return 8;
     case meta::FieldType::VECTOR_FLOAT:
     case meta::FieldType::VECTOR_DOUBLE:
@@ -49,7 +50,8 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
 
   // Get how many primitive, vectors, and strings attributes.
   for (auto& field_schema : table_schema.fields_) {
-    if (field_schema.field_type_ == meta::FieldType::STRING) {
+    if (field_schema.field_type_ == meta::FieldType::STRING ||
+        field_schema.field_type_ == meta::FieldType::JSON) {
       field_id_mem_offset_map_[field_schema.id_] = string_num_;
       field_name_mem_offset_map_[field_schema.name_] = string_num_;
       if (field_schema.is_primary_key_) {
@@ -315,6 +317,10 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           }
         }
         string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = value;
+      } else if (field.field_type_ == meta::FieldType::JSON) {
+        // Insert json dumped string attribute.
+        auto value = record.Get(field.name_);
+        string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = value.DumpToString();
       } else if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.
@@ -559,6 +565,7 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
   for (size_t i = 0; i < record_number_; ++i) {
     for (auto& field : table_schema.fields_) {
       if (field.field_type_ != meta::FieldType::STRING &&
+          field.field_type_ != meta::FieldType::JSON &&
           field.field_type_ != meta::FieldType::VECTOR_FLOAT &&
           field.field_type_ != meta::FieldType::VECTOR_DOUBLE) {
         // Extract primitive attribute.

@@ -20,7 +20,8 @@ namespace engine {
     case meta::FieldType::BOOL:
       return 1;
     case meta::FieldType::STRING:
-      // String attribute requires a 8-byte pointer to the string table.
+    case meta::FieldType::JSON:
+      // String or json attribute requires a 8-byte pointer to the string table.
       return 8;
     case meta::FieldType::VECTOR_FLOAT:
     case meta::FieldType::VECTOR_DOUBLE:
