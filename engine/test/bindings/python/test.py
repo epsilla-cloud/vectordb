@@ -6,7 +6,7 @@ epsilla.use_db(db_name="db")
 epsilla.create_table(
     table_name="MyTable",
     table_fields=[
-        {"name": "ID", "dataType": "INT"},
+        {"name": "ID", "dataType": "INT", "primaryKey": True},
         {"name": "Doc", "dataType": "STRING"},
         {"name": "Embedding", "dataType": "VECTOR_FLOAT", "dimensions": 4}
     ]
@@ -20,7 +20,9 @@ epsilla.insert(
         {"ID": 3, "Doc": "Moscow", "Embedding": [0.36, 0.55, 0.47, 0.94]},
         {"ID": 4, "Doc": "San Francisco",
             "Embedding": [0.18, 0.01, 0.85, 0.80]},
-        {"ID": 5, "Doc": "Shanghai", "Embedding": [0.24, 0.18, 0.22, 0.44]}
+        {"ID": 5, "Doc": "Shanghai", "Embedding": [0.24, 0.18, 0.22, 0.44]},
+        # duplicate insertion
+        {"ID": 1, "Doc": "Berlin", "Embedding": [0.05, 0.61, 0.76, 0.74]},
     ]
 )
 

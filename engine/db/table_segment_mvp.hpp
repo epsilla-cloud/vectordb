@@ -5,11 +5,11 @@
 #include <unordered_map>
 
 #include "db/catalog/meta.hpp"
+#include "db/unique_key.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
-
 namespace vectordb {
 namespace engine {
 
@@ -45,7 +45,6 @@ class TableSegmentMVP {
 
   ~TableSegmentMVP();
 
- public:
   std::atomic<bool> skip_sync_disk_;                                   // For default DB, skip sync to disk.
   size_t size_limit_;                                                  // The maximum size of the segment. Default 2^20.
   size_t first_record_id_;                                             // The internal record id of the first record in the segment.
@@ -67,6 +66,15 @@ class TableSegmentMVP {
   ConcurrentBitset* deleted_;  // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
                                // The deleted records still occupy the position in all other structures.
                                // They should be skipped during search.
+
+ private:
+  // the hashmap to store
+  UniqueKey primary_key_;
+  // primitive_pk_field_id_.get() != nullptr if there's a primitive pk
+  std::unique_ptr<int64_t> primitive_pk_field_id_;
+  // string_pk_offset_.get() != nullptr if there's a string pk
+  std::unique_ptr<int64_t> string_pk_offset_;
+
   // std::shared_ptr<AttributeTable> attribute_table_;  // The attribute table in memory (exclude vector attributes and string attributes).
   // std::shared_ptr<std::string*> string_table_;       // The string attribute table in memory.
   // // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
