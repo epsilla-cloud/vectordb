@@ -330,7 +330,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     status_dto->statusCode = Status::CODE_200.code;
-    status_dto->message = "Insert data to " + table_name + " successfully. ";
+    status_dto->message = "Insert data to " + table_name + " successfully. " + insert_status.message();
     return createDtoResponse(Status::CODE_200, status_dto);
   }
 
