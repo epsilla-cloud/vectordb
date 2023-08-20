@@ -70,8 +70,10 @@ class TableSegmentMVP {
  private:
   // the hashmap to store
   UniqueKey primary_key_;
+  // The id of primitive primary key
   // primitive_pk_field_id_.get() != nullptr if there's a primitive pk
   std::unique_ptr<int64_t> primitive_pk_field_id_;
+  // The index of primary key among string keys
   // string_pk_offset_.get() != nullptr if there's a string pk
   std::unique_ptr<int64_t> string_pk_offset_;
 
