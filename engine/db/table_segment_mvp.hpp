@@ -68,7 +68,7 @@ class TableSegmentMVP {
                                // They should be skipped during search.
 
  private:
-  // the hashmap to store
+  // used to store primary key set for duplication check
   UniqueKey primary_key_;
   // The id of primitive primary key
   // primitive_pk_field_id_.get() != nullptr if there's a primitive pk
