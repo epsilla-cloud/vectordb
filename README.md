@@ -77,7 +77,9 @@ status_code, response = client.query(
 
 **1. Build Epsilla Python Bindings lib package**
 ```shell
+apt-get update && apt-get install -y git cmake build-essential libboost-all-dev libgomp1
 cd engine
+bash scripts/install_oatpp_modules.sh
 bash build.sh
 ls -lh build/*.so
 ```
