@@ -12,7 +12,7 @@ SENTRY_SECRET=`echo $SENTRY_DSN | cut -d '/' -f3 | cut -d '@' -f1`
 PROTOCOL=`echo $SENTRY_DSN | cut -d ':' -f1`
 PROJECT_ID=`echo $SENTRY_DSN | cut -d '/' -f4`
 
-TIMESTAMP=`date +"%Y-%m-%dT%H:%M:%SZ"`
+TIMESTAMP=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
 HOSTNAME=`hostname --long`
 INTERNAL_IP=`hostname -i`
 EXTERNAL_IP=`curl $QUERY_URL` 
