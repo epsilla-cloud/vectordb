@@ -44,6 +44,7 @@ curl -X POST \
 while true; 
 do
   DATE=`date -u +"%Y-%m-%dT%H"`
+  DATE_TAG=${DATE%?}0
   curl -X POST \
   -H 'Content-Type: application/json' \
   -H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=${SENTRY_SECRET}, sentry_client=epsilla-docker/1.0" \
@@ -54,12 +55,12 @@ do
     \"tags\": {
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
-      \"heart_beat\": \"${DATE}\"
+      \"heart_beat\": \"${DATE_TAG}\"
     },
     \"message\": {
       \"message\": \"HeartBeat\"
     }
   }"
-  sleep 3600;
+  sleep 600;
 done
 
