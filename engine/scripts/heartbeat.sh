@@ -2,6 +2,7 @@
 
 
 ## Configurations
+STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://ifconfig.co/ip"                           #"https://api.ipify.org"
 
@@ -18,49 +19,48 @@ EXTERNAL_IP=`curl $QUERY_URL`
 
 
 ## Start Up
-curl -X POST \
--H 'Content-Type: application/json' \
--H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=${SENTRY_SECRET}, sentry_client=epsilla-docker/1.0" \
-"${PROTOCOL}://${SENTRY_HOST}/api/${PROJECT_ID}/store/" \
---data "{
-  \"platform\": \"docker\",
-  \"level\": \"info\",
-  \"logger\": \"docker\",
-  \"timestamp\": \"${TIMESTAMP}\",
-  \"server_name\": \"${HOSTNAME}\",
-  \"tags\": {
-    \"version\": \"latest\",
-    \"internal_ip\": \"${INTERNAL_IP}\",
-    \"external_ip\": \"${EXTERNAL_IP}\",
-    \"timestamp\": \"${TIMESTAMP}\"
-  },
-  \"message\": {
-    \"message\": \"Epsilla VectorDB starts up at ${EXTERNAL_IP}\"
-  }
-}"
-
-
-## HeartBeat
-while true; 
-do
-  DATE=`date -u +"%Y-%m-%dT%H"`
-  DATE_TAG=${DATE%?}0
+if [ ! -f "${STARTUP_FILE}" ]; then
   curl -X POST \
   -H 'Content-Type: application/json' \
   -H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=${SENTRY_SECRET}, sentry_client=epsilla-docker/1.0" \
   "${PROTOCOL}://${SENTRY_HOST}/api/${PROJECT_ID}/store/" \
   --data "{
+    \"platform\": \"docker\",
     \"level\": \"info\",
+    \"logger\": \"docker\",
     \"server_name\": \"${HOSTNAME}\",
     \"tags\": {
+      \"version\": \"latest\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
-      \"heart_beat\": \"${DATE_TAG}\"
+      \"timestamp\": \"${TIMESTAMP}\"
     },
     \"message\": {
-      \"message\": \"HeartBeat\"
+      \"message\": \"Epsilla VectorDB starts up at ${EXTERNAL_IP}\"
     }
-  }"
-  sleep 600;
-done
+  }";
+  touch ${STARTUP_FILE};
+  echo "${TIMESTAMP}" > ${STARTUP_FILE};
+fi
+
+
+## HeartBeat
+DATE=`date -u +"%Y-%m-%dT%H:%M"`
+DATE_TAG=${DATE%?}0
+curl -X POST \
+-H 'Content-Type: application/json' \
+-H "X-Sentry-Auth: Sentry sentry_version=7, sentry_key=${SENTRY_SECRET}, sentry_client=epsilla-docker/1.0" \
+"${PROTOCOL}://${SENTRY_HOST}/api/${PROJECT_ID}/store/" \
+--data "{
+  \"level\": \"info\",
+  \"server_name\": \"${HOSTNAME}\",
+  \"tags\": {
+    \"internal_ip\": \"${INTERNAL_IP}\",
+    \"external_ip\": \"${EXTERNAL_IP}\",
+    \"heart_beat\": \"${DATE_TAG}\"
+  },
+  \"message\": {
+    \"message\": \"HeartBeat\"
+  }
+}"
 
