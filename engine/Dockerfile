@@ -11,7 +11,9 @@ RUN scripts/setup-dev.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(nproc) && chmod +x vectordb
 
 FROM ubuntu:22.04
-RUN apt-get update && apt-get install -y libgomp1 libboost-all-dev
+RUN apt-get update && apt-get install -y curl libgomp1 libboost-all-dev
 COPY --from=builder /vectordb/build/vectordb /vectordb
+COPY ./scripts/heartbeat.sh /heartbeat.sh
+HEALTHCHECK --interval=600s --timeout=30s --retries=10000 CMD bash /heartbeat.sh || exit 0
 
 ENTRYPOINT ["/vectordb"]
