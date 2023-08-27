@@ -59,6 +59,10 @@ curl -X POST \
     \"external_ip\": \"${EXTERNAL_IP}\",
     \"heart_beat\": \"${DATE_TAG}\"
   },
+  \"user\": {
+    \"username\": \"${HOSTNAME}-${INTERNAL_IP}-${EXTERNAL_IP}\",
+    \"ip_address\": \"${EXTERNAL_IP}\"
+  },
   \"message\": {
     \"message\": \"HeartBeat\"
   }
