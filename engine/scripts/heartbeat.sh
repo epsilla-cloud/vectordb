@@ -4,7 +4,7 @@
 ## Configurations
 STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
-QUERY_URL="https://ifconfig.co/ip"                           #"https://api.ipify.org"
+QUERY_URL="https://api.ipify.org"                      #"https://ifconfig.co/ip" 
 
 SENTRY_DSN=`curl $CONFIG_URL | grep sentry | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
@@ -15,7 +15,7 @@ PROJECT_ID=`echo $SENTRY_DSN | cut -d '/' -f4`
 TIMESTAMP=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
 HOSTNAME=`hostname --long`
 INTERNAL_IP=`hostname -i`
-EXTERNAL_IP=`curl $QUERY_URL` 
+EXTERNAL_IP=`curl -s ${QUERY_URL} -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' --compressed` 
 
 
 ## Start Up
