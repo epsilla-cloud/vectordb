@@ -4,9 +4,9 @@
 ## Configurations
 STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
-QUERY_URL="https://api.ipify.org"                      #"https://ifconfig.co/ip" 
+QUERY_URL="https://api.ipify.org"
 
-SENTRY_DSN=`curl $CONFIG_URL | grep sentry | awk -F '"' '{print $(NF-1)}'`
+SENTRY_DSN=`curl $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
 SENTRY_SECRET=`echo $SENTRY_DSN | cut -d '/' -f3 | cut -d '@' -f1`
 PROTOCOL=`echo $SENTRY_DSN | cut -d ':' -f1`
@@ -15,8 +15,11 @@ PROJECT_ID=`echo $SENTRY_DSN | cut -d '/' -f4`
 TIMESTAMP=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
 HOSTNAME=`hostname --long`
 INTERNAL_IP=`hostname -i`
-EXTERNAL_IP=`curl -s ${QUERY_URL} -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' --compressed` 
-
+if [ ! -f "${STARTUP_FILE}" ]; then
+  EXTERNAL_IP=`curl -s ${QUERY_URL} -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36' --compressed` 
+else
+  EXTERNAL_IP=`cat ${STARTUP_FILE}`
+fi
 
 ## Start Up
 if [ ! -f "${STARTUP_FILE}" ]; then
@@ -40,7 +43,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     }
   }";
   touch ${STARTUP_FILE};
-  echo "${TIMESTAMP}" > ${STARTUP_FILE};
+  echo "${EXTERNAL_IP}" > ${STARTUP_FILE};
 fi
 
 
