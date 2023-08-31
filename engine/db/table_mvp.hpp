@@ -30,6 +30,8 @@ class TableMVP {
 
   Status Insert(vectordb::Json &records);
 
+  Status DeleteByPK(vectordb::Json &records);
+
   Status Search(
       const std::string &field_name,
       std::vector<std::string> &query_fields,

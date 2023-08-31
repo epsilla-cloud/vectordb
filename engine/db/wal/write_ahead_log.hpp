@@ -151,10 +151,10 @@ class WriteAheadLog {
 
  private:
   void ApplyEntry(meta::TableSchema &table_schema, std::shared_ptr<TableSegmentMVP> segment, int64_t global_id, LogEntryType &type, std::string &content) {
+    vectordb::Json record;
+    record.LoadFromString(content);
     switch (type) {
       case LogEntryType::INSERT: {
-        Json record;
-        record.LoadFromString(content);
         auto status = segment->Insert(table_schema, record, global_id);
         if (!status.ok()) {
           std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
@@ -162,7 +162,10 @@ class WriteAheadLog {
         break;
       }
       case LogEntryType::DELETE: {
-        // TODO: to be implemented.
+        auto status = segment->DeleteByPK(record, global_id);
+        if (!status.ok()) {
+          std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
+        }
         break;
       }
       default: {

@@ -126,14 +126,18 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             table_segment_->record_number_,
             table_schema_.fields_[i].vector_dimension_,
             ann_graph_segment_[index]->navigation_point_,
-            ann_graph_segment_[index], ann_graph_segment_[index]->offset_table_,
+            ann_graph_segment_[index],
+            ann_graph_segment_[index]->offset_table_,
             ann_graph_segment_[index]->neighbor_list_,
             table_segment_
                 ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                      [table_schema_.fields_[i].name_]],
             l2space_[index]->get_dist_func(),
-            l2space_[index]->get_dist_func_param(), IntraQueryThreads,
-            MasterQueueSize, LocalQueueSize, GlobalSyncInterval));
+            l2space_[index]->get_dist_func_param(),
+            IntraQueryThreads,
+            MasterQueueSize,
+            LocalQueueSize,
+            GlobalSyncInterval));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);
@@ -151,6 +155,13 @@ Status TableMVP::Insert(vectordb::Json &record) {
   int64_t wal_id =
       wal_->WriteEntry(LogEntryType::INSERT, record.DumpToString());
   return table_segment_->Insert(table_schema_, record, wal_id);
+}
+
+Status TableMVP::DeleteByPK(vectordb::Json &records) {
+  int64_t wal_id =
+      wal_->WriteEntry(LogEntryType::DELETE, records.DumpToString());
+
+  return table_segment_->DeleteByPK(records, wal_id);
 }
 
 Status TableMVP::Search(const std::string &field_name,
