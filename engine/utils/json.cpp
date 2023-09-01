@@ -1,12 +1,13 @@
 #include "json.hpp"
 
+#include <iostream>
+
 #include "thirdparty/rapidjson/stringbuffer.h"
 #include "thirdparty/rapidjson/writer.h"
-#include <iostream>
 
 namespace vectordb {
 
-Json::Json() : doc_(nlohmann::json()) {} 
+Json::Json() : doc_(nlohmann::json()) {}
 
 bool Json::LoadFromString(const std::string& json_string) {
   try {
@@ -56,6 +57,14 @@ std::string Json::GetString() const {
 
 int64_t Json::GetInt() const {
   return doc_.get<int64_t>();
+}
+
+bool Json::IsNumber() const {
+  return doc_.is_number();
+}
+
+bool Json::IsString() const {
+  return doc_.is_string();
 }
 
 double Json::GetDouble() const {

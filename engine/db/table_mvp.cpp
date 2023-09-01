@@ -160,7 +160,6 @@ Status TableMVP::Insert(vectordb::Json &record) {
 Status TableMVP::DeleteByPK(vectordb::Json &records) {
   int64_t wal_id =
       wal_->WriteEntry(LogEntryType::DELETE, records.DumpToString());
-
   return table_segment_->DeleteByPK(records, wal_id);
 }
 
@@ -239,8 +238,13 @@ Status TableMVP::Project(
     from_id_list = false;
   }
 
+  auto pkfieldIdx = table_segment_->pkFieldIdx();
+
   for (auto i = 0; i < idlist_size; ++i) {
     int64_t id = from_id_list ? ids[i] : i;
+    if (table_segment_->isEntryDeleted(id)) {
+      continue;
+    }
     vectordb::Json record;
     record.LoadFromString("{}");
     for (auto field : query_fields) {

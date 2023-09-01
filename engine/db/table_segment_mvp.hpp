@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <iostream>
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
@@ -73,6 +74,9 @@ class TableSegmentMVP {
   bool isIntPK() const;
   bool isStringPK() const;
   meta::FieldType pkType() const;
+  meta::FieldSchema pkField() const;
+  int64_t pkFieldIdx() const;
+  bool isEntryDeleted(int64_t id) const;
 
  private:
   // used to store primary key set for duplication check
@@ -87,7 +91,7 @@ class TableSegmentMVP {
   // save a copy of the schema - the lifecycle of the schema is not managed by the segment, so
   // we can keep the raw pointer here. In addition, the table_segment_mvp's lifecycle is always longer
   // than the owner, so so don't need to worry about invalid pointer here.
-  meta::TableSchema* schema_ptr_;
+  meta::TableSchema schema;
 
   Status DeleteByStringPK(const std::string& pk);
 

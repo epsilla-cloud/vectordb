@@ -47,7 +47,7 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
 Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   size_limit_ = size_limit;
   primitive_offset_ = 0;
-  schema_ptr_ = &table_schema;
+  schema = table_schema;
 
   // Get how many primitive, vectors, and strings attributes.
   for (auto& field_schema : table_schema.fields_) {
@@ -233,15 +233,27 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
 }
 
 bool TableSegmentMVP::isStringPK() const {
-  string_pk_offset_;
+  return string_pk_offset_ != nullptr;
 }
 
 bool TableSegmentMVP::isIntPK() const {
-  pk_field_idx_ && !string_pk_offset_;
+  return pk_field_idx_ && !string_pk_offset_;
+}
+
+int64_t TableSegmentMVP::pkFieldIdx() const {
+  return *pk_field_idx_;
+}
+
+meta::FieldSchema TableSegmentMVP::pkField() const {
+  return schema.fields_[*pk_field_idx_];
 }
 
 meta::FieldType TableSegmentMVP::pkType() const {
-  schema_ptr_->fields_[*pk_field_idx_].field_type_;
+  return schema.fields_[*pk_field_idx_].field_type_;
+}
+
+bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
+  return deleted_->test(id);
 }
 
 Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
@@ -278,6 +290,7 @@ Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
       DeleteByStringPK(pk);
     }
   }
+  return Status::OK();
 }
 
 Status TableSegmentMVP::DeleteByStringPK(const std::string& pk) {

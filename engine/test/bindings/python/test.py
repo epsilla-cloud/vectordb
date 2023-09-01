@@ -34,7 +34,23 @@ epsilla.insert(
     limit=2,
     with_distance=True
 )
+
 print(code, response)
+
+code = epsilla.delete_by_pk(table_name="MyTable", primary_keys=[1, 2, 3, 4])
+
+print("delete_by_pk:", code)
+
+(code, response) = epsilla.query(
+    table_name="MyTable",
+    query_field="Embedding",
+    response_fields=["ID", "Doc", "Embedding"],
+    query_vector=[0.35, 0.55, 0.47, 0.94],
+    limit=10,
+    with_distance=True
+)
+print(code, response)
+exit(0)
 
 epsilla.drop_table("MyTable")
 

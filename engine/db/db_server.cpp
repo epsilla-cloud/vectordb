@@ -1,6 +1,7 @@
 #include "db/db_server.hpp"
 
 #include <iostream>
+#include <string>
 
 #include "db/catalog/basic_meta_impl.hpp"
 
@@ -131,6 +132,57 @@ Status DBServer::Insert(const std::string& db_name,
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
   return table->Insert(records);
+}
+
+Status DBServer::DeleteByPK(const std::string& db_name, const std::string& table_name, vectordb::Json& pkList) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  int pkIdx = 0;
+  for (; pkIdx < table->table_schema_.fields_.size(); pkIdx++) {
+    if (table->table_schema_.fields_[pkIdx].is_primary_key_) {
+      break;
+    }
+  }
+  if (pkIdx == table->table_schema_.fields_.size()) {
+    return Status(DB_UNEXPECTED_ERROR, "PK not found: " + table_name);
+  }
+
+  // simple sanity check
+  auto pkField = table->table_schema_.fields_[pkIdx];
+  size_t pkListSize = pkList.GetSize();
+  if (pkListSize == 0) {
+    std::cout << "No pk to delete." << std::endl;
+    return Status::OK();
+  }
+  switch (pkField.field_type_) {
+    case meta::FieldType::INT1:
+    case meta::FieldType::INT2:
+    case meta::FieldType::INT4:
+    case meta::FieldType::INT8:
+      for (int i = 0; i < pkListSize; i++) {
+        if (!pkList.GetArrayElement(i).IsNumber()) {
+          return Status(DB_UNEXPECTED_ERROR, "PK type mismatch at pos " + std::to_string(i));
+        }
+      }
+      break;
+    case meta::FieldType::STRING:
+      for (int i = 0; i < pkListSize; i++) {
+        if (!pkList.GetArrayElement(i).IsString()) {
+          return Status(DB_UNEXPECTED_ERROR, "PK type mismatch at pos " + std::to_string(i));
+        }
+      }
+      break;
+    default:
+      return Status(DB_UNEXPECTED_ERROR, "unexpected PK type.");
+  }
+
+  return table->DeleteByPK(pkList);
 }
 
 Status DBServer::Search(const std::string& db_name,
