@@ -36,17 +36,6 @@ class TableListDto : public oatpp::DTO {
   DTO_FIELD(List<String>, result);
 };
 
-class DeleteRecordsReqDto : public oatpp::DTO {
-  DTO_INIT(DeleteRecordsReqDto, DTO)
-
-  DTO_FIELD_INFO(table) {
-    info->required = true;
-  }
-
-  DTO_FIELD(String, table);
-  DTO_FIELD(oatpp::List<oatpp::String>, ids);
-};
-
 class SearchRespDto : public oatpp::DTO {
   DTO_INIT(SearchRespDto, DTO);
 

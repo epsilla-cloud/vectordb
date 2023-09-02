@@ -27,7 +27,7 @@ static PyMethodDef EpsillaMethods[] = {
     {"insert", (PyCFunction)(void (*)(void))insert, METH_VARARGS | METH_KEYWORDS, "insert record into the database"},
     {"query", (PyCFunction)(void (*)(void))query, METH_VARARGS | METH_KEYWORDS, "query the database"},
     {"drop_table", (PyCFunction)(void (*)(void))drop_table, METH_VARARGS | METH_KEYWORDS, "drop the table"},
-    {"delete_by_pk", (PyCFunction)(void (*)(void))delete_by_pk, METH_VARARGS | METH_KEYWORDS, "delete by primary key"},
+    {"delete", (PyCFunction)(void (*)(void))delete_by_pk, METH_VARARGS | METH_KEYWORDS, "delete by primary key"},
     {NULL, NULL, 0, NULL} /* Sentinel */
 };
 

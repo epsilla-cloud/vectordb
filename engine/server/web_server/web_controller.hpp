@@ -351,7 +351,7 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ADD_CORS(DeleteRecordsByPK)
 
-  ENDPOINT("POST", "/api/{db_name}/data/delete/pk", DeleteRecordsByPK,
+  ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByPK,
            PATH(String, db_name, "db_name"),
            BODY_STRING(String, body)) {
     auto dto = StatusDto::createShared();
@@ -380,40 +380,6 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->message = status.message();
     }
     return createDtoResponse(responseCode, dto);
-  }
-
-  // TODO: implement with corresponding function later.
-  ADD_CORS(DeleteRecordsByID)
-
-  ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByID,
-           PATH(String, db_name, "db_name"),
-           BODY_DTO(Object<DeleteRecordsReqDto>, body)) {
-    auto dto = StatusDto::createShared();
-
-    if (!body->table) {
-      dto->statusCode = Status::CODE_400.code;
-      dto->message = "Missing table name in your payload.";
-      return createDtoResponse(Status::CODE_400, dto);
-    }
-    if (!body->ids) {
-      dto->statusCode = Status::CODE_400.code;
-      dto->message = "Missing ID list to delete in your payload.";
-      return createDtoResponse(Status::CODE_400, dto);
-    }
-
-    const auto& body_ids = body->ids;
-    if (body_ids->size() == 0) {
-      dto->statusCode = Status::CODE_400.code;
-      dto->message = "No IDs to delete provided.";
-      return createDtoResponse(Status::CODE_400, dto);
-    }
-    std::vector<std::string> arr;
-    for (size_t i = 0; i < body_ids->size(); i++) {
-      arr.push_back(body_ids[i]);
-    }
-    dto->statusCode = Status::CODE_200.code;
-    dto->message = "Deleted " + WebUtil::JoinStrs(arr, ", ") + " from " + body->table + " in " + db_name + " successfully.";
-    return createDtoResponse(Status::CODE_200, dto);
   }
 
   // TODO: implement with corresponding function later.
