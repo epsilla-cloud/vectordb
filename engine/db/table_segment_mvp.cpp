@@ -259,6 +259,7 @@ bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
 
 Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
   wal_global_id_ = wal_id;
+  size_t deleted_record = 0;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
     std::cout << "No records to delete." << std::endl;
@@ -271,16 +272,16 @@ Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
       auto pk = pkField.GetInt();
       switch (pkType()) {
         case meta::FieldType::INT1:
-          DeleteByIntPK(static_cast<int8_t>(pk));
+          deleted_record += DeleteByIntPK(static_cast<int8_t>(pk)).ok();
           break;
         case meta::FieldType::INT2:
-          DeleteByIntPK(static_cast<int16_t>(pk));
+          deleted_record += DeleteByIntPK(static_cast<int16_t>(pk)).ok();
           break;
         case meta::FieldType::INT4:
-          DeleteByIntPK(static_cast<int32_t>(pk));
+          deleted_record += DeleteByIntPK(static_cast<int32_t>(pk)).ok();
           break;
         case meta::FieldType::INT8:
-          DeleteByIntPK(static_cast<int64_t>(pk));
+          deleted_record += DeleteByIntPK(static_cast<int64_t>(pk)).ok();
           break;
       }
     }
@@ -288,10 +289,10 @@ Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
     for (auto i = 0; i < new_record_size; ++i) {
       auto pkField = records.GetArrayElement(i);
       auto pk = pkField.GetString();
-      DeleteByStringPK(pk);
+      deleted_record += DeleteByStringPK(pk).ok();
     }
   }
-  return Status::OK();
+  return Status(DB_SUCCESS, "successfully deleted " + std::to_string(deleted_record) + " records.");
 }
 
 Status TableSegmentMVP::DeleteByStringPK(const std::string& pk) {

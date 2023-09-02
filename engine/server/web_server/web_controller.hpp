@@ -374,6 +374,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     auto responseCode = Status::CODE_200;
     if (status.ok()) {
       dto->statusCode = Status::CODE_200.code;
+      dto->message = status.message();
     } else {
       responseCode = Status::CODE_400;
       dto->statusCode = Status::CODE_400.code;
