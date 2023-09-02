@@ -37,8 +37,9 @@ epsilla.insert(
 
 print(code, response)
 
-code = epsilla.delete_by_pk(table_name="MyTable", primary_keys=[1, 2, 3, 4])
-
+pk_to_delete = [1, 2, 3, 4]
+print("deleting pk ", pk_to_delete)
+code = epsilla.delete_by_pk(table_name="MyTable", primary_keys=pk_to_delete)
 print("delete_by_pk return code:", code)
 
 (code, response) = epsilla.query(
