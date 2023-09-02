@@ -39,7 +39,7 @@ print(code, response)
 
 code = epsilla.delete_by_pk(table_name="MyTable", primary_keys=[1, 2, 3, 4])
 
-print("delete_by_pk:", code)
+print("delete_by_pk return code:", code)
 
 (code, response) = epsilla.query(
     table_name="MyTable",
@@ -50,7 +50,6 @@ print("delete_by_pk:", code)
     with_distance=True
 )
 print(code, response)
-exit(0)
 
 epsilla.drop_table("MyTable")
 

@@ -349,6 +349,39 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, status_dto);
   }
 
+  ADD_CORS(DeleteRecordsByPK)
+
+  ENDPOINT("POST", "/api/{db_name}/data/delete/pk", DeleteRecordsByPK,
+           PATH(String, db_name, "db_name"),
+           BODY_STRING(String, body)) {
+    auto dto = StatusDto::createShared();
+    vectordb::Json requestBody;
+    requestBody.LoadFromString(body);
+    if (!requestBody.HasMember("table")) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Missing table name in your payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    if (!requestBody.HasMember("primaryKeys")) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Missing primary key list to delete in your payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    auto table = requestBody.GetString("table");
+    auto pks = requestBody.GetArray("primaryKeys");
+    auto status = db_server->DeleteByPK(db_name, table, pks);
+    auto responseCode = Status::CODE_200;
+    if (status.ok()) {
+      dto->statusCode = Status::CODE_200.code;
+    } else {
+      responseCode = Status::CODE_400;
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = status.message();
+    }
+    return createDtoResponse(responseCode, dto);
+  }
+
   // TODO: implement with corresponding function later.
   ADD_CORS(DeleteRecordsByID)
 
