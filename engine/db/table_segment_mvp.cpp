@@ -195,11 +195,6 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
 
     // Read the string table
     for (auto i = 0; i < record_number_; ++i) {
-      // skip deleted entry
-      if (deleted_->test(i)) {
-        continue;
-      }
-
       for (auto j = 0; j < string_num_; ++j) {
         int64_t offset = i * string_num_ + j;
         int64_t string_length = 0;
@@ -209,7 +204,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
         string_table_[offset] = str;
 
         // add pk into set
-        if (string_pk_offset_ && *string_pk_offset_ == j) {
+        if (!deleted_->test(i) && string_pk_offset_ && *string_pk_offset_ == j) {
           // do not check existance to avoid additional overhead
           primary_key_.addKeyIfNotExist(str, i);
         }

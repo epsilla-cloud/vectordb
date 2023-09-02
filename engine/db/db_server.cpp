@@ -150,7 +150,7 @@ Status DBServer::DeleteByPK(const std::string& db_name, const std::string& table
     }
   }
   if (pkIdx == table->table_schema_.fields_.size()) {
-    return Status(DB_UNEXPECTED_ERROR, "PK not found: " + table_name);
+    return Status(DB_UNEXPECTED_ERROR, "Primary key not found: " + table_name);
   }
 
   // simple sanity check
@@ -167,19 +167,19 @@ Status DBServer::DeleteByPK(const std::string& db_name, const std::string& table
     case meta::FieldType::INT8:
       for (int i = 0; i < pkListSize; i++) {
         if (!pkList.GetArrayElement(i).IsNumber()) {
-          return Status(DB_UNEXPECTED_ERROR, "PK type mismatch at pos " + std::to_string(i));
+          return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
         }
       }
       break;
     case meta::FieldType::STRING:
       for (int i = 0; i < pkListSize; i++) {
         if (!pkList.GetArrayElement(i).IsString()) {
-          return Status(DB_UNEXPECTED_ERROR, "PK type mismatch at pos " + std::to_string(i));
+          return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
         }
       }
       break;
     default:
-      return Status(DB_UNEXPECTED_ERROR, "unexpected PK type.");
+      return Status(DB_UNEXPECTED_ERROR, "unexpected Primary key type.");
   }
 
   return table->DeleteByPK(pkList);
