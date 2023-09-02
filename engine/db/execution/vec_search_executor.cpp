@@ -1,9 +1,10 @@
 #include "db/execution/vec_search_executor.hpp"
-#include "utils/atomic_counter.hpp"
 
 #include <omp.h>
 
 #include <numeric>
+
+#include "utils/atomic_counter.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -670,11 +671,11 @@ void VecSearchExecutor::SearchImpl(
     }  // Search Iterations
   }    // Parallel Phase
 
-// #pragma omp parallel for
-//   // TODO: exclude deleted and not passing filter records.
-//   for (int64_t k_i = 0; k_i < K; ++k_i) {
-//     set_K[k_i] = set_L[k_i + master_queue_start].id_;
-//   }
+  // #pragma omp parallel for
+  //   // TODO: exclude deleted and not passing filter records.
+  //   for (int64_t k_i = 0; k_i < K; ++k_i) {
+  //     set_K[k_i] = set_L[k_i + master_queue_start].id_;
+  //   }
   // for (int64_t k_i = 0; k_i < K; ++k_i) {
   //   std::cout << set_L[k_i + master_queue_start].distance_ << " " << std::endl;
   // }
@@ -700,7 +701,7 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
   return true;
 }
 
-Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const int64_t total, int64_t& result_size) {
+Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const int64_t total, int64_t &result_size) {
   if (K >= L_local_) {
     // TODO: support search for large K.
     return Status(DB_UNEXPECTED_ERROR, "Cannot search more than " + std::to_string(L_local_) + " results.");
@@ -737,12 +738,12 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       MergeTwoQueuesInto1stQueueSeqFixed(
-        set_L_,
-        master_queue_start,
-        K1,
-        brute_force_queue_,
-        0,
-        K2);
+          set_L_,
+          master_queue_start,
+          K1,
+          brute_force_queue_,
+          0,
+          K2);
       result_size = K < total ? K : total;
       // TODO: exclude deleted and not passing filter records.
 #pragma omp parallel for
