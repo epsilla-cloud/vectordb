@@ -161,9 +161,9 @@ Status DBServer::DeleteByPK(const std::string& db_name, const std::string& table
     return Status::OK();
   }
   switch (pkField.field_type_) {
-    case meta::FieldType::INT1:
-    case meta::FieldType::INT2:
-    case meta::FieldType::INT4:
+    case meta::FieldType::INT1:  // fall through
+    case meta::FieldType::INT2:  // fall through
+    case meta::FieldType::INT4:  // fall through
     case meta::FieldType::INT8:
       for (int i = 0; i < pkListSize; i++) {
         if (!pkList.GetArrayElement(i).IsNumber()) {

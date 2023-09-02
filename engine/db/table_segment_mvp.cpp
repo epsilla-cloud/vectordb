@@ -153,6 +153,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     if (isIntPK()) {
       auto field = table_schema.fields_[*pk_field_idx_];
       for (auto rIdx = 0; rIdx < record_number_; rIdx++) {
+        // skip deleted entry
         if (deleted_->test(rIdx)) {
           continue;
         }
@@ -194,6 +195,11 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
 
     // Read the string table
     for (auto i = 0; i < record_number_; ++i) {
+      // skip deleted entry
+      if (deleted_->test(i)) {
+        continue;
+      }
+
       for (auto j = 0; j < string_num_; ++j) {
         int64_t offset = i * string_num_ + j;
         int64_t string_length = 0;

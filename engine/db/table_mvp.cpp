@@ -238,8 +238,6 @@ Status TableMVP::Project(
     from_id_list = false;
   }
 
-  auto pkfieldIdx = table_segment_->pkFieldIdx();
-
   for (auto i = 0; i < idlist_size; ++i) {
     int64_t id = from_id_list ? ids[i] : i;
     if (table_segment_->isEntryDeleted(id)) {
