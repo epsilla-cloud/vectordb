@@ -263,13 +263,28 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
-  // TODO: implement with corresponding function later.
   ADD_CORS(ListTables)
 
   ENDPOINT("GET", "/api/{db_name}/schema/tables/show", ListTables, PATH(String, db_name, "db_name")) {
     auto dto = TableListDto::createShared();
-    dto->message = "Get all tables in " + db_name + " successfully.";
-    return createDtoResponse(Status::CODE_200, dto);
+    auto res_dto = TableListDto::createShared();
+
+    std::vector<std::string> table_names;
+    vectordb::Status status = db_server->ListTables(db_name, table_names);
+
+    if (!status.ok()) {
+        dto->statusCode = Status::CODE_500.code;
+        dto->message = status.message();
+        return createDtoResponse(Status::CODE_500, dto);
+    }
+
+    res_dto->statusCode = Status::CODE_200.code;
+    res_dto->message = "Get all tables in " + db_name + " successfully.";
+    res_dto->result = {};
+    for (const auto& name : table_names) {
+        res_dto->result->push_back(name);
+    }
+    return createDtoResponse(Status::CODE_200, res_dto);
   }
 
   ADD_CORS(InsertRecords)
