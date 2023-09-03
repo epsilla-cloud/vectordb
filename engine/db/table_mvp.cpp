@@ -166,7 +166,7 @@ Status TableMVP::DeleteByPK(vectordb::Json &records) {
 Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
                         int64_t query_dimension, const float *query_data,
-                        const int64_t K, vectordb::Json &result,
+                        const int64_t limit, vectordb::Json &result,
                         bool with_distance) {
   // Check if field_name exists.
   if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
@@ -208,7 +208,7 @@ Status TableMVP::Search(const std::string &field_name,
   executor.exec_->Search(query_data, *table_segment_->deleted_, table_segment_->record_number_,
                          result_num);
 
-  result_num = result_num > K ? K : result_num;
+  result_num = result_num > limit ? limit : result_num;
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,
               with_distance, executor.exec_->distance_);

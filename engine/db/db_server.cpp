@@ -189,7 +189,7 @@ Status DBServer::Search(const std::string& db_name,
                         const std::string& table_name, std::string& field_name,
                         std::vector<std::string>& query_fields,
                         int64_t query_dimension, const float* query_data,
-                        const int64_t K, vectordb::Json& result,
+                        const int64_t limit, vectordb::Json& result,
                         bool with_distance) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
@@ -199,7 +199,7 @@ Status DBServer::Search(const std::string& db_name,
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  return table->Search(field_name, query_fields, query_dimension, query_data, K,
+  return table->Search(field_name, query_fields, query_dimension, query_data, limit,
                        result, with_distance);
 }
 

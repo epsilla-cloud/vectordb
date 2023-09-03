@@ -37,7 +37,7 @@ class DBServer {
       std::vector<std::string>& query_fields,
       int64_t query_dimension,
       const float* query_data,
-      const int64_t K,
+      const int64_t limit,
       vectordb::Json& result,
       bool with_distance);
 
