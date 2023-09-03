@@ -356,7 +356,14 @@ class WebController : public oatpp::web::server::api::ApiController {
            BODY_STRING(String, body)) {
     auto dto = StatusDto::createShared();
     vectordb::Json requestBody;
-    requestBody.LoadFromString(body);
+    auto valid = requestBody.LoadFromString(body);
+
+    if (!valid) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
     if (!requestBody.HasMember("table")) {
       dto->statusCode = Status::CODE_400.code;
       dto->message = "Missing table name in your payload.";
