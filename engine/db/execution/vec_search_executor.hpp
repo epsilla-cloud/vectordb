@@ -11,9 +11,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include "db/ann_graph_segment.hpp"
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
-#include "db/ann_graph_segment.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
@@ -24,8 +24,8 @@ constexpr const int BruteforceThreshold = 512;
 
 class VecSearchExecutor {
  public:
-  std::shared_ptr<ANNGraphSegment> ann_index_; // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
-  int64_t ntotal_ = 0;      // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
+  std::shared_ptr<ANNGraphSegment> ann_index_;  // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
+  int64_t total_indexed_verctor_ = 0;           // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
 
@@ -174,17 +174,16 @@ class VecSearchExecutor {
       boost::dynamic_bitset<>& is_visited,
       const int64_t index_threshold);
 
-  bool BruteForceSearch(const float* query_data, const int64_t start, const int64_t end);
-  Status Search(const float* query_data, const int64_t K, const int64_t total, int64_t& result_size);
+  bool BruteForceSearch(const float* query_data, const int64_t start, const int64_t end, const ConcurrentBitset& deleted);
+  Status Search(const float* query_data, const ConcurrentBitset& deleted, const int64_t total, int64_t& result_size);
 };  // Class VecSearchExecutor
 
 }  // namespace execution
 }  // namespace engine
 }  // namespace vectordb
 
-
 /**
- * 
+ *
 
   std::srand(std::time(nullptr));
   int x = 100, y = 100;

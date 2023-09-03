@@ -12,7 +12,7 @@ class ConcurrentBitset {
 
   explicit ConcurrentBitset(id_type_t size);
 
-  bool test(id_type_t id);
+  bool test(id_type_t id) const;
   void set(id_type_t id);
   void clear(id_type_t id);
 

@@ -205,7 +205,7 @@ Status TableMVP::Search(const std::string &field_name,
 
   // Search.
   int64_t result_num = 0;
-  executor.exec_->Search(query_data, K, table_segment_->record_number_,
+  executor.exec_->Search(query_data, *table_segment_->deleted_, table_segment_->record_number_,
                          result_num);
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,
@@ -240,9 +240,6 @@ Status TableMVP::Project(
 
   for (auto i = 0; i < idlist_size; ++i) {
     int64_t id = from_id_list ? ids[i] : i;
-    if (table_segment_->isEntryDeleted(id)) {
-      continue;
-    }
     vectordb::Json record;
     record.LoadFromString("{}");
     for (auto field : query_fields) {

@@ -38,7 +38,7 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations)
-    : ntotal_(ntotal),
+    : total_indexed_verctor_(ntotal),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
@@ -460,7 +460,7 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
-  boost::dynamic_bitset<> is_selected(ntotal_);
+  boost::dynamic_bitset<> is_selected(total_indexed_verctor_);
   int64_t init_ids_end = 0;
   for (
       int64_t e_i = offset_table_[start_search_point_];
@@ -476,7 +476,7 @@ void VecSearchExecutor::PrepareInitIds(
 
   int64_t tmp_id = start_search_point_ + 1;
   while (init_ids_end < L) {
-    if (tmp_id == ntotal_) {
+    if (tmp_id == total_indexed_verctor_) {
       tmp_id = 0;
     }
     int64_t v_id = tmp_id++;
@@ -686,7 +686,7 @@ void VecSearchExecutor::SearchImpl(
   }
 }
 
-bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end) {
+bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end, const ConcurrentBitset &deleted) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
@@ -695,32 +695,43 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
     float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
     brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
   }
+
+  // compacting the result with 2 pointers by removing the deleted entries
+  // iter: the iterator to loop through the brute force queue
+  // num_result: the pointer to the current right-most slot in the new result
+  int64_t iter = 0,
+          num_result = 0;
+  // remove the invalid entries
+  for (; iter < end - start; ++iter) {
+    if (!deleted.test(iter)) {
+      if (iter != num_result) {
+        brute_force_queue_[num_result] = brute_force_queue_[iter];
+      }
+      num_result++;
+    }
+  }
+  brute_force_queue_.resize(num_result);
   std::sort(
       brute_force_queue_.begin(),
-      brute_force_queue_.begin() + end - start);
+      brute_force_queue_.end());
   return true;
 }
 
-Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const int64_t total, int64_t &result_size) {
-  if (K >= L_local_) {
-    // TODO: support search for large K.
-    return Status(DB_UNEXPECTED_ERROR, "Cannot search more than " + std::to_string(L_local_) + " results.");
-  }
+Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const int64_t total_vector, int64_t &result_size) {
+  // currently the max returned result is L_local_
+  // TODO: support larger search results
+
   if (brute_force_search_) {
-    BruteForceSearch(query_data, 0, total);
-    result_size = K < total ? K : total;
-    // TODO: exclude deleted and not passing filter records.
+    BruteForceSearch(query_data, 0, total_vector, deleted);
+    result_size = brute_force_queue_.size();
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       distance_[k_i] = brute_force_queue_[k_i].distance_;
-      // std::cout << brute_force_queue_[k_i].distance_ << " " << std::endl;
     }
-    // std::cout << std::endl;
   } else {
-    int64_t K1 = K < ntotal_ ? K : ntotal_;
     SearchImpl(
         query_data,
-        K,
+        total_indexed_verctor_,
         L_master_,
         set_L_,
         init_ids_,
@@ -730,37 +741,37 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
         local_queues_sizes_,
         is_visited_,
         subsearch_iterations_);
-    // std::cout << total << " " << ntotal_ << std::endl;
-    if (total > ntotal_) {
+    // std::cout << total_vector << " " << ntotal_ << std::endl;
+    if (total_vector > total_indexed_verctor_) {
       // Need to brute force search the newly added but haven't been indexed vectors.
-      BruteForceSearch(query_data, ntotal_, total);
-      int64_t K2 = K < (total - ntotal_) ? K : (total - ntotal_);
+      BruteForceSearch(query_data, total_indexed_verctor_, total_vector, deleted);
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       MergeTwoQueuesInto1stQueueSeqFixed(
           set_L_,
           master_queue_start,
-          K1,
+          total_indexed_verctor_,
           brute_force_queue_,
           0,
-          K2);
-      result_size = K < total ? K : total;
-      // TODO: exclude deleted and not passing filter records.
-#pragma omp parallel for
-      for (int64_t k_i = 0; k_i < result_size; ++k_i) {
-        search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
-        distance_[k_i] = set_L_[k_i + master_queue_start].distance_;
+          brute_force_queue_.size());
+      result_size = 0;
+      for (int64_t k_i = 0; k_i < total_indexed_verctor_ + brute_force_queue_.size(); ++k_i, ++result_size) {
+        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+          continue;
+        }
+        search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
+        distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
       }
     } else {
-      result_size = K1;
+      result_size = 0;
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
-#pragma omp parallel for
-      // TODO: exclude deleted and not passing filter records.
-      for (int64_t k_i = 0; k_i < K1; ++k_i) {
-        search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
-        distance_[k_i] = set_L_[k_i + master_queue_start].distance_;
+      for (int64_t k_i = 0; k_i < total_indexed_verctor_; ++k_i, ++result_size) {
+        search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
+        distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
       }
     }
+    search_result_.resize(result_size);
+    distance_.resize(result_size);
   }
   return Status::OK();
 }
