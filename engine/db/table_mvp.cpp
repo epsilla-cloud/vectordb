@@ -207,6 +207,8 @@ Status TableMVP::Search(const std::string &field_name,
   int64_t result_num = 0;
   executor.exec_->Search(query_data, *table_segment_->deleted_, table_segment_->record_number_,
                          result_num);
+
+  result_num = result_num > K ? K : result_num;
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,
               with_distance, executor.exec_->distance_);
