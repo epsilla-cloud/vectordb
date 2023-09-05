@@ -500,7 +500,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_500, status_dto);
     }
 
-    auto res_dto = SearchRespDto::createShared();
+    auto res_dto = ObjectRespDto::createShared();
     res_dto->statusCode = Status::CODE_200.code;
     res_dto->message = "Query search successfully.";
     oatpp::parser::json::mapping::ObjectMapper mapper;
@@ -550,7 +550,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_500, status_dto);
     }
 
-    auto res_dto = SearchRespDto::createShared();
+    auto res_dto = ObjectRespDto::createShared();
     res_dto->statusCode = Status::CODE_200.code;
     res_dto->message = "Query get successfully.";
     oatpp::parser::json::mapping::ObjectMapper mapper;
@@ -575,45 +575,45 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
-    ADD_CORS(TestExrParser)
+  ADD_CORS(TestExrParser)
 
-    ENDPOINT("POST", "/api/expr/test/{db_name}/{table_name}", TestExrParser,
-        PATH(String, db_name, "db_name"),
-        PATH(String, table_name, "table_name"),
-        BODY_STRING(String, body)) {
+  ENDPOINT("POST", "/api/expr/test/{db_name}/{table_name}", TestExrParser,
+      PATH(String, db_name, "db_name"),
+      PATH(String, table_name, "table_name"),
+      BODY_STRING(String, body)) {
 
-        auto dto = StatusDto::createShared();
+      auto dto = StatusDto::createShared();
 
-        // vectordb::engine::meta::DatabaseSchema db_schema;
-        // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
-        // if (!db_status.ok()) {
-        //     dto->statusCode = Status::CODE_500.code;
-        //     dto->message = db_status.message();
-        //     return createDtoResponse(Status::CODE_500, dto);
-        // }
+      // vectordb::engine::meta::DatabaseSchema db_schema;
+      // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
+      // if (!db_status.ok()) {
+      //     dto->statusCode = Status::CODE_500.code;
+      //     dto->message = db_status.message();
+      //     return createDtoResponse(Status::CODE_500, dto);
+      // }
 
-        // vectordb::engine::meta::TableSchema table_schema;
-        // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
-        // if (!table_status.ok()) {
-        //     dto->statusCode = Status::CODE_500.code;
-        //     dto->message = table_status.message();
-        //     return createDtoResponse(Status::CODE_500, dto);
-        // }
+      // vectordb::engine::meta::TableSchema table_schema;
+      // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
+      // if (!table_status.ok()) {
+      //     dto->statusCode = Status::CODE_500.code;
+      //     dto->message = table_status.message();
+      //     return createDtoResponse(Status::CODE_500, dto);
+      // }
 
-        vectordb::Json parsedBody;
-        parsedBody.LoadFromString(body);
-        std::string expr = parsedBody.GetString("expr");
-        std::cout << expr << std::endl;
+      vectordb::Json parsedBody;
+      parsedBody.LoadFromString(body);
+      std::string expr = parsedBody.GetString("expr");
+      std::cout << expr << std::endl;
 
-        // vectordb::query::expr::ExprNodePtr node = std::make_shared<vectordb::query::expr::ExprNode>();
-        std::vector<vectordb::query::expr::ExprNodePtr> nodes;
+      // vectordb::query::expr::ExprNodePtr node = std::make_shared<vectordb::query::expr::ExprNode>();
+      std::vector<vectordb::query::expr::ExprNodePtr> nodes;
 
-        vectordb::Status status = expr_ptr->ParseNodeFromStr(expr, nodes);
-        if (!status.ok()) {
-            dto->statusCode = Status::CODE_400.code;
-            dto->message = status.message();
-            return createDtoResponse(Status::CODE_400, dto);
-        }
+      vectordb::Status status = expr_ptr->ParseNodeFromStr(expr, nodes);
+      if (!status.ok()) {
+          dto->statusCode = Status::CODE_400.code;
+          dto->message = status.message();
+          return createDtoResponse(Status::CODE_400, dto);
+      }
 
         auto res_dto = SearchRespDto::createShared();
         res_dto->statusCode = Status::CODE_200.code;
