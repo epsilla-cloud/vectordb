@@ -25,7 +25,7 @@ constexpr const int BruteforceThreshold = 512;
 class VecSearchExecutor {
  public:
   std::shared_ptr<ANNGraphSegment> ann_index_;  // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
-  int64_t total_indexed_verctor_ = 0;           // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
+  int64_t total_indexed_vector_ = 0;            // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
 
@@ -175,7 +175,7 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(const float* query_data, const int64_t start, const int64_t end, const ConcurrentBitset& deleted);
-  Status Search(const float* query_data, const ConcurrentBitset& deleted, const int64_t total, int64_t& result_size);
+  Status Search(const float* query_data, const ConcurrentBitset& deleted, const size_t limit, const int64_t total, int64_t& result_size);
 };  // Class VecSearchExecutor
 
 }  // namespace execution

@@ -38,7 +38,7 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations)
-    : total_indexed_verctor_(ntotal),
+    : total_indexed_vector_(ntotal),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
@@ -460,7 +460,7 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
-  boost::dynamic_bitset<> is_selected(total_indexed_verctor_);
+  boost::dynamic_bitset<> is_selected(total_indexed_vector_);
   int64_t init_ids_end = 0;
   for (
       int64_t e_i = offset_table_[start_search_point_];
@@ -476,7 +476,7 @@ void VecSearchExecutor::PrepareInitIds(
 
   int64_t tmp_id = start_search_point_ + 1;
   while (init_ids_end < L) {
-    if (tmp_id == total_indexed_verctor_) {
+    if (tmp_id == total_indexed_vector_) {
       tmp_id = 0;
     }
     int64_t v_id = tmp_id++;
@@ -717,7 +717,7 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
   return true;
 }
 
-Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const int64_t total_vector, int64_t &result_size) {
+Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const size_t limit, const int64_t total_vector, int64_t &result_size) {
   // currently the max returned result is L_local_
   // TODO: support larger search results
 
@@ -729,9 +729,12 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
       distance_[k_i] = brute_force_queue_[k_i].distance_;
     }
   } else {
+    // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
+    // create circular dependency)
+    auto searchLimit = total_indexed_vector_ > limit ? limit : total_indexed_vector_;
     SearchImpl(
         query_data,
-        total_indexed_verctor_,
+        searchLimit,
         L_master_,
         set_L_,
         init_ids_,
@@ -742,20 +745,22 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
         is_visited_,
         subsearch_iterations_);
     // std::cout << total_vector << " " << ntotal_ << std::endl;
-    if (total_vector > total_indexed_verctor_) {
+    if (total_vector > total_indexed_vector_) {
       // Need to brute force search the newly added but haven't been indexed vectors.
-      BruteForceSearch(query_data, total_indexed_verctor_, total_vector, deleted);
+      BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted);
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       MergeTwoQueuesInto1stQueueSeqFixed(
           set_L_,
           master_queue_start,
-          total_indexed_verctor_,
+          searchLimit,
           brute_force_queue_,
           0,
-          brute_force_queue_.size());
+          searchLimit);
+
+      size_t bruteforceQueueSize = brute_force_queue_.size() > searchLimit ? searchLimit : brute_force_queue_.size();
       result_size = 0;
-      for (int64_t k_i = 0; k_i < total_indexed_verctor_ + brute_force_queue_.size(); ++k_i, ++result_size) {
+      for (int64_t k_i = 0; k_i < searchLimit + bruteforceQueueSize; ++k_i, ++result_size) {
         if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
           continue;
         }
@@ -765,7 +770,7 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
     } else {
       result_size = 0;
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
-      for (int64_t k_i = 0; k_i < total_indexed_verctor_; ++k_i, ++result_size) {
+      for (int64_t k_i = 0; k_i < total_indexed_vector_; ++k_i, ++result_size) {
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
         distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
       }
