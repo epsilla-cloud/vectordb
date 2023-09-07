@@ -2,6 +2,7 @@
 
 #include <omp.h>
 
+#include <algorithm>
 #include <numeric>
 
 #include "utils/atomic_counter.hpp"
@@ -720,10 +721,13 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
 Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const size_t limit, const int64_t total_vector, int64_t &result_size) {
   // currently the max returned result is L_local_
   // TODO: support larger search results
+  std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
+            << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
+            << total_vector << std::endl;
 
   if (brute_force_search_) {
     BruteForceSearch(query_data, 0, total_vector, deleted);
-    result_size = brute_force_queue_.size();
+    result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       distance_[k_i] = brute_force_queue_[k_i].distance_;
@@ -731,7 +735,7 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
   } else {
     // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
     // create circular dependency)
-    auto searchLimit = total_indexed_vector_ > limit ? limit : total_indexed_vector_;
+    auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
     SearchImpl(
         query_data,
         searchLimit,
@@ -744,7 +748,6 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
         local_queues_sizes_,
         is_visited_,
         subsearch_iterations_);
-    // std::cout << total_vector << " " << ntotal_ << std::endl;
     if (total_vector > total_indexed_vector_) {
       // Need to brute force search the newly added but haven't been indexed vectors.
       BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted);
@@ -758,7 +761,7 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
           0,
           searchLimit);
 
-      size_t bruteforceQueueSize = brute_force_queue_.size() > searchLimit ? searchLimit : brute_force_queue_.size();
+      size_t bruteforceQueueSize = std::min({brute_force_queue_.size(), searchLimit, size_t(L_master_)});
       result_size = 0;
       for (int64_t k_i = 0; k_i < searchLimit + bruteforceQueueSize; ++k_i, ++result_size) {
         if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
@@ -769,8 +772,9 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
       }
     } else {
       result_size = 0;
+      size_t searchLimit = std::min({size_t(total_indexed_vector_), size_t(L_master_), searchLimit});
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
-      for (int64_t k_i = 0; k_i < total_indexed_vector_; ++k_i, ++result_size) {
+      for (int64_t k_i = 0; k_i < searchLimit; ++k_i, ++result_size) {
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
         distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
       }

@@ -321,7 +321,7 @@ Status TableMVP::Project(
     if (with_distance) {
       record.SetDouble("@distance", distances[i]);
     }
-    result.AddObjectToArray(record);
+    result.AddObjectToArray(std::move(record));
   }
   return Status::OK();
 }
