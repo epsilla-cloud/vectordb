@@ -761,22 +761,27 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
           0,
           searchLimit);
 
-      size_t bruteforceQueueSize = std::min({brute_force_queue_.size(), searchLimit, size_t(L_master_)});
       result_size = 0;
-      for (int64_t k_i = 0; k_i < searchLimit + bruteforceQueueSize; ++k_i, ++result_size) {
+      auto candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
+      for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
         if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
         distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
+        result_size++;
       }
     } else {
       result_size = 0;
-      size_t searchLimit = std::min({size_t(total_indexed_vector_), size_t(L_master_), searchLimit});
+      auto candidateNum = std::min({size_t(L_master_), size_t(total_indexed_vector_)});
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
-      for (int64_t k_i = 0; k_i < searchLimit; ++k_i, ++result_size) {
+      for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
+        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+          continue;
+        }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
         distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
+        result_size++;
       }
     }
     search_result_.resize(result_size);
