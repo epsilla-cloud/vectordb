@@ -753,13 +753,14 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
       BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted);
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
+      auto bruteForceQueueSize = std::min({size_t(total_vector - total_indexed_vector_), limit});
       MergeTwoQueuesInto1stQueueSeqFixed(
           set_L_,
           master_queue_start,
           searchLimit,
           brute_force_queue_,
           0,
-          searchLimit);
+          bruteForceQueueSize);
 
       result_size = 0;
       auto candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
