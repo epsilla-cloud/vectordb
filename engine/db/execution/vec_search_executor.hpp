@@ -14,6 +14,7 @@
 #include "db/ann_graph_segment.hpp"
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
+#include "db/table_segment_mvp.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {

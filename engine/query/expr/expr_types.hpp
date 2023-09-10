@@ -1,7 +1,9 @@
 #pragma once
 
+#include <memory>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 
 namespace vectordb {
 namespace query {
@@ -81,15 +83,15 @@ namespace expr {
         BOOL
     };
 
-    union NodeDataType {
-        std::string strValue;
-        int intValue;
-        double doubleValue;
-        bool boolValue;
+    // union NodeDataType {
+    //     std::string strValue;
+    //     int intValue;
+    //     double doubleValue;
+    //     bool boolValue;
 
-        NodeDataType(): strValue("") {}
-        ~NodeDataType() {}
-    };
+    //     NodeDataType(): strValue("") {}
+    //     ~NodeDataType() {}
+    // };
 
     // union NodeOperatorType {
     //     ArithmeticOperator arithmetic;
@@ -106,10 +108,13 @@ namespace expr {
     struct ExprNode {
         ValueType value_type;
         NodeType node_type;
-        NodeDataType value;
         std::string field_name; // Only attribute has it.
         size_t left;
         size_t right;
+        std::string str_value;
+        int int_value;
+        double double_value;
+        bool bool_value;
     };
     using ExprNodePtr = std::shared_ptr<ExprNode>;
 

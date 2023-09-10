@@ -9,6 +9,7 @@
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
 #include "db/table_mvp.hpp"
+#include "query/expr/expr_types.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
@@ -31,15 +32,17 @@ class DBServer {
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
   Status DeleteByPK(const std::string& db_name, const std::string& table_name, vectordb::Json& pkList);
   Status Search(
-      const std::string& db_name,
-      const std::string& table_name,
-      std::string& field_name,
-      std::vector<std::string>& query_fields,
-      int64_t query_dimension,
-      const float* query_data,
-      const int64_t limit,
-      vectordb::Json& result,
-      bool with_distance);
+    const std::string& db_name,
+    const std::string& table_name,
+    std::string& field_name,
+    std::vector<std::string>& query_fields,
+    int64_t query_dimension,
+    const float* query_data,
+    const int64_t limit,
+    vectordb::Json& result,
+    const std::string& filter,
+    bool with_distance
+  );
 
   Status Project(
       const std::string& db_name,

@@ -291,9 +291,10 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       "query_vector",
       "response_fields",
       "limit",
+      "filter",
       "with_distance",
       NULL};
-  const char *tableNamePtr, *queryFieldPtr;
+  const char *tableNamePtr, *queryFieldPtr, *queryFilterPtr;
   int limit, withDistance;
   PyObject *queryVector, *responseFields;
 
@@ -307,6 +308,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
           &queryVector,
           &responseFields,
           &limit,
+          &queryFilterPtr,
           &withDistance)) {
     return NULL;
   }
@@ -315,7 +317,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
   auto queryFields = std::vector<std::string>();
 
   Py_ssize_t queryVectorSize = PyList_Size(queryVector);
-  std::string tableName = tableNamePtr, queryField = queryFieldPtr;
+  std::string tableName = tableNamePtr, queryField = queryFieldPtr, queryFilter = queryFilterPtr;
   auto vectorArr = std::make_unique<float[]>(queryVectorSize);
   for (Py_ssize_t i = 0; i < queryVectorSize; ++i) {
     PyObject *elem = PyList_GetItem(queryVector, i);
@@ -342,6 +344,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       vectorArr.get(),
       limit,
       result,
+      queryFilter,
       withDistance);
 
   if (!status.ok()) {

@@ -5,6 +5,7 @@
 #include <numeric>
 
 #include "db/catalog/meta_types.hpp"
+#include "query/expr/expr.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -158,6 +159,7 @@ Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
                         int64_t query_dimension, const float *query_data,
                         const int64_t limit, vectordb::Json &result,
+                        std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
                         bool with_distance) {
   // Check if field_name exists.
   if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
@@ -192,6 +194,13 @@ Status TableMVP::Search(const std::string &field_name,
   if (query_dimension != executor.exec_->dimension_) {
     return Status(DB_UNEXPECTED_ERROR,
                   "Query dimension doesn't match the vector field dimension.");
+  }
+
+  // Query filter validation check.
+  for (auto node : filter_nodes) {
+    Json filter;
+    query::expr::Expr::DumpToJson(node, filter);
+    std::cout << "filllllter:   " + filter.DumpToString() << std::endl;
   }
 
   // Search.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 
 #include "expr_types.hpp"
 #include "utils/json.hpp"
@@ -9,16 +10,16 @@ namespace vectordb {
 namespace query {
 namespace expr {
 
-  class Expr {
-    public:
-      Expr() = default;
+class Expr {
+  public:
+    static Status ParseNodeFromStr(
+      std::string expression,
+      std::vector<ExprNodePtr>& nodes,
+      std::unordered_map<std::string, engine::meta::FieldType>& field_map
+    );
 
-      Status ParseNodeFromStr(std::string expression, std::vector<ExprNodePtr>& nodes);
-
-      Status DumpToJson(ExprNodePtr& node, Json& json);
-  };
-
-  using ExprPtr = std::shared_ptr<Expr>;
+    static Status DumpToJson(ExprNodePtr& node, Json& json);
+};
 
 } // namespace expr
 } // namespace query

@@ -53,6 +53,10 @@ list(APPEND LIB_FILES ${WEB_SERVER_FILES})
 file(GLOB LOGGER_FILES "logger/*.cpp")
 list(APPEND LIB_FILES ${LOGGER_FILES})
 
+# Add source files in the query directory
+file(GLOB_RECURSE QUERY_FILES "query/*")
+list(APPEND LIB_FILES ${QUERY_FILES})
+
 # used by PyBinding
 find_package(PythonLibs REQUIRED)
 
@@ -80,18 +84,13 @@ add_library(pybinding SHARED bindings/python/interface.cpp)
 
 target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
 # the binding library name must match the module name
-set_target_properties(pybinding PROPERTIES 
+set_target_properties(pybinding PROPERTIES
     PREFIX ""
     SUFFIX ".so"
     OUTPUT_NAME "epsilla"
 )
 target_link_libraries(pybinding PUBLIC vectordb_dylib)
 target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})
-
-# Add source files in the query directory
-file(GLOB_RECURSE QUERY_FILES "query/*")
-list(APPEND SOURCE_FILES ${QUERY_FILES})
-
 
 if(APPLE)
     set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/Cellar/libomp/16.0.6/include")

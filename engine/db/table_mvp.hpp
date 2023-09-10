@@ -12,6 +12,7 @@
 #include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
 #include "db/wal/write_ahead_log.hpp"
+#include "query/expr/expr_types.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
@@ -48,6 +49,7 @@ class TableMVP {
       const float *query_data,
       const int64_t limit,
       vectordb::Json &result,
+      std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       bool with_distance);
 
   Status Project(

@@ -43,7 +43,7 @@ class WebController : public oatpp::web::server::api::ApiController {
   }
 
   std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
-    vectordb::query::expr::ExprPtr expr_ptr = std::make_shared<vectordb::query::expr::Expr>();
+    // vectordb::query::expr::ExprPtr expr_ptr = std::make_shared<vectordb::query::expr::Expr>();
   // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
 
 /**
@@ -486,6 +486,11 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     int64_t limit = parsedBody.GetInt("limit");
 
+    std::string filter;
+    if (parsedBody.HasMember("filter")) {
+      filter = parsedBody.GetString("filter");
+    }
+
     bool with_distance = false;
     if (parsedBody.HasMember("withDistance")) {
       with_distance = parsedBody.GetBool("withDistance");
@@ -493,11 +498,41 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     vectordb::Json result;
     vectordb::Status search_status = db_server->Search(
-        db_name, table_name, field_name, query_fields, vector_size, query_vector, limit, result, with_distance);
+      db_name,
+      table_name,
+      field_name,
+      query_fields,
+      vector_size,
+      query_vector,
+      limit,
+      result,
+      filter,
+      with_distance
+    );
+
+    // if (!filter_status.ok()) {
+      //   oatpp::web::protocol::http::Status code =
+      //     filter_status.code() == NOT_IMPLEMENTED_ERROR ? Status::CODE_501 : Status::CODE_400;
+      //   status_dto->statusCode = code.code;
+      //   status_dto->message = filter_status.message();
+      //   return createDtoResponse(code, status_dto);
+      // }
     if (!search_status.ok()) {
-      status_dto->statusCode = Status::CODE_500.code;
+      oatpp::web::protocol::http::Status status;
+      switch (search_status.code()) {
+        case INVALID_EXPR:
+          status = Status::CODE_400;
+          break;
+        case NOT_IMPLEMENTED_ERROR:
+          status = Status::CODE_501;
+          break;
+        default:
+          status = Status::CODE_500;
+          break;
+      }
+      status_dto->statusCode = status.code;
       status_dto->message = search_status.message();
-      return createDtoResponse(Status::CODE_500, status_dto);
+      return createDtoResponse(status, status_dto);
     }
 
     auto res_dto = ObjectRespDto::createShared();
@@ -608,22 +643,33 @@ class WebController : public oatpp::web::server::api::ApiController {
       // vectordb::query::expr::ExprNodePtr node = std::make_shared<vectordb::query::expr::ExprNode>();
       std::vector<vectordb::query::expr::ExprNodePtr> nodes;
 
-      vectordb::Status status = expr_ptr->ParseNodeFromStr(expr, nodes);
+      std::unordered_map<std::string, engine::meta::FieldType> map = {};
+      vectordb::Status status = vectordb::query::expr::Expr::ParseNodeFromStr(expr, nodes, map);
       if (!status.ok()) {
-          dto->statusCode = Status::CODE_400.code;
-          dto->message = status.message();
-          return createDtoResponse(Status::CODE_400, dto);
+        oatpp::web::protocol::http::Status code =
+          status.code() == NOT_IMPLEMENTED_ERROR ? Status::CODE_501 : Status::CODE_400;
+        dto->statusCode = code.code;
+        dto->message = status.message();
+        return createDtoResponse(code, dto);
       }
 
-        auto res_dto = SearchRespDto::createShared();
-        res_dto->statusCode = Status::CODE_200.code;
-        res_dto->message = "Get root node successfully.";
-        vectordb::Json result;
-        auto res_status = expr_ptr->DumpToJson(nodes[nodes.size() - 1], result);
-        oatpp::parser::json::mapping::ObjectMapper mapper;
-        res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
-        return createDtoResponse(Status::CODE_200, res_dto);
-    }
+      auto res_dto = SearchRespDto::createShared();
+      res_dto->statusCode = Status::CODE_200.code;
+      res_dto->message = "Get root node successfully.";
+      std::cout << nodes.size() << std::endl;
+      std::vector<vectordb::Json> node_list;
+      for (auto i = 0; i < nodes.size(); i++) {
+        vectordb::Json node;
+        auto res = vectordb::query::expr::Expr::DumpToJson(nodes[i], node);
+        node_list.push_back(node);
+      }
+      vectordb::Json result;
+      result.SetArray("nodes", node_list);
+      // auto res_status = expr_ptr->DumpToJson(nodes[nodes.size() - 1], result);
+      oatpp::parser::json::mapping::ObjectMapper mapper;
+      res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
+      return createDtoResponse(Status::CODE_200, res_dto);
+  }
 
 /**
  *  Finish ENDPOINTs generation ('ApiController' codegen)
