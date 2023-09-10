@@ -13,7 +13,7 @@ enum class LogLevel {
   ERROR
 };
 
-void log(LogLevel level, const std::string& message) {
+void Log(LogLevel level, const std::string& message) {
   std::time_t now = std::time(nullptr);
   char timestamp[20];
   std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
@@ -36,9 +36,13 @@ void log(LogLevel level, const std::string& message) {
   }
 };
 
-void Logger::info(const std::string& message) {
-  log(LogLevel::INFO, message);
+void Logger::Info(const std::string& message) {
+  Log(LogLevel::INFO, message);
 };
+
+void Logger::Warning(const std::string& message) {
+  Log(LogLevel::WARNING, message);
+}
 
 } // namespace engine
 } // namespace vectordb

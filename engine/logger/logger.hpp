@@ -5,7 +5,8 @@ namespace engine {
 
 class Logger {
   public:
-    void info(const std::string& message);
+    void Info(const std::string& message);
+    void Warning(const std::string& message);
 };
 
 } // namespace engine

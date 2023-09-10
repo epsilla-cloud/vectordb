@@ -13,10 +13,13 @@
 #include "db/catalog/meta_types.hpp"
 #include "utils/status.hpp"
 #include "expr.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace query {
 namespace expr {
+
+  std::shared_ptr<vectordb::engine::Logger> logger = std::make_shared<vectordb::engine::Logger>();
 
   enum class State {
     Start,
@@ -360,6 +363,7 @@ namespace expr {
   ) {
     std::stack<ExprNodePtr> nodeStack;
     std::vector<ExprNodePtr> node_list;
+    bool has_field_type = false;
 
     for (std::string token : tokens) {
       if (isUnsupportedLogicalOp(token)) {
@@ -437,6 +441,7 @@ namespace expr {
           if (field_map.find(token) == field_map.end()) {
             return Status(INVALID_EXPR, "Invalid filter expression: field name '" + token + "' not found.");
           }
+          has_field_type = true;
           node->field_name = token;
           engine::meta::FieldType field_type = field_map[token];
           switch (field_type) {
@@ -476,7 +481,11 @@ namespace expr {
     node_list.push_back(nodeStack.top());
     nodeStack.pop();
 
-    nodes = node_list;
+    if (has_field_type) {
+      nodes = node_list;
+    } else {
+      logger->Warning("Filter expression without field name(s) will be skipped.");
+    }
     return Status::OK();
   };
 
