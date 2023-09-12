@@ -688,33 +688,15 @@ void VecSearchExecutor::SearchImpl(
   }
 }
 
-bool VecSearchExecutor::BruteForceSearch(
-  const float *query_data,
-  const int64_t start,
-  const int64_t end,
-  const ConcurrentBitset &deleted,
-  std::shared_ptr<vectordb::query::expr::ExprEvaluator>& expr_evaluator,
+std::unordered_map<std::string, std::any> GenFieldValueMap(
   std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
   std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-  const size_t root_node_index
+  const int& root_node_index,
+  const int& ind
 ) {
-  if (brute_force_queue_.size() < end - start) {
-    brute_force_queue_.resize(end - start);
-  }
-#pragma omp parallel for
-  for (int64_t v_id = start; v_id < end; ++v_id) {
-    float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
-    brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
-  }
+  std::unordered_map<std::string, std::any> field_value_map;
 
-  // compacting the result with 2 pointers by removing the deleted entries
-  // iter: the iterator to loop through the brute force queue
-  // num_result: the pointer to the current right-most slot in the new result
-  int64_t iter = 0,
-          num_result = 0;
-  // remove the invalid entries
-  for (; iter < end - start; ++iter) {
-    std::unordered_map<std::string, std::any> field_value_map;
+  if (root_node_index >= 0) {
     for (auto& field : field_name_type_map) {
       std::string field_name = field.first;
       meta::FieldType field_type = field.second;
@@ -726,10 +708,10 @@ bool VecSearchExecutor::BruteForceSearch(
       ) {
         continue;
       } else if (field_type == meta::FieldType::STRING) {
-        auto offset = table_segment->field_name_mem_offset_map_[field_name] + iter * table_segment->string_num_;
+        auto offset = table_segment->field_name_mem_offset_map_[field_name] + ind * table_segment->string_num_;
         field_value_map.insert_or_assign(field_name, table_segment->string_table_[offset]);
       } else {
-        auto offset = table_segment->field_name_mem_offset_map_[field_name] + iter * table_segment->primitive_offset_;
+        auto offset = table_segment->field_name_mem_offset_map_[field_name] + ind * table_segment->primitive_offset_;
         switch (field_type) {
           case meta::FieldType::INT1: {
             int8_t *ptr = reinterpret_cast<int8_t *>(
@@ -776,6 +758,38 @@ bool VecSearchExecutor::BruteForceSearch(
         }
       }
     }
+  }
+
+  return field_value_map;
+}
+
+bool VecSearchExecutor::BruteForceSearch(
+  const float *query_data,
+  const int64_t start,
+  const int64_t end,
+  const ConcurrentBitset &deleted,
+  std::shared_ptr<vectordb::query::expr::ExprEvaluator>& expr_evaluator,
+  std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
+  std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
+  const int root_node_index
+) {
+  if (brute_force_queue_.size() < end - start) {
+    brute_force_queue_.resize(end - start);
+  }
+#pragma omp parallel for
+  for (int64_t v_id = start; v_id < end; ++v_id) {
+    float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
+    brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+  }
+
+  // compacting the result with 2 pointers by removing the deleted entries
+  // iter: the iterator to loop through the brute force queue
+  // num_result: the pointer to the current right-most slot in the new result
+  int64_t iter = 0,
+          num_result = 0;
+  // remove the invalid entries
+  for (; iter < end - start; ++iter) {
+    auto field_value_map = GenFieldValueMap(table_segment, field_name_type_map, root_node_index, iter);
     if (!deleted.test(iter) && expr_evaluator->LogicalEvaluate(root_node_index, field_value_map)) {
       if (iter != num_result) {
         brute_force_queue_[num_result] = brute_force_queue_[iter];
@@ -801,7 +815,7 @@ Status VecSearchExecutor::Search(
 ) {
   int64_t total_vector = table_segment->record_number_;
   auto expr_evaluator = std::make_shared<vectordb::query::expr::ExprEvaluator>(filter_nodes);
-  size_t filter_root_index = filter_nodes.size() - 1;
+  int filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
   // TODO: support larger search results
   std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
@@ -848,7 +862,9 @@ Status VecSearchExecutor::Search(
       result_size = 0;
       auto candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
-        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+        auto id = set_L_[k_i + master_queue_start].id_;
+        auto field_value_map = GenFieldValueMap(table_segment, field_name_type_map, filter_root_index, id);
+        if (deleted.test(id) && !expr_evaluator->LogicalEvaluate(filter_root_index, field_value_map)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
@@ -860,7 +876,9 @@ Status VecSearchExecutor::Search(
       auto candidateNum = std::min({size_t(L_master_), size_t(total_indexed_vector_)});
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
-        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+        auto id = set_L_[k_i + master_queue_start].id_;
+        auto field_value_map = GenFieldValueMap(table_segment, field_name_type_map, filter_root_index, id);
+        if (deleted.test(id) && !expr_evaluator->LogicalEvaluate(filter_root_index, field_value_map)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;

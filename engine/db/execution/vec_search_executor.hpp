@@ -185,7 +185,7 @@ class VecSearchExecutor {
     std::shared_ptr<vectordb::query::expr::ExprEvaluator>& expr_evaluator,
     std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    const size_t root_node_index);
+    const int root_node_index);
   Status Search(
     const float* query_data,
     const ConcurrentBitset& deleted,
