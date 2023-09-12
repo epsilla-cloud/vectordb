@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "expr_evaluation.hpp"
 
 namespace vectordb {
@@ -57,7 +59,7 @@ double ExprEvaluation::NumEvaluate(const int& node_index) {
       case NodeType::Divide:
         return left / right;
       case NodeType::Module:
-        return left % right;
+        return std::fmod(left, right);
     }
   }
   return 0.0;
