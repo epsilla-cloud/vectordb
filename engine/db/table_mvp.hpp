@@ -21,6 +21,15 @@
 namespace vectordb {
 namespace engine {
 
+constexpr const int IntraQueryThreads = 4;
+constexpr const int MasterQueueSize = 500;
+constexpr const int LocalQueueSize = 500;
+constexpr const int GlobalSyncInterval = 15;
+constexpr const int MinimalGraphSize = 100;
+constexpr const int NumExecutorPerField = 16;
+
+constexpr const int RebuildThreads = 4;
+
 class TableMVP {
  public:
   explicit TableMVP(meta::TableSchema &table_schema, const std::string &db_catalog_path, int64_t init_table_scale /*, int64_t executors_num*/);
@@ -30,12 +39,14 @@ class TableMVP {
 
   Status Insert(vectordb::Json &records);
 
+  Status DeleteByPK(vectordb::Json &records);
+
   Status Search(
       const std::string &field_name,
       std::vector<std::string> &query_fields,
       int64_t query_dimension,
       const float *query_data,
-      const int64_t K,
+      const int64_t limit,
       vectordb::Json &result,
       bool with_distance);
 

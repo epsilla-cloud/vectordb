@@ -14,6 +14,7 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs);
 static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs);
 static PyObject *drop_table(PyObject *self, PyObject *args, PyObject *kwargs);
 static PyObject *unload_db(PyObject *self, PyObject *args, PyObject *kwargs);
+static PyObject *delete_by_pk(PyObject *self, PyObject *args, PyObject *kwargs);
 
 static std::string db_name;
 static vectordb::engine::DBServer *db;
@@ -26,6 +27,7 @@ static PyMethodDef EpsillaMethods[] = {
     {"insert", (PyCFunction)(void (*)(void))insert, METH_VARARGS | METH_KEYWORDS, "insert record into the database"},
     {"query", (PyCFunction)(void (*)(void))query, METH_VARARGS | METH_KEYWORDS, "query the database"},
     {"drop_table", (PyCFunction)(void (*)(void))drop_table, METH_VARARGS | METH_KEYWORDS, "drop the table"},
+    {"delete", (PyCFunction)(void (*)(void))delete_by_pk, METH_VARARGS | METH_KEYWORDS, "delete by primary key"},
     {NULL, NULL, 0, NULL} /* Sentinel */
 };
 

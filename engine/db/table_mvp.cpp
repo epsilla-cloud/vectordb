@@ -9,15 +9,6 @@
 namespace vectordb {
 namespace engine {
 
-constexpr const int IntraQueryThreads = 4;
-constexpr const int MasterQueueSize = 500;
-constexpr const int LocalQueueSize = 500;
-constexpr const int GlobalSyncInterval = 15;
-constexpr const int MinimalGraphSize = 100;
-constexpr const int NumExecutorPerField = 16;
-
-constexpr const int RebuildThreads = 4;
-
 TableMVP::TableMVP(meta::TableSchema &table_schema,
                    const std::string &db_catalog_path, int64_t init_table_scale)
     : table_schema_(table_schema),
@@ -126,14 +117,18 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             table_segment_->record_number_,
             table_schema_.fields_[i].vector_dimension_,
             ann_graph_segment_[index]->navigation_point_,
-            ann_graph_segment_[index], ann_graph_segment_[index]->offset_table_,
+            ann_graph_segment_[index],
+            ann_graph_segment_[index]->offset_table_,
             ann_graph_segment_[index]->neighbor_list_,
             table_segment_
                 ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                      [table_schema_.fields_[i].name_]],
             l2space_[index]->get_dist_func(),
-            l2space_[index]->get_dist_func_param(), IntraQueryThreads,
-            MasterQueueSize, LocalQueueSize, GlobalSyncInterval));
+            l2space_[index]->get_dist_func_param(),
+            IntraQueryThreads,
+            MasterQueueSize,
+            LocalQueueSize,
+            GlobalSyncInterval));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);
@@ -153,10 +148,16 @@ Status TableMVP::Insert(vectordb::Json &record) {
   return table_segment_->Insert(table_schema_, record, wal_id);
 }
 
+Status TableMVP::DeleteByPK(vectordb::Json &records) {
+  int64_t wal_id =
+      wal_->WriteEntry(LogEntryType::DELETE, records.DumpToString());
+  return table_segment_->DeleteByPK(records, wal_id);
+}
+
 Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
                         int64_t query_dimension, const float *query_data,
-                        const int64_t K, vectordb::Json &result,
+                        const int64_t limit, vectordb::Json &result,
                         bool with_distance) {
   // Check if field_name exists.
   if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
@@ -195,8 +196,10 @@ Status TableMVP::Search(const std::string &field_name,
 
   // Search.
   int64_t result_num = 0;
-  executor.exec_->Search(query_data, K, table_segment_->record_number_,
+  executor.exec_->Search(query_data, *table_segment_->deleted_, limit, table_segment_->record_number_,
                          result_num);
+
+  result_num = result_num > limit ? limit : result_num;
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,
               with_distance, executor.exec_->distance_);
@@ -318,7 +321,7 @@ Status TableMVP::Project(
     if (with_distance) {
       record.SetDouble("@distance", distances[i]);
     }
-    result.AddObjectToArray(record);
+    result.AddObjectToArray(std::move(record));
   }
   return Status::OK();
 }

@@ -2,19 +2,19 @@
 
 #include <atomic>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
-#include <thread>
 
 #include "db/catalog/meta.hpp"
-#include "db/table_mvp.hpp"
 #include "db/db_mvp.hpp"
+#include "db/table_mvp.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
 namespace engine {
 
-constexpr const long RebuildInterval = 60000; // TODO:: to be config.
+constexpr const long RebuildInterval = 60000;  // TODO:: to be config.
 
 class DBServer {
  public:
@@ -29,24 +29,23 @@ class DBServer {
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
   Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
+  Status DeleteByPK(const std::string& db_name, const std::string& table_name, vectordb::Json& pkList);
   Status Search(
-    const std::string& db_name,
-    const std::string& table_name,
-    std::string& field_name,
-    std::vector<std::string>& query_fields,
-    int64_t query_dimension,
-    const float* query_data,
-    const int64_t K,
-    vectordb::Json& result,
-    bool with_distance
-  );
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& field_name,
+      std::vector<std::string>& query_fields,
+      int64_t query_dimension,
+      const float* query_data,
+      const int64_t limit,
+      vectordb::Json& result,
+      bool with_distance);
 
   Status Project(
-    const std::string& db_name,
-    const std::string& table_name,
-    std::vector<std::string>& query_fields,
-    vectordb::Json& result
-  );
+      const std::string& db_name,
+      const std::string& table_name,
+      std::vector<std::string>& query_fields,
+      vectordb::Json& result);
 
   void StartRebuild() {
     if (rebuild_started_) {
@@ -68,7 +67,7 @@ class DBServer {
   }
 
  private:
-  std::shared_ptr<meta::Meta> meta_;                           // The db meta.
+  std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.
   std::vector<std::shared_ptr<DBMVP>> dbs_;                    // The dbs.
@@ -81,7 +80,7 @@ class DBServer {
     const std::chrono::milliseconds rebuild_interval(RebuildInterval);
 
     while (!stop_rebuild_thread_) {
-      Rebuild(); // Call the Rebuild function
+      Rebuild();  // Call the Rebuild function
 
       // Introduce the time delay before the next Rebuild
       std::this_thread::sleep_for(rebuild_interval);
@@ -90,7 +89,6 @@ class DBServer {
 
   Status Rebuild();
 };
-
 
 }  // namespace engine
 }  // namespace vectordb

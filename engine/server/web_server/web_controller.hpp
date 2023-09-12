@@ -349,38 +349,45 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, status_dto);
   }
 
-  // TODO: implement with corresponding function later.
-  ADD_CORS(DeleteRecordsByID)
+  ADD_CORS(DeleteRecordsByPK)
 
-  ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByID,
+  ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByPK,
            PATH(String, db_name, "db_name"),
-           BODY_DTO(Object<DeleteRecordsReqDto>, body)) {
+           BODY_STRING(String, body)) {
     auto dto = StatusDto::createShared();
+    vectordb::Json requestBody;
+    auto valid = requestBody.LoadFromString(body);
 
-    if (!body->table) {
+    if (!valid) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    if (!requestBody.HasMember("table")) {
       dto->statusCode = Status::CODE_400.code;
       dto->message = "Missing table name in your payload.";
       return createDtoResponse(Status::CODE_400, dto);
     }
-    if (!body->ids) {
+    if (!requestBody.HasMember("primaryKeys")) {
       dto->statusCode = Status::CODE_400.code;
-      dto->message = "Missing ID list to delete in your payload.";
+      dto->message = "Missing primary key list to delete in your payload.";
       return createDtoResponse(Status::CODE_400, dto);
     }
 
-    const auto& body_ids = body->ids;
-    if (body_ids->size() == 0) {
+    auto table = requestBody.GetString("table");
+    auto pks = requestBody.GetArray("primaryKeys");
+    auto status = db_server->DeleteByPK(db_name, table, pks);
+    auto responseCode = Status::CODE_200;
+    if (status.ok()) {
+      dto->statusCode = Status::CODE_200.code;
+      dto->message = status.message();
+    } else {
+      responseCode = Status::CODE_400;
       dto->statusCode = Status::CODE_400.code;
-      dto->message = "No IDs to delete provided.";
-      return createDtoResponse(Status::CODE_400, dto);
+      dto->message = status.message();
     }
-    std::vector<std::string> arr;
-    for (size_t i = 0; i < body_ids->size(); i++) {
-      arr.push_back(body_ids[i]);
-    }
-    dto->statusCode = Status::CODE_200.code;
-    dto->message = "Deleted " + WebUtil::JoinStrs(arr, ", ") + " from " + body->table + " in " + db_name + " successfully.";
-    return createDtoResponse(Status::CODE_200, dto);
+    return createDtoResponse(responseCode, dto);
   }
 
   // TODO: implement with corresponding function later.

@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <iostream>
 #include <string>
+#include <typeinfo>
 #include <unordered_map>
 
 #include "db/catalog/meta.hpp"
@@ -38,6 +40,8 @@ class TableSegmentMVP {
   Status Insert(meta::TableSchema& table_schema, Json& records);
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
 
+  Status DeleteByPK(Json& records, int64_t wal_id);
+
   // Save the table segment to disk.
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
 
@@ -67,15 +71,41 @@ class TableSegmentMVP {
                                // The deleted records still occupy the position in all other structures.
                                // They should be skipped during search.
 
+  bool isIntPK() const;
+  bool isStringPK() const;
+  meta::FieldType pkType() const;
+  meta::FieldSchema pkField() const;
+  int64_t pkFieldIdx() const;
+  bool isEntryDeleted(int64_t id) const;
+
  private:
   // used to store primary key set for duplication check
   UniqueKey primary_key_;
-  // The id of primitive primary key
-  // primitive_pk_field_id_.get() != nullptr if there's a primitive pk
-  std::unique_ptr<int64_t> primitive_pk_field_id_;
+  // The index of primary key in schema fields
+  // pk_field_id_.get() != nullptr if there's a pk
+  std::unique_ptr<int64_t> pk_field_idx_;
   // The index of primary key among string keys
   // string_pk_offset_.get() != nullptr if there's a string pk
   std::unique_ptr<int64_t> string_pk_offset_;
+
+  // save a copy of the schema - the lifecycle of the schema is not managed by the segment, so
+  // we can keep the raw pointer here. In addition, the table_segment_mvp's lifecycle is always longer
+  // than the owner, so so don't need to worry about invalid pointer here.
+  meta::TableSchema schema;
+
+  Status DeleteByStringPK(const std::string& pk);
+
+  template <typename T>
+  Status DeleteByIntPK(T pk) {
+    size_t result = 0;
+    auto found = primary_key_.getKey(pk, result);
+    if (found) {
+      deleted_->set(result);
+      primary_key_.removeKey(pk);
+      return Status::OK();
+    }
+    return Status(RECORD_NOT_FOUND, "could not find record with primary key: " + pk);
+  }
 
   // std::shared_ptr<AttributeTable> attribute_table_;  // The attribute table in memory (exclude vector attributes and string attributes).
   // std::shared_ptr<std::string*> string_table_;       // The string attribute table in memory.
