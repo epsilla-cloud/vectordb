@@ -53,7 +53,6 @@ class VecSearchExecutor {
   std::vector<int64_t> local_queues_starts_;
   bool brute_force_search_;
   std::vector<Candidate> brute_force_queue_;
-  std::shared_ptr<
 
   VecSearchExecutor(
       const int64_t ntotal,
