@@ -1,6 +1,5 @@
 #include "db/execution/vec_search_executor.hpp"
 #include "query/expr/expr.hpp"
-#include "query/expr/expr_evaluation.hpp"
 
 #include <omp.h>
 
@@ -689,7 +688,16 @@ void VecSearchExecutor::SearchImpl(
   }
 }
 
-bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end, const ConcurrentBitset &deleted) {
+bool VecSearchExecutor::BruteForceSearch(
+  const float *query_data,
+  const int64_t start,
+  const int64_t end,
+  const ConcurrentBitset &deleted,
+  std::shared_ptr<vectordb::query::expr::ExprEvaluator>& expr_evaluator,
+  std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
+  std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
+  const size_t root_node_index
+) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
@@ -706,7 +714,69 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
           num_result = 0;
   // remove the invalid entries
   for (; iter < end - start; ++iter) {
-    if (!deleted.test(iter)) {
+    std::unordered_map<std::string, std::any> field_value_map;
+    for (auto& field : field_name_type_map) {
+      std::string field_name = field.first;
+      meta::FieldType field_type = field.second;
+      if (
+        field_type == meta::FieldType::VECTOR_DOUBLE ||
+        field_type == meta::FieldType::VECTOR_FLOAT ||
+        field_type == meta::FieldType::JSON ||
+        field_type == meta::FieldType::UNKNOWN
+      ) {
+        continue;
+      } else if (field_type == meta::FieldType::STRING) {
+        auto offset = table_segment->field_name_mem_offset_map_[field_name] + iter * table_segment->string_num_;
+        field_value_map.insert_or_assign(field_name, table_segment->string_table_[offset]);
+      } else {
+        auto offset = table_segment->field_name_mem_offset_map_[field_name] + iter * table_segment->primitive_offset_;
+        switch (field_type) {
+          case meta::FieldType::INT1: {
+            int8_t *ptr = reinterpret_cast<int8_t *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, (int64_t)(*ptr));
+            break;
+          }
+          case meta::FieldType::INT2: {
+            int16_t *ptr = reinterpret_cast<int16_t *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, (int64_t)(*ptr));
+            break;
+          }
+          case meta::FieldType::INT4: {
+            int32_t *ptr = reinterpret_cast<int32_t *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, (int64_t)(*ptr));
+            break;
+          }
+          case meta::FieldType::INT8: {
+            int64_t *ptr = reinterpret_cast<int64_t *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, (int64_t)(*ptr));
+            break;
+          }
+          case meta::FieldType::FLOAT: {
+            float *ptr = reinterpret_cast<float *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, (double)(*ptr));
+            break;
+          }
+          case meta::FieldType::DOUBLE: {
+            double *ptr = reinterpret_cast<double *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, *ptr);
+            break;
+          }
+          case meta::FieldType::BOOL: {
+            bool *ptr = reinterpret_cast<bool *>(
+                &table_segment->attribute_table_[offset]);
+            field_value_map.insert_or_assign(field_name, *ptr);
+            break;
+          }
+        }
+      }
+    }
+    if (!deleted.test(iter) && expr_evaluator->LogicalEvaluate(root_node_index, field_value_map)) {
       if (iter != num_result) {
         brute_force_queue_[num_result] = brute_force_queue_[iter];
       }
@@ -726,9 +796,12 @@ Status VecSearchExecutor::Search(
   const size_t limit,
   std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
   std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
+  std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
   int64_t &result_size
 ) {
   int64_t total_vector = table_segment->record_number_;
+  auto expr_evaluator = std::make_shared<vectordb::query::expr::ExprEvaluator>(filter_nodes);
+  size_t filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
   // TODO: support larger search results
   std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
@@ -736,7 +809,7 @@ Status VecSearchExecutor::Search(
             << total_vector << std::endl;
 
   if (brute_force_search_) {
-    BruteForceSearch(query_data, 0, total_vector, deleted);
+    BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, field_name_type_map, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
@@ -760,7 +833,7 @@ Status VecSearchExecutor::Search(
         subsearch_iterations_);
     if (total_vector > total_indexed_vector_) {
       // Need to brute force search the newly added but haven't been indexed vectors.
-      BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted);
+      BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted, expr_evaluator, table_segment, field_name_type_map, filter_root_index);
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       auto bruteForceQueueSize = std::min({brute_force_queue_.size(), limit});

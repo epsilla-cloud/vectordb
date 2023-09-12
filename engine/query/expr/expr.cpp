@@ -205,10 +205,6 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
     cur_token.clear();
   }
 
-  if (token_list.size() < 3) {
-    return Status(INVALID_EXPR, "Filter expression is invalid.");
-  }
-
   tokens = token_list;
   return Status::OK();
 };

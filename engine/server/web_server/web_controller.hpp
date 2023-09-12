@@ -610,67 +610,6 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
-  ADD_CORS(TestExrParser)
-
-  ENDPOINT("POST", "/api/expr/test/{db_name}/{table_name}", TestExrParser,
-      PATH(String, db_name, "db_name"),
-      PATH(String, table_name, "table_name"),
-      BODY_STRING(String, body)) {
-
-      auto dto = StatusDto::createShared();
-
-      // vectordb::engine::meta::DatabaseSchema db_schema;
-      // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
-      // if (!db_status.ok()) {
-      //     dto->statusCode = Status::CODE_500.code;
-      //     dto->message = db_status.message();
-      //     return createDtoResponse(Status::CODE_500, dto);
-      // }
-
-      // vectordb::engine::meta::TableSchema table_schema;
-      // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
-      // if (!table_status.ok()) {
-      //     dto->statusCode = Status::CODE_500.code;
-      //     dto->message = table_status.message();
-      //     return createDtoResponse(Status::CODE_500, dto);
-      // }
-
-      vectordb::Json parsedBody;
-      parsedBody.LoadFromString(body);
-      std::string expr = parsedBody.GetString("expr");
-      std::cout << expr << std::endl;
-
-      // vectordb::query::expr::ExprNodePtr node = std::make_shared<vectordb::query::expr::ExprNode>();
-      std::vector<vectordb::query::expr::ExprNodePtr> nodes;
-
-      std::unordered_map<std::string, engine::meta::FieldType> map = {};
-      vectordb::Status status = vectordb::query::expr::Expr::ParseNodeFromStr(expr, nodes, map);
-      if (!status.ok()) {
-        oatpp::web::protocol::http::Status code =
-          status.code() == NOT_IMPLEMENTED_ERROR ? Status::CODE_501 : Status::CODE_400;
-        dto->statusCode = code.code;
-        dto->message = status.message();
-        return createDtoResponse(code, dto);
-      }
-
-      auto res_dto = ObjectRespDto::createShared();
-      res_dto->statusCode = Status::CODE_200.code;
-      res_dto->message = "Get root node successfully.";
-      std::cout << nodes.size() << std::endl;
-      std::vector<vectordb::Json> node_list;
-      for (auto i = 0; i < nodes.size(); i++) {
-        vectordb::Json node;
-        auto res = vectordb::query::expr::Expr::DumpToJson(nodes[i], node);
-        node_list.push_back(node);
-      }
-      vectordb::Json result;
-      result.SetArray("nodes", node_list);
-      // auto res_status = expr_ptr->DumpToJson(nodes[nodes.size() - 1], result);
-      oatpp::parser::json::mapping::ObjectMapper mapper;
-      res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
-      return createDtoResponse(Status::CODE_200, res_dto);
-  }
-
 /**
  *  Finish ENDPOINTs generation ('ApiController' codegen)
  */

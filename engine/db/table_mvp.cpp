@@ -196,17 +196,10 @@ Status TableMVP::Search(const std::string &field_name,
                   "Query dimension doesn't match the vector field dimension.");
   }
 
-  // Query filter validation check.
-  for (auto node : filter_nodes) {
-    Json filter;
-    query::expr::Expr::DumpToJson(node, filter);
-    std::cout << "filllllter:   " + filter.DumpToString() << std::endl;
-  }
-
   // Search.
   int64_t result_num = 0;
   executor.exec_->Search(query_data, *table_segment_->deleted_, limit,
-                         filter_nodes, table_segment_, result_num);
+                         filter_nodes, table_segment_, field_name_type_map_, result_num);
 
   result_num = result_num > limit ? limit : result_num;
   auto status =
