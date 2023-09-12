@@ -23,12 +23,12 @@ class Json {
   double GetDouble() const;
   bool GetBool() const;
   size_t GetSize() const;
-  Json GetObject(const std::string& key) const;                      // Get nested object
-  Json Get(const std::string& key) const;                      // Get nested json
+  Json GetObject(const std::string& key) const;  // Get nested object
+  Json Get(const std::string& key) const;        // Get nested json
   size_t GetArraySize(const std::string& key) const;
   Json GetArrayElement(const std::string& key, size_t index) const;  // Get specific element from array
-  Json GetArray(const std::string& key) const;  // Get specific element from array
-  Json GetArrayElement(size_t index) const;  // Get specific element from array
+  Json GetArray(const std::string& key) const;                       // Get specific element from array
+  Json GetArrayElement(size_t index) const;                          // Get specific element from array
   bool HasMember(const std::string& key) const;
 
   void SetString(const std::string& key, const std::string& value);
@@ -47,6 +47,9 @@ class Json {
   void AddDoubleToArray(double value);
   void AddBoolToArray(bool value);
   void AddObjectToArray(const Json& object);
+  bool IsNumber() const;
+  bool IsString() const;
+
  private:
   nlohmann::json doc_;
 };
@@ -55,7 +58,7 @@ class Json {
 
 /**
  * Usage example:
- * 
+ *
   std::string json_string = R"({
         "name": "John Doe",
         "age": 30,

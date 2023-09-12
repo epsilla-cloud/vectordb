@@ -6,7 +6,7 @@ ConcurrentBitset::ConcurrentBitset(id_type_t capacity)
     : capacity_(capacity), bitset_((capacity + 8 - 1) >> 3) {
 }
 
-bool ConcurrentBitset::test(id_type_t id) {
+bool ConcurrentBitset::test(id_type_t id) const {
   return bitset_[id >> 3].load() & (0x1 << (id & 0x7));
 }
 

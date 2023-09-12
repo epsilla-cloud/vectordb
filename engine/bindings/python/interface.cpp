@@ -13,7 +13,8 @@
 const std::string tableSchemaKey_name = "name",
                   tableSchemaKey_dataType = "dataType",
                   tableSchemaKey_dimensions = "dimensions",
-                  tableSchemaKey_autoEmbedding = "autoEmbedding";
+                  tableSchemaKey_autoEmbedding = "autoEmbedding",
+                  tableSchemaKey_isPrimaryKey = "primaryKey";
 
 PyMODINIT_FUNC
 PyInit_epsilla(void) {
@@ -110,6 +111,15 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
     Py_DECREF(nameKey);
     Py_DECREF(nameValue);
 
+    PyObject *isPkKey = PyUnicode_DecodeUTF8(tableSchemaKey_isPrimaryKey.c_str(), tableSchemaKey_isPrimaryKey.size(), "strict");
+    PyObject *isPkValue = PyDict_GetItem(dict_obj, isPkKey);
+    if (isPkValue != NULL) {
+      bool isPk = PyObject_IsTrue(isPkValue);
+      field.is_primary_key_ = isPk;
+    }
+    Py_XDECREF(isPkKey);
+    Py_XDECREF(isPkValue);
+
     PyObject *dataTypeKey = PyUnicode_DecodeUTF8(tableSchemaKey_dataType.c_str(), tableSchemaKey_dataType.size(), "strict");
     PyObject *dataTypeValue = PyObject_Str(PyDict_GetItem(dict_obj, dataTypeKey));
     const char *dataTypePtr = PyUnicode_AsUTF8(dataTypeValue);
@@ -157,6 +167,7 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
   }
   return PyLong_FromLong(int(status.code()));
 }
+
 static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
   static const char *keywords[] = {"table_name", "records", NULL};
   const char *tableNamePtr;
@@ -209,6 +220,67 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
   Py_DECREF(json_str);
 
   auto status = db->Insert(db_name, tableName, records);
+  return PyLong_FromLong(int(status.code()));
+}
+
+static PyObject *delete_by_pk(PyObject *self, PyObject *args, PyObject *kwargs) {
+  static const char *keywords[] = {"table_name", "primary_keys", NULL};
+  const char *tableNamePtr;
+  PyObject *pkListPtr;
+
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "sO", (char **)keywords, &tableNamePtr, &pkListPtr))
+    return NULL;
+  Py_XINCREF(pkListPtr);
+
+  std::string tableName = tableNamePtr;
+
+  PyObject *json_module = PyImport_ImportModule("json");
+
+  if (json_module == NULL) {
+    PyErr_SetString(PyExc_Exception, "Unable to import json module");
+    return NULL;
+  }
+
+  PyObject *dumps_func = PyObject_GetAttrString(json_module, "dumps");
+  Py_XDECREF(json_module);
+
+  if (dumps_func == NULL || !PyCallable_Check(dumps_func)) {
+    PyErr_SetString(PyExc_Exception, "Unable to get address of json.dumps method");
+    Py_XDECREF(dumps_func);
+    return NULL;
+  }
+
+  PyObject *args_tuple = PyTuple_Pack(1, pkListPtr);
+  PyObject *kwargs_dict = PyDict_New();  // You can pass keyword arguments here if needed
+  Py_XINCREF(args_tuple);
+  Py_XINCREF(kwargs_dict);
+
+  PyObject *json_str = PyObject_Call(dumps_func, args_tuple, kwargs_dict);
+  Py_XINCREF(dumps_func);
+
+  Py_XDECREF(dumps_func);
+  Py_XDECREF(args_tuple);
+  Py_XDECREF(kwargs_dict);
+  Py_XDECREF(pkListPtr);
+
+  if (json_str == NULL) {
+    PyErr_SetString(PyExc_Exception, "unable to dump records as JSON");
+    return NULL;
+  }
+
+  // Convert the PyObject to a C-style string (UTF-8)
+  const char *utf8_str = PyUnicode_AsUTF8(json_str);
+
+  if (utf8_str == NULL) {
+    return NULL;
+  }
+
+  auto records = vectordb::Json();
+  records.LoadFromString(std::string(utf8_str));
+  Py_XDECREF(json_str);
+
+  auto status = db->DeleteByPK(db_name, tableName, records);
+  std::cerr << status.message() << std::endl;
   return PyLong_FromLong(int(status.code()));
 }
 

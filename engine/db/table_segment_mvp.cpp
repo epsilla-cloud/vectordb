@@ -47,6 +47,7 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
 Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   size_limit_ = size_limit;
   primitive_offset_ = 0;
+  schema = table_schema;
 
   // Get how many primitive, vectors, and strings attributes.
   for (auto& field_schema : table_schema.fields_) {
@@ -68,10 +69,11 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       field_id_mem_offset_map_[field_schema.id_] = primitive_offset_;
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
       primitive_offset_ += FieldTypeSizeMVP(field_schema.field_type_);
-      if (field_schema.is_primary_key_) {
-        primitive_pk_field_id_ = std::make_unique<int64_t>(field_schema.id_);
-      }
       ++primitive_num_;
+    }
+
+    if (field_schema.is_primary_key_) {
+      pk_field_idx_ = std::make_unique<int64_t>(field_schema.id_);
     }
   }
 
@@ -148,9 +150,13 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     file.read(attribute_table_, record_number_ * primitive_offset_);
 
     // add pk into set
-    if (primitive_pk_field_id_) {
-      auto field = table_schema.fields_[*primitive_pk_field_id_];
+    if (isIntPK()) {
+      auto field = table_schema.fields_[*pk_field_idx_];
       for (auto rIdx = 0; rIdx < record_number_; rIdx++) {
+        // skip deleted entry
+        if (deleted_->test(rIdx)) {
+          continue;
+        }
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = 0;
@@ -198,7 +204,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
         string_table_[offset] = str;
 
         // add pk into set
-        if (string_pk_offset_ && *string_pk_offset_ == j) {
+        if (!deleted_->test(i) && string_pk_offset_ && *string_pk_offset_ == j) {
           // do not check existance to avoid additional overhead
           primary_key_.addKeyIfNotExist(str, i);
         }
@@ -225,6 +231,79 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       throw status.message();
     }
   }
+}
+
+bool TableSegmentMVP::isStringPK() const {
+  return string_pk_offset_ != nullptr;
+}
+
+bool TableSegmentMVP::isIntPK() const {
+  return pk_field_idx_ && !string_pk_offset_;
+}
+
+int64_t TableSegmentMVP::pkFieldIdx() const {
+  return *pk_field_idx_;
+}
+
+meta::FieldSchema TableSegmentMVP::pkField() const {
+  return schema.fields_[*pk_field_idx_];
+}
+
+meta::FieldType TableSegmentMVP::pkType() const {
+  return schema.fields_[*pk_field_idx_].field_type_;
+}
+
+bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
+  return deleted_->test(id);
+}
+
+Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
+  wal_global_id_ = wal_id;
+  size_t deleted_record = 0;
+  size_t new_record_size = records.GetSize();
+  if (new_record_size == 0) {
+    std::cout << "No records to delete." << std::endl;
+    return Status::OK();
+  }
+  if (isIntPK()) {
+    auto fieldType = pkType();
+    for (auto i = 0; i < new_record_size; ++i) {
+      auto pkField = records.GetArrayElement(i);
+      auto pk = pkField.GetInt();
+      switch (pkType()) {
+        case meta::FieldType::INT1:
+          deleted_record += DeleteByIntPK(static_cast<int8_t>(pk)).ok();
+          break;
+        case meta::FieldType::INT2:
+          deleted_record += DeleteByIntPK(static_cast<int16_t>(pk)).ok();
+          break;
+        case meta::FieldType::INT4:
+          deleted_record += DeleteByIntPK(static_cast<int32_t>(pk)).ok();
+          break;
+        case meta::FieldType::INT8:
+          deleted_record += DeleteByIntPK(static_cast<int64_t>(pk)).ok();
+          break;
+      }
+    }
+  } else if (isStringPK()) {
+    for (auto i = 0; i < new_record_size; ++i) {
+      auto pkField = records.GetArrayElement(i);
+      auto pk = pkField.GetString();
+      deleted_record += DeleteByStringPK(pk).ok();
+    }
+  }
+  return Status(DB_SUCCESS, "successfully deleted " + std::to_string(deleted_record) + " records.");
+}
+
+Status TableSegmentMVP::DeleteByStringPK(const std::string& pk) {
+  size_t result = 0;
+  auto found = primary_key_.getKey(pk, result);
+  if (found) {
+    deleted_->set(result);
+    primary_key_.removeKey(pk);
+    return Status::OK();
+  }
+  return Status(RECORD_NOT_FOUND, "could not find record with primary key: " + pk);
 }
 
 // Status TableSegmentMVP::DoubleSize() {
@@ -398,7 +477,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     }
     ++cursor;
 
-  LOOP_END : {}
+  LOOP_END: {}
     // nothing should be done at the end of block
   }
   record_number_.store(cursor);

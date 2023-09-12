@@ -1,9 +1,11 @@
 #include "db/execution/vec_search_executor.hpp"
-#include "utils/atomic_counter.hpp"
 
 #include <omp.h>
 
+#include <algorithm>
 #include <numeric>
+
+#include "utils/atomic_counter.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -37,7 +39,7 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations)
-    : ntotal_(ntotal),
+    : total_indexed_vector_(ntotal),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
@@ -459,7 +461,7 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
-  boost::dynamic_bitset<> is_selected(ntotal_);
+  boost::dynamic_bitset<> is_selected(total_indexed_vector_);
   int64_t init_ids_end = 0;
   for (
       int64_t e_i = offset_table_[start_search_point_];
@@ -475,7 +477,7 @@ void VecSearchExecutor::PrepareInitIds(
 
   int64_t tmp_id = start_search_point_ + 1;
   while (init_ids_end < L) {
-    if (tmp_id == ntotal_) {
+    if (tmp_id == total_indexed_vector_) {
       tmp_id = 0;
     }
     int64_t v_id = tmp_id++;
@@ -670,11 +672,11 @@ void VecSearchExecutor::SearchImpl(
     }  // Search Iterations
   }    // Parallel Phase
 
-// #pragma omp parallel for
-//   // TODO: exclude deleted and not passing filter records.
-//   for (int64_t k_i = 0; k_i < K; ++k_i) {
-//     set_K[k_i] = set_L[k_i + master_queue_start].id_;
-//   }
+  // #pragma omp parallel for
+  //   // TODO: exclude deleted and not passing filter records.
+  //   for (int64_t k_i = 0; k_i < K; ++k_i) {
+  //     set_K[k_i] = set_L[k_i + master_queue_start].id_;
+  //   }
   // for (int64_t k_i = 0; k_i < K; ++k_i) {
   //   std::cout << set_L[k_i + master_queue_start].distance_ << " " << std::endl;
   // }
@@ -685,7 +687,7 @@ void VecSearchExecutor::SearchImpl(
   }
 }
 
-bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end) {
+bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end, const ConcurrentBitset &deleted) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
@@ -694,32 +696,49 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
     float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
     brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
   }
+
+  // compacting the result with 2 pointers by removing the deleted entries
+  // iter: the iterator to loop through the brute force queue
+  // num_result: the pointer to the current right-most slot in the new result
+  int64_t iter = 0,
+          num_result = 0;
+  // remove the invalid entries
+  for (; iter < end - start; ++iter) {
+    if (!deleted.test(iter)) {
+      if (iter != num_result) {
+        brute_force_queue_[num_result] = brute_force_queue_[iter];
+      }
+      num_result++;
+    }
+  }
+  brute_force_queue_.resize(num_result);
   std::sort(
       brute_force_queue_.begin(),
-      brute_force_queue_.begin() + end - start);
+      brute_force_queue_.end());
   return true;
 }
 
-Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const int64_t total, int64_t& result_size) {
-  if (K >= L_local_) {
-    // TODO: support search for large K.
-    return Status(DB_UNEXPECTED_ERROR, "Cannot search more than " + std::to_string(L_local_) + " results.");
-  }
+Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const size_t limit, const int64_t total_vector, int64_t &result_size) {
+  // currently the max returned result is L_local_
+  // TODO: support larger search results
+  std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
+            << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
+            << total_vector << std::endl;
+
   if (brute_force_search_) {
-    BruteForceSearch(query_data, 0, total);
-    result_size = K < total ? K : total;
-    // TODO: exclude deleted and not passing filter records.
+    BruteForceSearch(query_data, 0, total_vector, deleted);
+    result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       distance_[k_i] = brute_force_queue_[k_i].distance_;
-      // std::cout << brute_force_queue_[k_i].distance_ << " " << std::endl;
     }
-    // std::cout << std::endl;
   } else {
-    int64_t K1 = K < ntotal_ ? K : ntotal_;
+    // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
+    // create circular dependency)
+    auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
     SearchImpl(
         query_data,
-        K,
+        searchLimit,
         L_master_,
         set_L_,
         init_ids_,
@@ -729,37 +748,45 @@ Status VecSearchExecutor::Search(const float *query_data, const int64_t K, const
         local_queues_sizes_,
         is_visited_,
         subsearch_iterations_);
-    // std::cout << total << " " << ntotal_ << std::endl;
-    if (total > ntotal_) {
+    if (total_vector > total_indexed_vector_) {
       // Need to brute force search the newly added but haven't been indexed vectors.
-      BruteForceSearch(query_data, ntotal_, total);
-      int64_t K2 = K < (total - ntotal_) ? K : (total - ntotal_);
+      BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted);
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
+      auto bruteForceQueueSize = std::min({brute_force_queue_.size(), limit});
       MergeTwoQueuesInto1stQueueSeqFixed(
-        set_L_,
-        master_queue_start,
-        K1,
-        brute_force_queue_,
-        0,
-        K2);
-      result_size = K < total ? K : total;
-      // TODO: exclude deleted and not passing filter records.
-#pragma omp parallel for
-      for (int64_t k_i = 0; k_i < result_size; ++k_i) {
-        search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
-        distance_[k_i] = set_L_[k_i + master_queue_start].distance_;
+          set_L_,
+          master_queue_start,
+          searchLimit,
+          brute_force_queue_,
+          0,
+          bruteForceQueueSize);
+
+      result_size = 0;
+      auto candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
+      for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
+        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+          continue;
+        }
+        search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
+        distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
+        result_size++;
       }
     } else {
-      result_size = K1;
+      result_size = 0;
+      auto candidateNum = std::min({size_t(L_master_), size_t(total_indexed_vector_)});
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
-#pragma omp parallel for
-      // TODO: exclude deleted and not passing filter records.
-      for (int64_t k_i = 0; k_i < K1; ++k_i) {
-        search_result_[k_i] = set_L_[k_i + master_queue_start].id_;
-        distance_[k_i] = set_L_[k_i + master_queue_start].distance_;
+      for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
+        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+          continue;
+        }
+        search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
+        distance_[result_size] = set_L_[k_i + master_queue_start].distance_;
+        result_size++;
       }
     }
+    search_result_.resize(result_size);
+    distance_.resize(result_size);
   }
   return Status::OK();
 }
