@@ -864,7 +864,7 @@ Status VecSearchExecutor::Search(
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
         auto id = set_L_[k_i + master_queue_start].id_;
         auto field_value_map = GenFieldValueMap(table_segment, field_name_type_map, filter_root_index, id);
-        if (deleted.test(id) && !expr_evaluator->LogicalEvaluate(filter_root_index, field_value_map)) {
+        if (deleted.test(id) || !expr_evaluator->LogicalEvaluate(filter_root_index, field_value_map)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
@@ -878,7 +878,7 @@ Status VecSearchExecutor::Search(
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
         auto id = set_L_[k_i + master_queue_start].id_;
         auto field_value_map = GenFieldValueMap(table_segment, field_name_type_map, filter_root_index, id);
-        if (deleted.test(id) && !expr_evaluator->LogicalEvaluate(filter_root_index, field_value_map)) {
+        if (deleted.test(id) || !expr_evaluator->LogicalEvaluate(filter_root_index, field_value_map)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
