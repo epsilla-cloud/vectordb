@@ -1,4 +1,6 @@
 #include "db/execution/vec_search_executor.hpp"
+#include "query/expr/expr.hpp"
+#include "query/expr/expr_evaluation.hpp"
 
 #include <omp.h>
 
@@ -718,7 +720,15 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
   return true;
 }
 
-Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const size_t limit, const int64_t total_vector, int64_t &result_size) {
+Status VecSearchExecutor::Search(
+  const float *query_data,
+  const ConcurrentBitset &deleted,
+  const size_t limit,
+  const int64_t total_vector,
+  std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+  std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
+  int64_t &result_size
+) {
   // currently the max returned result is L_local_
   // TODO: support larger search results
   std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_

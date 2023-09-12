@@ -15,6 +15,7 @@
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
+#include "query/expr/expr_types.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
@@ -52,6 +53,7 @@ class VecSearchExecutor {
   std::vector<int64_t> local_queues_starts_;
   bool brute_force_search_;
   std::vector<Candidate> brute_force_queue_;
+  std::shared_ptr<
 
   VecSearchExecutor(
       const int64_t ntotal,
@@ -176,7 +178,14 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(const float* query_data, const int64_t start, const int64_t end, const ConcurrentBitset& deleted);
-  Status Search(const float* query_data, const ConcurrentBitset& deleted, const size_t limit, const int64_t total, int64_t& result_size);
+  Status Search(
+    const float* query_data,
+    const ConcurrentBitset& deleted,
+    const size_t limit,
+    const int64_t total,
+    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+    std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
+    int64_t& result_size);
 };  // Class VecSearchExecutor
 
 }  // namespace execution

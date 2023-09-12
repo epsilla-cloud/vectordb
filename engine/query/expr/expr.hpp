@@ -1,5 +1,3 @@
-#pragma once
-
 #include <string>
 #include <unordered_map>
 
@@ -17,7 +15,6 @@ class Expr {
       std::vector<ExprNodePtr>& nodes,
       std::unordered_map<std::string, engine::meta::FieldType>& field_map
     );
-
     static Status DumpToJson(ExprNodePtr& node, Json& json);
 };
 
