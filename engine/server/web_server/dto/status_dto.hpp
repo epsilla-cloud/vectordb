@@ -36,8 +36,8 @@ class TableListDto : public oatpp::DTO {
   DTO_FIELD(List<String>, result);
 };
 
-class SearchRespDto : public oatpp::DTO {
-  DTO_INIT(SearchRespDto, DTO);
+class ObjectRespDto : public oatpp::DTO {
+  DTO_INIT(ObjectRespDto, DTO);
 
   DTO_FIELD(Int32, statusCode);
   DTO_FIELD(String, message);

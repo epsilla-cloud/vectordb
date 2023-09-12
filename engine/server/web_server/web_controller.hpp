@@ -653,7 +653,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         return createDtoResponse(code, dto);
       }
 
-      auto res_dto = SearchRespDto::createShared();
+      auto res_dto = ObjectRespDto::createShared();
       res_dto->statusCode = Status::CODE_200.code;
       res_dto->message = "Get root node successfully.";
       std::cout << nodes.size() << std::endl;

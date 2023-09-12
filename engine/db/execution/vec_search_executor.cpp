@@ -724,11 +724,11 @@ Status VecSearchExecutor::Search(
   const float *query_data,
   const ConcurrentBitset &deleted,
   const size_t limit,
-  const int64_t total_vector,
   std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
   std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
   int64_t &result_size
 ) {
+  int64_t total_vector = table_segment->record_number_;
   // currently the max returned result is L_local_
   // TODO: support larger search results
   std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_

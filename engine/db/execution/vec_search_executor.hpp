@@ -181,7 +181,6 @@ class VecSearchExecutor {
     const float* query_data,
     const ConcurrentBitset& deleted,
     const size_t limit,
-    const int64_t total,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
     int64_t& result_size);
