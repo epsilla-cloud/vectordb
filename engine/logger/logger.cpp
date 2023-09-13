@@ -36,6 +36,10 @@ void Log(LogLevel level, const std::string& message) {
   }
 };
 
+void Logger::Error(const std::string& message) {
+  Log(LogLevel::ERROR, message);
+}
+
 void Logger::Info(const std::string& message) {
   Log(LogLevel::INFO, message);
 };

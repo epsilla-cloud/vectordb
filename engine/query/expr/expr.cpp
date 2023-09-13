@@ -9,15 +9,13 @@
 #include <boost/algorithm/string/join.hpp>
 
 #include "db/catalog/meta_types.hpp"
+#include "logger/logger.hpp"
 #include "utils/status.hpp"
 #include "expr.hpp"
-#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace query {
 namespace expr {
-
-std::shared_ptr<vectordb::engine::Logger> logger = std::make_shared<vectordb::engine::Logger>();
 
 enum class State {
   Start,
@@ -411,22 +409,18 @@ Status GenerateNodes(
         node->node_type = NodeType::BoolConst;
         node->value_type = ValueType::BOOL;
         node->bool_value = to_bool(token);
-        std::cout << node->bool_value << std::endl;
       } else if (token[0] == '\'') {
         node->node_type = NodeType::StringConst;
         node->value_type = ValueType::STRING;
         node->str_value = token.substr(1, token.size() - 2);
-        std::cout << node->str_value << std::endl;
       } else if (isIntConstant(token)) {
         node->node_type = NodeType::IntConst;
         node->value_type = ValueType::INT;
         node->int_value = std::stoi(token);
-        std::cout << node->int_value << std::endl;
       } else if (isDoubleConstant(token)) {
         node->node_type = NodeType::DoubleConst;
         node->value_type = ValueType::DOUBLE;
         node->double_value = std::stod(token);
-        std::cout << node->double_value << std::endl;
       } else {
         // TODO: attribute node validating with table schema
         // node->node_type = NodeType::StringAttr;
@@ -491,22 +485,22 @@ Status Expr::ParseNodeFromStr(
     return Status::OK();
   }
 
+  std::shared_ptr<vectordb::engine::Logger> logger = std::make_shared<vectordb::engine::Logger>();
+
   // Parse string into token arr
   std::vector<std::string> token_list;
   Status parsing_status = SplitTokens(expression, token_list);
   if (!parsing_status.ok()) {
-    std::cout << parsing_status.message() << std::endl;
+    logger->Error(parsing_status.message());
     return parsing_status;
   }
 
-  std::cout << expression + " transfer to: " + boost::algorithm::join(token_list, ", ") << std::endl;
-
   std::vector<std::string> tokens_queue;
   tokens_queue = ShuntingYard(token_list);
-  std::cout << "After SY: " + boost::algorithm::join(tokens_queue, ", ") << std::endl;
 
   Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map);
   if (!nodes_status.ok()) {
+    logger->Error(nodes_status.message());
     return nodes_status;
   }
 

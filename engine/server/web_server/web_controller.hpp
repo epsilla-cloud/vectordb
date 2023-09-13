@@ -20,7 +20,6 @@
 #include "server/web_server/utils/util.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
-#include "query/expr/expr.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -43,7 +42,6 @@ class WebController : public oatpp::web::server::api::ApiController {
   }
 
   std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
-    // vectordb::query::expr::ExprPtr expr_ptr = std::make_shared<vectordb::query::expr::Expr>();
   // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
 
 /**
@@ -510,13 +508,6 @@ class WebController : public oatpp::web::server::api::ApiController {
       with_distance
     );
 
-    // if (!filter_status.ok()) {
-      //   oatpp::web::protocol::http::Status code =
-      //     filter_status.code() == NOT_IMPLEMENTED_ERROR ? Status::CODE_501 : Status::CODE_400;
-      //   status_dto->statusCode = code.code;
-      //   status_dto->message = filter_status.message();
-      //   return createDtoResponse(code, status_dto);
-      // }
     if (!search_status.ok()) {
       oatpp::web::protocol::http::Status status;
       switch (search_status.code()) {

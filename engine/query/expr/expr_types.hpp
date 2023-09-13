@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <iostream>
 #include <string>
 #include <unordered_map>
 
@@ -82,28 +81,6 @@ enum class ValueType {
     DOUBLE,
     BOOL
 };
-
-// union NodeDataType {
-//     std::string strValue;
-//     int intValue;
-//     double doubleValue;
-//     bool boolValue;
-
-//     NodeDataType(): strValue("") {}
-//     ~NodeDataType() {}
-// };
-
-// union NodeOperatorType {
-//     ArithmeticOperator arithmetic;
-//     CompareOperator compare;
-//     LogicalOperator logical;
-
-//     NodeOperatorType(ArithmeticOperator op): arithmetic(op) {}
-//     NodeOperatorType(CompareOperator op): compare(op) {}
-//     NodeOperatorType(LogicalOperator op): logical(op) {}
-//     NodeOperatorType(): logical(LogicalOperator::INVALID) {}
-//     ~NodeOperatorType() {}
-// };
 
 struct ExprNode {
     ValueType value_type;

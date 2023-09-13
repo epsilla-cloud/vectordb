@@ -210,12 +210,6 @@ Status DBServer::Search(const std::string& db_name,
     return expr;
   }
 
-  for (auto node : expr_nodes) {
-    Json res;
-    query::expr::Expr::DumpToJson(node, res);
-    std::cout << res.DumpToString() << std::endl;
-  }
-
   return table->Search(field_name, query_fields, query_dimension, query_data, limit,
                        result, expr_nodes, with_distance);
 }
