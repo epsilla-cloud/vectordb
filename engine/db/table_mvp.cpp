@@ -5,7 +5,6 @@
 #include <numeric>
 
 #include "db/catalog/meta_types.hpp"
-#include "query/expr/expr.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -198,9 +197,8 @@ Status TableMVP::Search(const std::string &field_name,
 
   // Search.
   int64_t result_num = 0;
-  executor.exec_->Search(query_data, *table_segment_->deleted_, limit,
-                         filter_nodes, table_segment_, field_name_type_map_, result_num);
-
+  executor.exec_->Search(query_data, table_segment_.get(), limit,
+                         filter_nodes, result_num);
   result_num = result_num > limit ? limit : result_num;
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,

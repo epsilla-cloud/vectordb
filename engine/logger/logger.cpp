@@ -1,7 +1,7 @@
-#include <iostream>
-#include <ctime>
-
 #include "logger.hpp"
+
+#include <ctime>
+#include <iostream>
 
 namespace vectordb {
 namespace engine {
@@ -48,5 +48,5 @@ void Logger::Warning(const std::string& message) {
   Log(LogLevel::WARNING, message);
 }
 
-} // namespace engine
-} // namespace vectordb
+}  // namespace engine
+}  // namespace vectordb

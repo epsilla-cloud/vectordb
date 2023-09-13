@@ -15,8 +15,8 @@
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
-#include "query/expr/expr_types.hpp"
 #include "query/expr/expr_evaluator.hpp"
+#include "query/expr/expr_types.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
@@ -178,22 +178,19 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(
-    const float* query_data,
-    const int64_t start,
-    const int64_t end,
-    const ConcurrentBitset& deleted,
-    std::shared_ptr<vectordb::query::expr::ExprEvaluator>& expr_evaluator,
-    std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
-    std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    const int root_node_index);
+      const float* query_data,
+      const int64_t start,
+      const int64_t end,
+      const ConcurrentBitset& deleted,
+      vectordb::query::expr::ExprEvaluator& expr_evaluator,
+      vectordb::engine::TableSegmentMVP* table_segment,
+      const int root_node_index);
   Status Search(
-    const float* query_data,
-    const ConcurrentBitset& deleted,
-    const size_t limit,
-    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
-    std::shared_ptr<vectordb::engine::TableSegmentMVP>& table_segment,
-    std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    int64_t& result_size);
+      const float* query_data,
+      vectordb::engine::TableSegmentMVP* table_segment,
+      const size_t limit,
+      std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
+      int64_t& result_size);
 };  // Class VecSearchExecutor
 
 }  // namespace execution

@@ -1,17 +1,13 @@
-#include <iostream>
-#include <sstream>
+#include "expr.hpp"
+
 #include <algorithm>
+#include <queue>
 #include <regex>
 #include <stack>
-#include <queue>
 #include <unordered_map>
 #include <vector>
-#include <boost/algorithm/string/join.hpp>
 
-#include "db/catalog/meta_types.hpp"
 #include "logger/logger.hpp"
-#include "utils/status.hpp"
-#include "expr.hpp"
 
 namespace vectordb {
 namespace query {
@@ -43,17 +39,17 @@ bool isCompareStr(std::string str) {
 
 bool isLogicalStr(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
-      return std::toupper(c);
+    return std::toupper(c);
   });
   return str == "AND" || str == "OR" || str == "NOT";
 };
 
 bool isUnsupportedLogicalOp(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
-      return std::toupper(c);
+    return std::toupper(c);
   });
   return str == "ALL" || str == "ANY" || str == "BETWEEN" || str == "EXISTS" || str == "IN" ||
-    str == "LIKE" || str == "SOME";
+         str == "LIKE" || str == "SOME";
 }
 
 bool isOperator(std::string str) {
@@ -78,7 +74,7 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
   std::string cur_token;
 
   size_t last_index = expression.length() - 1;
-  for (size_t i = 0; i < expression.length(); ) {
+  for (size_t i = 0; i < expression.length();) {
     char c = expression[i];
     switch (state) {
       case State::Start:
@@ -123,10 +119,7 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         if (c == '\'') {
           i++;
           cur_token += c;
-          if (cur_token == "''") {
-            return Status(INVALID_EXPR, "String constant cannot be empty.");
-          }
-          if (cur_token.size() > 2) {
+          if (cur_token.size() >= 2) {
             token_list.push_back(cur_token);
             cur_token.clear();
             state = State::Start;
@@ -159,7 +152,9 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
           } else {
             token_list.push_back(cur_token);
             cur_token.clear();
-            i++;
+            if (std::isspace(c)) {
+              i++;
+            }
             state = State::Start;
           }
         } else if (std::isdigit(c)) {
@@ -209,31 +204,31 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
 
 std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
   std::vector<std::string> res;
-  std::stack<std::string> operatorStack;
+  std::stack<std::string> operator_stack;
 
   for (std::string str : tokens) {
     if (str == "(") {
-      operatorStack.push(str);
+      operator_stack.push(str);
     } else if (str == ")") {
-      while (!operatorStack.empty() && operatorStack.top() != "(") {
-        res.push_back(operatorStack.top());
-        operatorStack.pop();
+      while (!operator_stack.empty() && operator_stack.top() != "(") {
+        res.push_back(operator_stack.top());
+        operator_stack.pop();
       }
-      operatorStack.pop(); // Pop the '('
+      operator_stack.pop();  // Pop the '('
     } else if (isOperator(str)) {
-      while (!operatorStack.empty() && getPrecedence(operatorStack.top()) >= getPrecedence(str)) {
-        res.push_back(operatorStack.top());
-        operatorStack.pop();
+      while (!operator_stack.empty() && getPrecedence(operator_stack.top()) >= getPrecedence(str)) {
+        res.push_back(operator_stack.top());
+        operator_stack.pop();
       }
-      operatorStack.push(str);
+      operator_stack.push(str);
     } else {
       res.push_back(str);
     }
   }
 
-  while (!operatorStack.empty()) {
-      res.push_back(operatorStack.top());
-      operatorStack.pop();
+  while (!operator_stack.empty()) {
+    res.push_back(operator_stack.top());
+    operator_stack.pop();
   }
 
   return res;
@@ -241,7 +236,7 @@ std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
 
 bool isBoolConstant(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
-      return std::toupper(c);
+    return std::toupper(c);
   });
   return str == "TRUE" || str == "FALSE";
 };
@@ -268,7 +263,7 @@ bool to_bool(std::string str) {
 
 bool isNotOperator(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
-      return std::toupper(c);
+    return std::toupper(c);
   });
   return str == "NOT";
 };
@@ -276,13 +271,13 @@ bool isNotOperator(std::string str) {
 NodeType GetOperatorNodeType(std::string op) {
   if (isLogicalStr(op)) {
     std::transform(op.begin(), op.end(), op.begin(), [](unsigned char c) {
-        return std::toupper(c);
+      return std::toupper(c);
     });
   }
 
   auto it = OperatorNodeTypeMap.find(op);
   if (it != OperatorNodeTypeMap.end()) {
-      return it->second;
+    return it->second;
   }
 
   return NodeType::Invalid;
@@ -299,8 +294,7 @@ Status CheckCompatible(std::string& op, ValueType& left, ValueType& right, Value
   if (isCompareStr(op)) {
     if (op != "=" && op != "<>") {
       if (left == ValueType::STRING || left == ValueType::BOOL ||
-          right == ValueType::STRING || right == ValueType::BOOL
-      ) {
+          right == ValueType::STRING || right == ValueType::BOOL) {
         return Status(INVALID_EXPR, op + " statement is invalid.");
       }
     } else {
@@ -349,11 +343,10 @@ Status CheckCompatible(std::string& op, ValueType& left, ValueType& right, Value
 };
 
 Status GenerateNodes(
-  std::vector<std::string>& tokens,
-  std::vector<ExprNodePtr>& nodes,
-  std::unordered_map<std::string, engine::meta::FieldType>& field_map
-) {
-  std::stack<ExprNodePtr> nodeStack;
+    std::vector<std::string>& tokens,
+    std::vector<ExprNodePtr>& nodes,
+    std::unordered_map<std::string, engine::meta::FieldType>& field_map) {
+  std::stack<ExprNodePtr> node_stack;
   std::vector<ExprNodePtr> node_list;
 
   for (std::string token : tokens) {
@@ -362,12 +355,12 @@ Status GenerateNodes(
     } else if (isOperator(token)) {
       ExprNodePtr node = std::make_shared<ExprNode>();
       if (isNotOperator(token)) {
-        if (nodeStack.empty()) {
+        if (node_stack.empty()) {
           return Status(INVALID_EXPR, "Filter expression is invalid.");
         }
 
-        ExprNodePtr child_node = nodeStack.top();
-        nodeStack.pop();
+        ExprNodePtr child_node = node_stack.top();
+        node_stack.pop();
         if (child_node->value_type != ValueType::BOOL) {
           return Status(INVALID_EXPR, "NOT statement is invalid.");
         }
@@ -378,17 +371,17 @@ Status GenerateNodes(
         node->left = node_list.size() - 1;
         node->right = -1;
 
-        nodeStack.push(node);
+        node_stack.push(node);
       } else {
-        if (nodeStack.size() < 2) {
+        if (node_stack.size() < 2) {
           return Status(INVALID_EXPR, "Filter expression is invalid.");
         }
 
         node->node_type = GetOperatorNodeType(token);
-        ExprNodePtr right_node = nodeStack.top();
-        nodeStack.pop();
-        ExprNodePtr left_node = nodeStack.top();
-        nodeStack.pop();
+        ExprNodePtr right_node = node_stack.top();
+        node_stack.pop();
+        ExprNodePtr left_node = node_stack.top();
+        node_stack.pop();
 
         Status compability_status = CheckCompatible(token, left_node->value_type, right_node->value_type, node->value_type);
         if (!compability_status.ok()) {
@@ -399,7 +392,7 @@ Status GenerateNodes(
         node->left = node_list.size() - 2;
         node->right = node_list.size() - 1;
 
-        nodeStack.push(node);
+        node_stack.push(node);
       }
     } else {
       ExprNodePtr node = std::make_shared<ExprNode>();
@@ -422,9 +415,6 @@ Status GenerateNodes(
         node->value_type = ValueType::DOUBLE;
         node->double_value = std::stod(token);
       } else {
-        // TODO: attribute node validating with table schema
-        // node->node_type = NodeType::StringAttr;
-        // node->value_type = ValueType::STRING;
         if (field_map.find(token) == field_map.end()) {
           return Status(INVALID_EXPR, "Invalid filter expression: field name '" + token + "' not found.");
         }
@@ -432,15 +422,27 @@ Status GenerateNodes(
         engine::meta::FieldType field_type = field_map[token];
         switch (field_type) {
           case engine::meta::FieldType::INT1:
+            node->node_type = NodeType::Int1Attr;
+            node->value_type = ValueType::INT;
+            break;
           case engine::meta::FieldType::INT2:
+            node->node_type = NodeType::Int2Attr;
+            node->value_type = ValueType::INT;
+            break;
           case engine::meta::FieldType::INT4:
+            node->node_type = NodeType::Int4Attr;
+            node->value_type = ValueType::INT;
+            break;
           case engine::meta::FieldType::INT8:
-            node->node_type = NodeType::IntAttr;
+            node->node_type = NodeType::Int8Attr;
             node->value_type = ValueType::INT;
             break;
           case engine::meta::FieldType::DOUBLE:
-          case engine::meta::FieldType::FLOAT:
             node->node_type = NodeType::DoubleAttr;
+            node->value_type = ValueType::DOUBLE;
+            break;
+          case engine::meta::FieldType::FLOAT:
+            node->node_type = NodeType::FloatAttr;
             node->value_type = ValueType::DOUBLE;
             break;
           case engine::meta::FieldType::BOOL:
@@ -456,16 +458,16 @@ Status GenerateNodes(
         }
       }
 
-      nodeStack.push(node);
+      node_stack.push(node);
     }
   }
 
-  if (nodeStack.size() != 1) {
+  if (node_stack.size() != 1) {
     return Status(INVALID_EXPR, "Filter expression is invalid.");
   }
 
-  node_list.push_back(nodeStack.top());
-  nodeStack.pop();
+  node_list.push_back(node_stack.top());
+  node_stack.pop();
 
   if (node_list.back()->value_type != ValueType::BOOL) {
     return Status(INVALID_EXPR, "Filter should be a boolean expression,");
@@ -476,22 +478,21 @@ Status GenerateNodes(
 };
 
 Status Expr::ParseNodeFromStr(
-  std::string expression,
-  std::vector<ExprNodePtr>& nodes,
-  std::unordered_map<std::string, engine::meta::FieldType>& field_map
-) {
+    std::string expression,
+    std::vector<ExprNodePtr>& nodes,
+    std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map) {
   // Skip if expression is empty.
   if (expression == "") {
     return Status::OK();
   }
 
-  std::shared_ptr<vectordb::engine::Logger> logger = std::make_shared<vectordb::engine::Logger>();
+  vectordb::engine::Logger logger;
 
   // Parse string into token arr
   std::vector<std::string> token_list;
   Status parsing_status = SplitTokens(expression, token_list);
   if (!parsing_status.ok()) {
-    logger->Error(parsing_status.message());
+    logger.Error(parsing_status.message());
     return parsing_status;
   }
 
@@ -500,7 +501,7 @@ Status Expr::ParseNodeFromStr(
 
   Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map);
   if (!nodes_status.ok()) {
-    logger->Error(nodes_status.message());
+    logger.Error(nodes_status.message());
     return nodes_status;
   }
 
@@ -532,6 +533,6 @@ Status Expr::DumpToJson(ExprNodePtr& node, Json& json) {
   return Status::OK();
 };
 
-} // namespace expr
-} // namespace query
-} // namespace vectordb
+}  // namespace expr
+}  // namespace query
+}  // namespace vectordb

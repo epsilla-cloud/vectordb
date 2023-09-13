@@ -9,7 +9,7 @@
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
 #include "db/table_mvp.hpp"
-#include "query/expr/expr_types.hpp"
+#include "query/expr/expr.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {

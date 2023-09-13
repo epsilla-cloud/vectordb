@@ -4,8 +4,6 @@
 #include <string>
 
 #include "db/catalog/basic_meta_impl.hpp"
-#include "query/expr/expr.hpp"
-#include "query/expr/expr_types.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -205,9 +203,9 @@ Status DBServer::Search(const std::string& db_name,
 
   // Filter validation
   std::vector<query::expr::ExprNodePtr> expr_nodes;
-  Status expr = query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
-  if (!expr.ok()) {
-    return expr;
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  if (!expr_parse_status.ok()) {
+    return expr_parse_status;
   }
 
   return table->Search(field_name, query_fields, query_dimension, query_data, limit,
