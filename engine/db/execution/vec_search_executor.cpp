@@ -744,9 +744,9 @@ Status VecSearchExecutor::Search(
   int filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
   // TODO: support larger search results
-  std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
-            << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
-            << total_vector << std::endl;
+  // std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
+  //           << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
+  //           << total_vector << std::endl;
 
   if (brute_force_search_) {
     BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);

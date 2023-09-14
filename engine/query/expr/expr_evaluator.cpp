@@ -63,7 +63,7 @@ int64_t ExprEvaluator::GetIntFieldValue(const std::string& field_name, const int
   return result;
 }
 
-double ExprEvaluator::GetDoubleFieldValue(const std::string& field_name, const int64_t& cand_ind, NodeType& node_type) {
+double ExprEvaluator::GetRealNumberFieldValue(const std::string& field_name, const int64_t& cand_ind, NodeType& node_type) {
   auto offset = field_name_mem_offset_map_[field_name] + cand_ind * primitive_offset_;
   if (node_type == NodeType::DoubleAttr) {
     double* ptr = reinterpret_cast<double*>(&attribute_table_[offset]);
@@ -108,7 +108,7 @@ double ExprEvaluator::NumEvaluate(const int& node_index, const int64_t& cand_ind
     return GetIntFieldValue(name, cand_ind, node_type);
   } else if (node_type == NodeType::DoubleAttr || node_type == NodeType::FloatAttr) {
     auto name = root->field_name;
-    return GetDoubleFieldValue(name, cand_ind, node_type);
+    return GetRealNumberFieldValue(name, cand_ind, node_type);
   } else if (root->left != -1 && root->right != -1) {
     auto left = NumEvaluate(root->left, cand_ind);
     auto right = NumEvaluate(root->right, cand_ind);
