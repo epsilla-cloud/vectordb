@@ -484,6 +484,11 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     int64_t limit = parsedBody.GetInt("limit");
 
+    std::string filter;
+    if (parsedBody.HasMember("filter")) {
+      filter = parsedBody.GetString("filter");
+    }
+
     bool with_distance = false;
     if (parsedBody.HasMember("withDistance")) {
       with_distance = parsedBody.GetBool("withDistance");
@@ -491,14 +496,37 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     vectordb::Json result;
     vectordb::Status search_status = db_server->Search(
-        db_name, table_name, field_name, query_fields, vector_size, query_vector, limit, result, with_distance);
+      db_name,
+      table_name,
+      field_name,
+      query_fields,
+      vector_size,
+      query_vector,
+      limit,
+      result,
+      filter,
+      with_distance
+    );
+
     if (!search_status.ok()) {
-      status_dto->statusCode = Status::CODE_500.code;
+      oatpp::web::protocol::http::Status status;
+      switch (search_status.code()) {
+        case INVALID_EXPR:
+          status = Status::CODE_400;
+          break;
+        case NOT_IMPLEMENTED_ERROR:
+          status = Status::CODE_501;
+          break;
+        default:
+          status = Status::CODE_500;
+          break;
+      }
+      status_dto->statusCode = status.code;
       status_dto->message = search_status.message();
-      return createDtoResponse(Status::CODE_500, status_dto);
+      return createDtoResponse(status, status_dto);
     }
 
-    auto res_dto = SearchRespDto::createShared();
+    auto res_dto = ObjectRespDto::createShared();
     res_dto->statusCode = Status::CODE_200.code;
     res_dto->message = "Query search successfully.";
     oatpp::parser::json::mapping::ObjectMapper mapper;
@@ -548,7 +576,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_500, status_dto);
     }
 
-    auto res_dto = SearchRespDto::createShared();
+    auto res_dto = ObjectRespDto::createShared();
     res_dto->statusCode = Status::CODE_200.code;
     res_dto->message = "Query get successfully.";
     oatpp::parser::json::mapping::ObjectMapper mapper;

@@ -158,6 +158,7 @@ Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
                         int64_t query_dimension, const float *query_data,
                         const int64_t limit, vectordb::Json &result,
+                        std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
                         bool with_distance) {
   // Check if field_name exists.
   if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
@@ -196,9 +197,8 @@ Status TableMVP::Search(const std::string &field_name,
 
   // Search.
   int64_t result_num = 0;
-  executor.exec_->Search(query_data, *table_segment_->deleted_, limit, table_segment_->record_number_,
-                         result_num);
-
+  executor.exec_->Search(query_data, table_segment_.get(), limit,
+                         filter_nodes, result_num);
   result_num = result_num > limit ? limit : result_num;
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,

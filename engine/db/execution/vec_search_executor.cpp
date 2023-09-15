@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "query/expr/expr.hpp"
 #include "utils/atomic_counter.hpp"
 
 namespace vectordb {
@@ -687,7 +688,14 @@ void VecSearchExecutor::SearchImpl(
   }
 }
 
-bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t start, const int64_t end, const ConcurrentBitset &deleted) {
+bool VecSearchExecutor::BruteForceSearch(
+    const float *query_data,
+    const int64_t start,
+    const int64_t end,
+    const ConcurrentBitset &deleted,
+    vectordb::query::expr::ExprEvaluator &expr_evaluator,
+    vectordb::engine::TableSegmentMVP *table_segment,
+    const int root_node_index) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
@@ -704,7 +712,7 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
           num_result = 0;
   // remove the invalid entries
   for (; iter < end - start; ++iter) {
-    if (!deleted.test(iter)) {
+    if (!deleted.test(iter) && expr_evaluator.LogicalEvaluate(root_node_index, iter)) {
       if (iter != num_result) {
         brute_force_queue_[num_result] = brute_force_queue_[iter];
       }
@@ -718,15 +726,30 @@ bool VecSearchExecutor::BruteForceSearch(const float *query_data, const int64_t 
   return true;
 }
 
-Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset &deleted, const size_t limit, const int64_t total_vector, int64_t &result_size) {
+Status VecSearchExecutor::Search(
+    const float *query_data,
+    vectordb::engine::TableSegmentMVP *table_segment,
+    const size_t limit,
+    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+    int64_t &result_size) {
+  int64_t total_vector = table_segment->record_number_;
+  ConcurrentBitset &deleted = *(table_segment->deleted_);
+  vectordb::query::expr::ExprEvaluator expr_evaluator(
+      filter_nodes,
+      table_segment->field_name_mem_offset_map_,
+      table_segment->primitive_offset_,
+      table_segment->string_num_,
+      table_segment->attribute_table_,
+      table_segment->string_table_);
+  int filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
   // TODO: support larger search results
-  std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
-            << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
-            << total_vector << std::endl;
+  // std::cout << "search with limit: " << limit << " brute force: " << brute_force_search_
+  //           << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
+  //           << total_vector << std::endl;
 
   if (brute_force_search_) {
-    BruteForceSearch(query_data, 0, total_vector, deleted);
+    BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
@@ -750,7 +773,7 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
         subsearch_iterations_);
     if (total_vector > total_indexed_vector_) {
       // Need to brute force search the newly added but haven't been indexed vectors.
-      BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted);
+      BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       auto bruteForceQueueSize = std::min({brute_force_queue_.size(), limit});
@@ -765,7 +788,8 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
       result_size = 0;
       auto candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
-        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+        auto id = set_L_[k_i + master_queue_start].id_;
+        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
@@ -777,7 +801,8 @@ Status VecSearchExecutor::Search(const float *query_data, const ConcurrentBitset
       auto candidateNum = std::min({size_t(L_master_), size_t(total_indexed_vector_)});
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
-        if (deleted.test(set_L_[k_i + master_queue_start].id_)) {
+        auto id = set_L_[k_i + master_queue_start].id_;
+        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
