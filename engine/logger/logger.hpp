@@ -1,12 +1,16 @@
 #pragma once
 
+#include <string>
+
 namespace vectordb {
 namespace engine {
 
 class Logger {
-  public:
-    void info(const std::string& message);
+ public:
+  void Error(const std::string& message);
+  void Info(const std::string& message);
+  void Warning(const std::string& message);
 };
 
-} // namespace engine
-} // namespace vectordb
+}  // namespace engine
+}  // namespace vectordb

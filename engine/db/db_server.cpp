@@ -190,6 +190,7 @@ Status DBServer::Search(const std::string& db_name,
                         std::vector<std::string>& query_fields,
                         int64_t query_dimension, const float* query_data,
                         const int64_t limit, vectordb::Json& result,
+                        const std::string& filter,
                         bool with_distance) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
@@ -199,8 +200,16 @@ Status DBServer::Search(const std::string& db_name,
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
+
+  // Filter validation
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  if (!expr_parse_status.ok()) {
+    return expr_parse_status;
+  }
+
   return table->Search(field_name, query_fields, query_dimension, query_data, limit,
-                       result, with_distance);
+                       result, expr_nodes, with_distance);
 }
 
 Status DBServer::Project(const std::string& db_name,

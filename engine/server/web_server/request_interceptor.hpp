@@ -13,7 +13,7 @@ public:
     std::string full_path = request->getStartingLine().path.toString();
 
     // Log the full request path
-    logger->info(full_path);
+    logger->Info(full_path);
 
     // Return nullptr to continue processing the request
     return nullptr;

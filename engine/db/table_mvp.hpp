@@ -48,6 +48,7 @@ class TableMVP {
       const float *query_data,
       const int64_t limit,
       vectordb::Json &result,
+      std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       bool with_distance);
 
   Status Project(
