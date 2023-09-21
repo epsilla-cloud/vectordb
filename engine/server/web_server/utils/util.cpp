@@ -54,7 +54,6 @@ vectordb::engine::meta::MetricType WebUtil::GetMetricType(std::string& type) {
     return it->second;
   }
 
-  // TODO: need to return UNKNOWN after EUCLIDEAN support only.
   return vectordb::engine::meta::MetricType::UNKNOWN;
 }
 
