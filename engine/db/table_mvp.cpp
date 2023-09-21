@@ -111,7 +111,8 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
           table_segment_
               ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                    [table_schema_.fields_[i].name_]],
-          record_number, table_schema_.fields_[i].vector_dimension_);
+          record_number, table_schema_.fields_[i].vector_dimension_,
+          table_schema_.fields_[i].metric_type_);
       std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
           ann_graph_segment_[index];
       ann_graph_segment_[index] = new_ann;

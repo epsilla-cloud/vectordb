@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#include "utils/builder_suspend.hpp"
 #include "db/index/nsg/nsg_helper.hpp"
+#include "utils/builder_suspend.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -19,10 +19,19 @@ unsigned int seed = 100;
 
 NsgIndex::NsgIndex(const size_t& dimension, const size_t& n, Metric_Type metric)
     : dimension(dimension), ntotal(n), metric_type(metric) {
-  if (metric == Metric_Type::Metric_Type_L2) {
-    distance_ = new DistanceL2;
-  } else if (metric == Metric_Type::Metric_Type_IP) {
-    distance_ = new DistanceIP;
+  switch (metric) {
+    case Metric_Type::Metric_Type_L2:
+      distance_ = new DistanceL2;
+      break;
+    case Metric_Type::Metric_Type_IP:
+      distance_ = new DistanceIP;
+      break;
+    case Metric_Type::Metric_Type_COSINE:
+      distance_ = new DistanceCosine;
+      break;
+    default:
+      distance_ = new DistanceL2;
+      break;
   }
 }
 
@@ -130,7 +139,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, s
   size_t buffer_size = search_length;
 
   if (buffer_size > ntotal) {
-    throw ("Build Error, search_length > ntotal");
+    throw("Build Error, search_length > ntotal");
     // THROW_MSG("Build Error, search_length > ntotal");
   }
 
@@ -171,7 +180,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, s
       node_t id = init_ids[i];
 
       if (id >= static_cast<node_t>(ntotal)) {
-        throw ("Build Index Error, id > ntotal");
+        throw("Build Index Error, id > ntotal");
         // THROW_MSG("Build Index Error, id > ntotal");
         continue;
       }
@@ -232,7 +241,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, s
   size_t buffer_size = search_length;
 
   if (buffer_size > ntotal) {
-    throw ("Build Error, search_length > ntotal");
+    throw("Build Error, search_length > ntotal");
     // THROW_MSG("Build Error, search_length > ntotal");
   }
 
@@ -274,7 +283,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, s
       node_t id = init_ids[i];
 
       if (id >= static_cast<node_t>(ntotal)) {
-        throw ("Build Index Error, id > ntotal");
+        throw("Build Index Error, id > ntotal");
         // THROW_MSG("Build Index Error, id > ntotal");
         continue;
       }
@@ -329,7 +338,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, G
   size_t buffer_size = params ? params->search_length : search_length;
 
   if (buffer_size > ntotal) {
-    throw ("Build Error, search_length > ntotal");
+    throw("Build Error, search_length > ntotal");
     // THROW_MSG("Build Error, search_length > ntotal");
   }
 
@@ -367,7 +376,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, G
       node_t id = init_ids[i];
 
       if (id >= static_cast<node_t>(ntotal)) {
-        throw ("Build Index Error, id > ntotal");
+        throw("Build Index Error, id > ntotal");
         // THROW_MSG("Build Index Error, id > ntotal");
       }
 

@@ -231,6 +231,10 @@ float DistanceIP::Compare(const float* a, const float* b, unsigned size) const {
   return -(fvec_inner_product(a, b, (size_t)size));
 }
 
+float DistanceCosine::Compare(const float* a, const float* b, unsigned size) const {
+  return -(fvec_inner_product(a, b, (size_t)size));
+}
+
 #endif
 
 }  // namespace index
