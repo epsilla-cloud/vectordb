@@ -13,6 +13,7 @@
 const std::string tableSchemaKey_name = "name",
                   tableSchemaKey_dataType = "dataType",
                   tableSchemaKey_dimensions = "dimensions",
+                  tableSchemaKey_metricType = "metricType",
                   tableSchemaKey_autoEmbedding = "autoEmbedding",
                   tableSchemaKey_isPrimaryKey = "primaryKey";
 
@@ -152,6 +153,16 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
       }
       Py_DECREF(dimensionsKey);
       Py_DECREF(dimensionsValue);
+
+      PyObject *metricTypeKey = PyUnicode_DecodeUTF8(tableSchemaKey_metricType.c_str(), tableSchemaKey_metricType.size(), "strict");
+      PyObject *metricTypeValue = PyDict_GetItem(dict_obj, metricTypeKey);
+
+      if (metricTypeValue != NULL) {
+        PyObject *metricTypeValueStr = PyObject_Str(metricTypeValue);
+        const char *metricTypeValueStrPtr = PyUnicode_AsUTF8(metricTypeValueStr);
+        std::string metricType = std::string(metricTypeValueStrPtr);
+        field.metric_type_ = vectordb::server::web::WebUtil::GetMetricType(metricType);
+      }
     }
     schema.fields_.push_back(field);
     Py_DECREF(dict_obj);

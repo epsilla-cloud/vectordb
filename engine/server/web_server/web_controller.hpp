@@ -181,7 +181,6 @@ class WebController : public oatpp::web::server::api::ApiController {
       if (
           field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
           field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT) {
-        // TODO: after figuring out metric type other than EUCLIDEAN, need to check metric type as well.
         if (!body_field.HasMember("dimensions")) {
           dto->statusCode = Status::CODE_400.code;
           dto->message = "Vector field must have dimensions.";
@@ -273,16 +272,16 @@ class WebController : public oatpp::web::server::api::ApiController {
     vectordb::Status status = db_server->ListTables(db_name, table_names);
 
     if (!status.ok()) {
-        dto->statusCode = Status::CODE_500.code;
-        dto->message = status.message();
-        return createDtoResponse(Status::CODE_500, dto);
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
     }
 
     res_dto->statusCode = Status::CODE_200.code;
     res_dto->message = "Get all tables in " + db_name + " successfully.";
     res_dto->result = {};
     for (const auto& name : table_names) {
-        res_dto->result->push_back(name);
+      res_dto->result->push_back(name);
     }
     return createDtoResponse(Status::CODE_200, res_dto);
   }
