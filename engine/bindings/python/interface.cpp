@@ -312,7 +312,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
   if (!PyArg_ParseTupleAndKeywords(
           args,
           kwargs,
-          "ssOOip",
+          "ssOOisp",
           (char **)keywords,
           &tableNamePtr,
           &queryFieldPtr,

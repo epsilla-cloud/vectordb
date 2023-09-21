@@ -72,6 +72,7 @@ for field in ["EmbeddingEuclidean", "EmbeddingDotProduct", "EmbeddingCosine"]:
         query_field="EmbeddingEuclidean",
         response_fields=["ID", "Doc", field],
         query_vector=[0.35, 0.55, 0.47, 0.94],
+        filter="ID < 6",
         limit=2,
         with_distance=True
     )
@@ -89,6 +90,7 @@ print("delete return code:", code)
     query_field="EmbeddingEuclidean",
     response_fields=["ID", "Doc", "EmbeddingEuclidean"],
     query_vector=[0.35, 0.55, 0.47, 0.94],
+    filter="ID < 6",
     limit=10,
     with_distance=True
 )

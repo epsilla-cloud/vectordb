@@ -17,7 +17,8 @@ client.create_table(
     table_fields=[
         {"name": "ID", "dataType": "INT"},
         {"name": "Doc", "dataType": "STRING"},
-        {"name": "Embedding", "dataType": "VECTOR_FLOAT", "dimensions": 4}
+        {"name": "Embedding", "dataType": "VECTOR_FLOAT",
+            "dimensions": 4, "metricType": "EUCLIDEAN"}
     ]
 )
 
