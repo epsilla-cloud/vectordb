@@ -193,6 +193,11 @@ class WebController : public oatpp::web::server::api::ApiController {
       if (body_field.HasMember("metricType")) {
         std::string m_type;
         field.metric_type_ = WebUtil::GetMetricType(m_type.assign(body_field.GetString("metricType")));
+        if (field.metric_type_ == vectordb::engine::meta::MetricType::UNKNOWN) {
+          dto->statusCode = Status::CODE_400.code;
+          dto->message = "invalid metric type: " + body_field.GetString("metricType");
+          return createDtoResponse(Status::CODE_400, dto);
+        }
       }
       table_schema.fields_.push_back(field);
     }
@@ -495,17 +500,16 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     vectordb::Json result;
     vectordb::Status search_status = db_server->Search(
-      db_name,
-      table_name,
-      field_name,
-      query_fields,
-      vector_size,
-      query_vector,
-      limit,
-      result,
-      filter,
-      with_distance
-    );
+        db_name,
+        table_name,
+        field_name,
+        query_fields,
+        vector_size,
+        query_vector,
+        limit,
+        result,
+        filter,
+        with_distance);
 
     if (!search_status.ok()) {
       oatpp::web::protocol::http::Status status;
