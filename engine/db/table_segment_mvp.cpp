@@ -411,8 +411,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
         }
         // covert to length
-        sum = std::sqrt(sum);
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
+          sum = std::sqrt(sum);
           // normalize value
           for (auto j = 0; j < field.vector_dimension_; ++j) {
             vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j] /= sum;
