@@ -407,10 +407,12 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         float sum = 0;
         for (auto j = 0; j < field.vector_dimension_; ++j) {
           float value = static_cast<float>((float)(vector.GetArrayElement(j).GetDouble()));
-          sum += value;
+          sum += value * value;
           std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
         }
-        if (field.metric_type_ == meta::MetricType::COSINE && sum > 0e-10) {
+        // covert to length
+        sum = std::sqrt(sum);
+        if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           // normalize value
           for (auto j = 0; j < field.vector_dimension_; ++j) {
             vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j] /= sum;
