@@ -166,6 +166,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, dto);
     }
     size_t fields_size = parsedBody.GetArraySize("fields");
+    bool has_primary_key = false;
     for (size_t i = 0; i < fields_size; i++) {
       auto body_field = parsedBody.GetArrayElement("fields", i);
       vectordb::engine::meta::FieldSchema field;
@@ -173,6 +174,14 @@ class WebController : public oatpp::web::server::api::ApiController {
       field.name_ = body_field.GetString("name");
       if (body_field.HasMember("primaryKey")) {
         field.is_primary_key_ = body_field.GetBool("primaryKey");
+        if (field.is_primary_key_) {
+          if (has_primary_key) {
+            dto->statusCode = Status::CODE_400.code;
+            dto->message = "At most one field can be primary key.";
+            return createDtoResponse(Status::CODE_400, dto);
+          }
+          has_primary_key = true;
+        }
       }
       if (body_field.HasMember("dataType")) {
         std::string d_type;
