@@ -439,8 +439,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           }
           case meta::FieldType::INT4: {
             int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
-            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (field.is_primary_key_) {
+              auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
                 std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
