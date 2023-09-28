@@ -222,13 +222,15 @@ class WebController : public oatpp::web::server::api::ApiController {
     vectordb::Status status = db_server->CreateTable(db_name, table_schema);
 
     if (!status.ok()) {
+      auto status_code = Status::CODE_500;
       if (status.code() == TABLE_ALREADY_EXISTS) {
         dto->statusCode = Status::CODE_409.code;
+        status_code = Status::CODE_409;
       } else {
         dto->statusCode = Status::CODE_500.code;
       }
       dto->message = status.message();
-      return createDtoResponse(Status::CODE_500, dto);
+      return createDtoResponse(status_code, dto);
     }
     dto->statusCode = Status::CODE_200.code;
     dto->message = "Create " + table_schema.name_ + " successfully.";
