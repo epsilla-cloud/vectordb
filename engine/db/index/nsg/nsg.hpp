@@ -40,6 +40,7 @@ class NsgIndex {
   enum Metric_Type {
     Metric_Type_L2,
     Metric_Type_IP,
+    Metric_Type_COSINE,
   };
 
   size_t dimension;

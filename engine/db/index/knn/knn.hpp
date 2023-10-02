@@ -8,6 +8,8 @@
 #include <iostream>
 
 #include "db/index/knn/nndescent.hpp"
+#include "db/index/space_cosine.hpp"
+#include "db/index/space_ip.hpp"
 #include "db/index/space_l2.hpp"
 
 namespace vectordb {
@@ -22,15 +24,28 @@ namespace {
 class OracleL2 {
  private:
   size_t dim;
-  vectordb::L2Space space;
+  std::unique_ptr<SpaceInterface<float>> space;
   DISTFUNC<float> fstdistfunc_;
   void* dist_func_param_;
   float* m;
 
  public:
-  OracleL2(size_t dim_, float* m_) : dim(dim_), space(dim_) {
-    fstdistfunc_ = space.get_dist_func();
-    dist_func_param_ = space.get_dist_func_param();
+  OracleL2(size_t dim_, float* m_, meta::MetricType metricType) : dim(dim_) {
+    switch (metricType) {
+      case meta::MetricType::EUCLIDEAN:
+        space = std::make_unique<L2Space>(dim_);
+        break;
+      case meta::MetricType::COSINE:
+        space = std::make_unique<CosineSpace>(dim_);
+        break;
+      case meta::MetricType::DOT_PRODUCT:
+        space = std::make_unique<InnerProductSpace>(dim_);
+        break;
+      default:
+        space = std::make_unique<L2Space>(dim_);
+    }
+    fstdistfunc_ = space->get_dist_func();
+    dist_func_param_ = space->get_dist_func_param();
     m = m_;
   }
   float operator()(int i, int j) const __attribute__((noinline));
@@ -44,7 +59,7 @@ float OracleL2::operator()(int p, int q) const {
 
 class KNNGraph {
  public:
-  KNNGraph(int N, int D, int K, float* data, Graph& knng) {
+  KNNGraph(int N, int D, int K, float* data, Graph& knng, meta::MetricType metricType) {
     int I = 1000;
     float T = 0.001;
     float S = 1;
@@ -53,7 +68,7 @@ class KNNGraph {
     //   S = 0.5;
     // }
 
-    OracleL2 oracle(D, data);
+    OracleL2 oracle(D, data, metricType);
 
     NNDescent<OracleL2> nndes(N, K, S, oracle);
 
