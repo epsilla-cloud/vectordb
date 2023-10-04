@@ -22,7 +22,7 @@ class ANNGraphSegment {
   explicit ANNGraphSegment(int64_t size_limit);
 
   // Build the ANN graph from vector table.
-  void BuildFromVectorTable(float* vector_table, int64_t n, int64_t dim);
+  void BuildFromVectorTable(float* vector_table, int64_t n, int64_t dim, meta::MetricType metricType);
 
   void Debug();
 
@@ -32,13 +32,13 @@ class ANNGraphSegment {
   ~ANNGraphSegment();
 
  public:
-  bool skip_sync_disk_;                // For default DB, skip sync to disk.
+  bool skip_sync_disk_;  // For default DB, skip sync to disk.
   // bool synced_with_disk_;              // Whether the table segment is synced with disk.
   int64_t first_record_id_;             // The internal record id (node id) of the first record in the segment.
   std::atomic<int64_t> record_number_;  // Currently how many records (nodes) in the segment.
-  int64_t* offset_table_;              // The offset table for neighbor list for each node.
-  int64_t* neighbor_list_;             // The neighbor list for each node consecutively stored.
-  int64_t navigation_point_;           // The navigation point for the starting search.
+  int64_t* offset_table_;               // The offset table for neighbor list for each node.
+  int64_t* neighbor_list_;              // The neighbor list for each node consecutively stored.
+  int64_t navigation_point_;            // The navigation point for the starting search.
   // TODO: Will support these in the future when we support dynamic update NSG index.
   // ConcurrentBitset updated_;                                              // The updated bitset. If the i-th bit is 1, then the i-th record's neighbor list is updated.
   //                                                                         // In this case, query should consult the hashmap instead of the neighbor list for getting neighbors.
@@ -50,7 +50,7 @@ class ANNGraphSegment {
 }  // namespace vectordb
 
 /**
- * 
+ *
 
   int x = 1000, y = 1000;
   int n = x * y;
@@ -75,5 +75,5 @@ class ANNGraphSegment {
 
   auto ann_graph_segment = std::make_shared<vectordb::engine::ANNGraphSegment>();
   ann_graph_segment->BuildFromVectorTable(data, n, dim);
-  ann_graph_segment->Debug(); 
+  ann_graph_segment->Debug();
 */

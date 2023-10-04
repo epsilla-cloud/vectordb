@@ -404,9 +404,19 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.
         auto vector = record.GetArray(field.name_);
+        float sum = 0;
         for (auto j = 0; j < field.vector_dimension_; ++j) {
           float value = static_cast<float>((float)(vector.GetArrayElement(j).GetDouble()));
+          sum += value * value;
           std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
+        }
+        // covert to length
+        if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
+          sum = std::sqrt(sum);
+          // normalize value
+          for (auto j = 0; j < field.vector_dimension_; ++j) {
+            vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j] /= sum;
+          }
         }
       } else {
         // Insert primitive attribute.
