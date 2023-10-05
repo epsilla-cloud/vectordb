@@ -1,8 +1,9 @@
 #include "db/ann_graph_segment.hpp"
 
-#include <iostream>
+#include <unistd.h>
+
 #include <cstdio>
-#include <unistd.h> 
+#include <iostream>
 
 #include "db/index/knn/knn.hpp"
 #include "db/index/nsg/nsg.hpp"
@@ -194,7 +195,7 @@ Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t
   return Status::OK();
 }
 
-void ANNGraphSegment::BuildFromVectorTable(float* vector_table, int64_t n, int64_t dim) {
+void ANNGraphSegment::BuildFromVectorTable(float* vector_table, int64_t n, int64_t dim, meta::MetricType metricType) {
   record_number_ = n;
 
   // Build a KNN graph using NN descent.
@@ -202,7 +203,7 @@ void ANNGraphSegment::BuildFromVectorTable(float* vector_table, int64_t n, int64
   std::cout << "KNN" << std::endl;
   vectordb::engine::index::Graph knng(n);
   std::cout << "KNN graph" << std::endl;
-  vectordb::engine::index::KNNGraph graph(n, dim, k, vector_table, knng);
+  vectordb::engine::index::KNNGraph graph(n, dim, k, vector_table, knng, metricType);
   std::cout << "KNN graph finish" << std::endl;
 
   vectordb::engine::index::BuildParams b_params;

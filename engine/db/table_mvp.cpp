@@ -39,8 +39,20 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
               db_catalog_path, table_schema_.id_,
               table_schema_.fields_[i].id_));
       // Construct the executor.
-      l2space_.push_back(std::make_shared<vectordb::L2Space>(
-          table_schema_.fields_[i].vector_dimension_));
+      if (table_schema.fields_[i].metric_type_ == vectordb::engine::meta::MetricType::EUCLIDEAN) {
+        space_.push_back(std::make_shared<vectordb::L2Space>(
+            table_schema_.fields_[i].vector_dimension_));
+      } else if (table_schema.fields_[i].metric_type_ == vectordb::engine::meta::MetricType::COSINE) {
+        space_.push_back(std::make_shared<vectordb::CosineSpace>(
+            table_schema_.fields_[i].vector_dimension_));
+      } else if (table_schema.fields_[i].metric_type_ == vectordb::engine::meta::MetricType::DOT_PRODUCT) {
+        space_.push_back(std::make_shared<vectordb::InnerProductSpace>(
+            table_schema_.fields_[i].vector_dimension_));
+      } else {
+        // by default use L2
+        space_.push_back(std::make_shared<vectordb::L2Space>(
+            table_schema_.fields_[i].vector_dimension_));
+      }
 
       auto pool = std::make_shared<execution::ExecutorPool>();
       for (int executorIdx = 0; executorIdx < NumExecutorPerField;
@@ -54,8 +66,8 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
             table_segment_
                 ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                      [table_schema_.fields_[i].name_]],
-            l2space_.back()->get_dist_func(),
-            l2space_.back()->get_dist_func_param(), IntraQueryThreads,
+            space_.back()->get_dist_func(),
+            space_.back()->get_dist_func_param(), IntraQueryThreads,
             MasterQueueSize, LocalQueueSize, GlobalSyncInterval));
       }
       executor_pool_.push_back(pool);
@@ -99,7 +111,8 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
           table_segment_
               ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                    [table_schema_.fields_[i].name_]],
-          record_number, table_schema_.fields_[i].vector_dimension_);
+          record_number, table_schema_.fields_[i].vector_dimension_,
+          table_schema_.fields_[i].metric_type_);
       std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
           ann_graph_segment_[index];
       ann_graph_segment_[index] = new_ann;
@@ -123,8 +136,8 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             table_segment_
                 ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                      [table_schema_.fields_[i].name_]],
-            l2space_[index]->get_dist_func(),
-            l2space_[index]->get_dist_func_param(),
+            space_[index]->get_dist_func(),
+            space_[index]->get_dist_func_param(),
             IntraQueryThreads,
             MasterQueueSize,
             LocalQueueSize,

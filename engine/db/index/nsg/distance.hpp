@@ -16,6 +16,10 @@ struct DistanceIP : public Distance {
   float Compare(const float* a, const float* b, unsigned size) const override;
 };
 
+struct DistanceCosine : public Distance {
+  float Compare(const float* a, const float* b, unsigned size) const override;
+};
+
 }  // namespace index
 }  // namespace engine
 }  // namespace vectordb

@@ -9,6 +9,8 @@
 #include "db/catalog/meta.hpp"
 #include "db/execution/executor_pool.hpp"
 #include "db/execution/vec_search_executor.hpp"
+#include "db/index/space_cosine.hpp"
+#include "db/index/space_ip.hpp"
 #include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
 #include "db/wal/write_ahead_log.hpp"
@@ -77,8 +79,8 @@ class TableMVP {
 
   ThreadSafeVector<std::shared_ptr<execution::ExecutorPool>> executor_pool_;  // The executor for vector search.
   std::mutex executor_pool_mutex_;
-  std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;  // The ann graph segment for each vector field.
-  std::vector<std::shared_ptr<vectordb::L2Space>> l2space_;          // The l2 space for each vector field.
+  std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;      // The ann graph segment for each vector field.
+  std::vector<std::shared_ptr<vectordb::SpaceInterface<float>>> space_;  // The space for each vector field.
 
   // One write ahead log per table.
   std::shared_ptr<WriteAheadLog> wal_;
