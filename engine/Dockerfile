@@ -13,7 +13,7 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(npro
 FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse && \
-    curl -o /usr/local/bin/geesefs -LO https://github.com/yandex-cloud/geesefs/releases/download/v0.38.3/geesefs-linux-amd64 && \
+    curl -o /usr/local/bin/geesefs -LO https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-amd64 && \
     chmod +x /usr/local/bin/geesefs && geesefs --version
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
