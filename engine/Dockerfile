@@ -15,7 +15,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse && \
     wget --no-check-certificate https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-amd64 && \
     chmod +x geesefs-linux-amd64 && \
-    mv geesefs-linux-amd64 /usr/local/bin && \
+    mv geesefs-linux-amd64 /usr/local/bin/geesefs && \
     geesefs --version
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
