@@ -26,14 +26,18 @@ jobs:
           
     - name: Build
       env:
+        DOCKER_HUB_REPOSITORY: epsilla/vectordb
         SHA_TAG: ${{ github.sha }}
       run: |
+        export IMAGE_TAG=${{ steps.date.outputs.date }}
+        echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "SHA: ${SHA_TAG}"
         cd ./engine
-        docker build --pull -t epsilla/vectordb:latest .
-        docker push epsilla/vectordb:latest
-        #docker build --pull -t epsilla/vectordb:${SHA_TAG} .
-        echo {{ steps.date.outputs.date }}
+        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} .
+        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}
+        docker tag  ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} ${DOCKER_HUB_REPOSITORY}:latest
+        docker push ${DOCKER_HUB_REPOSITORY}:latest
+        
 
 
         
