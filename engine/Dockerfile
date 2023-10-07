@@ -13,7 +13,7 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(npro
 FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse && \
-    wget https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-amd64 && \
+    wget --no-check-certificate https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-amd64 && \
     chmod +x geesefs-linux-amd64 && \
     mv geesefs-linux-amd64 /usr/local/bin && \
     geesefs --version
