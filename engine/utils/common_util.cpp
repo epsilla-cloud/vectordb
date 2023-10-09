@@ -100,6 +100,7 @@ Status CommonUtil::CreateDirectory(const std::string& path) {
 
   int makeOK = mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IROTH);
   if (makeOK != 0) {
+    std::cout << "failed to create directory " << path << " with response code " << makeOK << std::endl;
     return Status(INFRA_UNEXPECTED_ERROR, "failed to create directory: " + path);
   }
 
