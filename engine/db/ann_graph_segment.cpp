@@ -83,7 +83,10 @@ ANNGraphSegment::ANNGraphSegment(const std::string& db_catalog_path, int64_t tab
   } else {
     // Create directory with an empty ann graph.
     std::string folder_path = db_catalog_path + "/" + std::to_string(table_id);
-    server::CommonUtil::CreateDirectory(folder_path);
+    auto mkdir_status = server::CommonUtil::CreateDirectory(folder_path);
+    if (!mkdir_status.ok()) {
+      throw mkdir_status.message();
+    }
     offset_table_ = new int64_t[record_number_ + 1];
     offset_table_[record_number_] = 0;
     neighbor_list_ = new int64_t[record_number_];

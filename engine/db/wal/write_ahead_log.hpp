@@ -37,7 +37,10 @@ class WriteAheadLog {
       global_counter_.SetValue(last_global_id);
       id_file.close();
     }
-    server::CommonUtil::CreateDirectory(logs_folder_);
+    auto mkdir_status = server::CommonUtil::CreateDirectory(logs_folder_);
+    if (!mkdir_status.ok()) {
+      throw mkdir_status.message();
+    }
     RotateFile();
   }
 
