@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include "utils/common_util.hpp"
 // TODO: to be implemented
 // #include "utils/log.hpp"
@@ -71,36 +73,58 @@ bool CommonUtil::IsDirectoryExist(const std::string& path) {
   return true;
 }
 
+// Status CommonUtil::CreateDirectory(const std::string& path) {
+//   if (path.empty()) {
+//     return Status::OK();
+//   }
+
+//   struct stat directory_stat;
+//   int status = stat(path.c_str(), &directory_stat);
+//   if (status == 0) {
+//     return Status::OK();  // already exist
+//   }
+
+//   size_t separator_pos = path.find_last_of('/');  // get the parent directory path
+//   if (separator_pos != std::string::npos) {
+//     std::string parent_path = path.substr(0, separator_pos);
+//     if (!parent_path.empty()) {
+//       Status err_status = CreateDirectory(parent_path);
+//       if (!err_status.ok()) {
+//         return err_status;
+//       }
+//     }
+//   }
+
+//   status = stat(path.c_str(), &directory_stat);
+//   if (status == 0) {
+//     return Status::OK();  // already exist
+//   }
+
+//   int makeOK = mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IROTH);
+//   if (makeOK != 0) {
+//     std::cout << "failed to create directory " << path << " with response code " << makeOK << std::endl;
+//     return Status(INFRA_UNEXPECTED_ERROR, "failed to create directory: " + path);
+//   }
+
+//   return Status::OK();
+// }
+
 Status CommonUtil::CreateDirectory(const std::string& path) {
   if (path.empty()) {
     return Status::OK();
   }
 
-  struct stat directory_stat;
-  int status = stat(path.c_str(), &directory_stat);
-  if (status == 0) {
-    return Status::OK();  // already exist
+  std::filesystem::path fs_path(path);
+  std::error_code ec;  // to capture any error without throwing exceptions
+
+  // Check if the directory already exists
+  if (std::filesystem::exists(fs_path, ec)) {
+    return Status::OK();
   }
 
-  size_t separator_pos = path.find_last_of('/');  // get the parent directory path
-  if (separator_pos != std::string::npos) {
-    std::string parent_path = path.substr(0, separator_pos);
-    if (!parent_path.empty()) {
-      Status err_status = CreateDirectory(parent_path);
-      if (!err_status.ok()) {
-        return err_status;
-      }
-    }
-  }
-
-  status = stat(path.c_str(), &directory_stat);
-  if (status == 0) {
-    return Status::OK();  // already exist
-  }
-
-  int makeOK = mkdir(path.c_str(), S_IRWXU | S_IRGRP | S_IROTH);
-  if (makeOK != 0) {
-    std::cout << "failed to create directory " << path << " with response code " << makeOK << std::endl;
+  // Recursively create the directory and its parent directories if needed
+  if (!std::filesystem::create_directories(fs_path, ec)) {
+    std::cout << "failed to create directory " << path << " with response code " << ec << std::endl;
     return Status(INFRA_UNEXPECTED_ERROR, "failed to create directory: " + path);
   }
 
