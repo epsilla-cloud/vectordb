@@ -207,7 +207,10 @@ Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::stri
     }
   } else {
     // Create directory with an empty db.
-    server::CommonUtil::CreateDirectory(db_catalog_path);
+    auto mkdir_status = server::CommonUtil::CreateDirectory(db_catalog_path);
+    if (!mkdir_status.ok()) {
+      throw mkdir_status.message();
+    }
     // Create database catalog file.
     DatabaseSchema db_schema;
     auto status = SaveDBToFile(db_schema, db_catalog_path + "/" + DB_CATALOG_FILE_NAME);
