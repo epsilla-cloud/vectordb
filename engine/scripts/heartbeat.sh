@@ -21,6 +21,8 @@ else
   EXTERNAL_IP=`cat ${STARTUP_FILE}`
 fi
 
+DISTINCT_ID=`md5sum <<< "${HOSTNAME}-${INTERNAL_IP}-${EXTERNAL_IP}" | cut -d ' ' -f1`
+
 ## Start Up
 if [ ! -f "${STARTUP_FILE}" ]; then
   curl -X POST \
@@ -36,12 +38,27 @@ if [ ! -f "${STARTUP_FILE}" ]; then
       \"version\": \"latest\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
-      \"timestamp\": \"${TIMESTAMP}\"
+      \"timestamp\": \"${TIMESTAMP}\",
+      \"distinct_id\": \"${DISTINCT_ID}\"
     },
     \"message\": {
       \"message\": \"Epsilla VectorDB starts up at ${EXTERNAL_IP}\"
     }
   }";
+  curl -v -L --header "Content-Type: application/json" \
+  "https://app.posthog.com/capture/" \
+  --data "{
+    \"event\": \"VectorDB started\",
+    \"api_key\": \"phc_HoDjIs8hJa1dHPB6dudGwCCk5Q8t3lUaAQDWzhq9DDS\",
+    \"distinct_id\": \"${DISTINCT_ID}\",
+    \"properties\": {
+      \"version\": \"latest\",
+      \"internal_ip\": \"${INTERNAL_IP}\",
+      \"external_ip\": \"${EXTERNAL_IP}\",
+      \"timestamp\": \"${TIMESTAMP}\",
+    },
+    \"timestamp": \"[optional timestamp in ISO 8601 format]\"
+  }"; 
   touch ${STARTUP_FILE};
   echo "${EXTERNAL_IP}" > ${STARTUP_FILE};
 fi
@@ -60,7 +77,8 @@ curl -X POST \
   \"tags\": {
     \"internal_ip\": \"${INTERNAL_IP}\",
     \"external_ip\": \"${EXTERNAL_IP}\",
-    \"heart_beat\": \"${DATE_TAG}\"
+    \"heart_beat\": \"${DATE_TAG}\",
+    \"distinct_id\": \"${DISTINCT_ID}\"
   },
   \"user\": {
     \"username\": \"${HOSTNAME}-${INTERNAL_IP}-${EXTERNAL_IP}\",
