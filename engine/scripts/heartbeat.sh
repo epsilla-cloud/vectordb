@@ -5,6 +5,7 @@
 STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
+POSTHOG_API_KEY="phc_HoDjIs8hJa1dHPB6dudGwCCk5Q8t3lUaAQDWzhq9DDS"
 
 SENTRY_DSN=`curl $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
@@ -45,20 +46,18 @@ if [ ! -f "${STARTUP_FILE}" ]; then
       \"message\": \"Epsilla VectorDB starts up at ${EXTERNAL_IP}\"
     }
   }";
-  curl -v -L --header "Content-Type: application/json" \
-  "https://app.posthog.com/capture/" \
+  curl -X POST -L --header "Content-Type: application/json" \
+  "https://epsilla.ph.getmentioned.ai/ingest/capture/" \
   --data "{
     \"event\": \"VectorDB started\",
-    \"api_key\": \"phc_HoDjIs8hJa1dHPB6dudGwCCk5Q8t3lUaAQDWzhq9DDS\",
+    \"api_key\": \"${POSTHOG_API_KEY}\",
     \"distinct_id\": \"${DISTINCT_ID}\",
     \"properties\": {
       \"version\": \"latest\",
       \"internal_ip\": \"${INTERNAL_IP}\",
-      \"external_ip\": \"${EXTERNAL_IP}\",
-      \"timestamp\": \"${TIMESTAMP}\",
+      \"external_ip\": \"${EXTERNAL_IP}\"
     },
-    \"timestamp": \"[optional timestamp in ISO 8601 format]\"
-  }"; 
+  }";
   touch ${STARTUP_FILE};
   echo "${EXTERNAL_IP}" > ${STARTUP_FILE};
 fi
@@ -88,4 +87,16 @@ curl -X POST \
     \"message\": \"HeartBeat\"
   }
 }"
+curl -X POST -L --header "Content-Type: application/json" \
+  "https://epsilla.ph.getmentioned.ai/ingest/capture/" \
+  --data "{
+    \"event\": \"VectorDB heartbeat\",
+    \"api_key\": \"${POSTHOG_API_KEY}\",
+    \"distinct_id\": \"${DISTINCT_ID}\",
+    \"properties\": {
+      \"version\": \"latest\",
+      \"internal_ip\": \"${INTERNAL_IP}\",
+      \"external_ip\": \"${EXTERNAL_IP}\"
+    },
+  }";
 
