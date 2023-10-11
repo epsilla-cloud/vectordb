@@ -6,14 +6,14 @@ STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
 
-SENTRY_DSN=`curl $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
+SENTRY_DSN=`curl -s $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
 SENTRY_SECRET=`echo $SENTRY_DSN | cut -d '/' -f3 | cut -d '@' -f1`
 PROTOCOL=`echo $SENTRY_DSN | cut -d ':' -f1`
 PROJECT_ID=`echo $SENTRY_DSN | cut -d '/' -f4`
 
-POSTHOG_HOST=`curl $CONFIG_URL | grep posthog | cut -d '@' -f1 | cut -d '"' -f4`
-POSTHOG_API_KEY=`curl $CONFIG_URL | grep posthog | cut -d '@' -f2 | cut -d '"' -f1`
+POSTHOG_HOST=`curl -s $CONFIG_URL | grep posthog | cut -d '@' -f1 | cut -d '"' -f4`
+POSTHOG_API_KEY=`curl -s $CONFIG_URL | grep posthog | cut -d '@' -f2 | cut -d '"' -f1`
 
 TIMESTAMP=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
 HOSTNAME=`hostname --long`
