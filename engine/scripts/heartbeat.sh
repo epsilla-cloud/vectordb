@@ -5,13 +5,15 @@
 STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
-POSTHOG_API_KEY="phc_HoDjIs8hJa1dHPB6dudGwCCk5Q8t3lUaAQDWzhq9DDS"
 
 SENTRY_DSN=`curl $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
 SENTRY_SECRET=`echo $SENTRY_DSN | cut -d '/' -f3 | cut -d '@' -f1`
 PROTOCOL=`echo $SENTRY_DSN | cut -d ':' -f1`
 PROJECT_ID=`echo $SENTRY_DSN | cut -d '/' -f4`
+
+POSTHOG_HOST=`curl $CONFIG_URL | grep posthog | cut -d '@' -f1 | cut -d '"' -f4`
+POSTHOG_API_KEY=`curl $CONFIG_URL | grep posthog | cut -d '@' -f2 | cut -d '"' -f1`
 
 TIMESTAMP=`date -u +"%Y-%m-%dT%H:%M:%SZ"`
 HOSTNAME=`hostname --long`
@@ -47,7 +49,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     }
   }";
   curl -X POST -L --header "Content-Type: application/json" \
-  "https://epsilla.ph.getmentioned.ai/ingest/capture/" \
+  "${POSTHOG_HOST}/capture/" \
   --data "{
     \"event\": \"VectorDB started\",
     \"api_key\": \"${POSTHOG_API_KEY}\",
@@ -88,7 +90,7 @@ curl -X POST \
   }
 }"
 curl -X POST -L --header "Content-Type: application/json" \
-  "https://epsilla.ph.getmentioned.ai/ingest/capture/" \
+  "${POSTHOG_HOST}/capture/" \
   --data "{
     \"event\": \"VectorDB heartbeat\",
     \"api_key\": \"${POSTHOG_API_KEY}\",
