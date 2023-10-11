@@ -5,6 +5,7 @@
 STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
+POSTHOG_API_KEY="phc_HoDjIs8hJa1dHPB6dudGwCCk5Q8t3lUaAQDWzhq9DDS"
 
 SENTRY_DSN=`curl $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
@@ -21,6 +22,8 @@ else
   EXTERNAL_IP=`cat ${STARTUP_FILE}`
 fi
 
+DISTINCT_ID=`md5sum <<< "${HOSTNAME}-${INTERNAL_IP}-${EXTERNAL_IP}" | cut -d ' ' -f1`
+
 ## Start Up
 if [ ! -f "${STARTUP_FILE}" ]; then
   curl -X POST \
@@ -36,10 +39,23 @@ if [ ! -f "${STARTUP_FILE}" ]; then
       \"version\": \"latest\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
-      \"timestamp\": \"${TIMESTAMP}\"
+      \"timestamp\": \"${TIMESTAMP}\",
+      \"distinct_id\": \"${DISTINCT_ID}\"
     },
     \"message\": {
       \"message\": \"Epsilla VectorDB starts up at ${EXTERNAL_IP}\"
+    }
+  }";
+  curl -X POST -L --header "Content-Type: application/json" \
+  "https://epsilla.ph.getmentioned.ai/ingest/capture/" \
+  --data "{
+    \"event\": \"VectorDB started\",
+    \"api_key\": \"${POSTHOG_API_KEY}\",
+    \"distinct_id\": \"${DISTINCT_ID}\",
+    \"properties\": {
+      \"version\": \"latest\",
+      \"internal_ip\": \"${INTERNAL_IP}\",
+      \"external_ip\": \"${EXTERNAL_IP}\"
     }
   }";
   touch ${STARTUP_FILE};
@@ -60,7 +76,8 @@ curl -X POST \
   \"tags\": {
     \"internal_ip\": \"${INTERNAL_IP}\",
     \"external_ip\": \"${EXTERNAL_IP}\",
-    \"heart_beat\": \"${DATE_TAG}\"
+    \"heart_beat\": \"${DATE_TAG}\",
+    \"distinct_id\": \"${DISTINCT_ID}\"
   },
   \"user\": {
     \"username\": \"${HOSTNAME}-${INTERNAL_IP}-${EXTERNAL_IP}\",
@@ -70,4 +87,16 @@ curl -X POST \
     \"message\": \"HeartBeat\"
   }
 }"
+curl -X POST -L --header "Content-Type: application/json" \
+  "https://epsilla.ph.getmentioned.ai/ingest/capture/" \
+  --data "{
+    \"event\": \"VectorDB heartbeat\",
+    \"api_key\": \"${POSTHOG_API_KEY}\",
+    \"distinct_id\": \"${DISTINCT_ID}\",
+    \"properties\": {
+      \"version\": \"latest\",
+      \"internal_ip\": \"${INTERNAL_IP}\",
+      \"external_ip\": \"${EXTERNAL_IP}\"
+    }
+  }";
 
