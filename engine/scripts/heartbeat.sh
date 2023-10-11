@@ -56,7 +56,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
       \"version\": \"latest\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\"
-    },
+    }
   }";
   touch ${STARTUP_FILE};
   echo "${EXTERNAL_IP}" > ${STARTUP_FILE};
@@ -97,6 +97,6 @@ curl -X POST -L --header "Content-Type: application/json" \
       \"version\": \"latest\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\"
-    },
+    }
   }";
 
