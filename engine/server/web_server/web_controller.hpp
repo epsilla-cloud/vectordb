@@ -540,12 +540,12 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(status, status_dto);
     }
 
-    auto res_dto = ObjectRespDto::createShared();
-    res_dto->statusCode = Status::CODE_200.code;
-    res_dto->message = "Query search successfully.";
-    oatpp::parser::json::mapping::ObjectMapper mapper;
-    res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
-    return createDtoResponse(Status::CODE_200, res_dto);
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Query search successfully.");
+    response.SetObject("result", result);
+    return createResponse(Status::CODE_200, response.DumpToString());
   }
 
   ADD_CORS(Project)
@@ -590,12 +590,12 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_500, status_dto);
     }
 
-    auto res_dto = ObjectRespDto::createShared();
-    res_dto->statusCode = Status::CODE_200.code;
-    res_dto->message = "Query get successfully.";
-    oatpp::parser::json::mapping::ObjectMapper mapper;
-    res_dto->result = mapper.readFromString<oatpp::Any>(result.DumpToString());
-    return createDtoResponse(Status::CODE_200, res_dto);
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Query get successfully.");
+    response.SetObject("result", result);
+    return createResponse(Status::CODE_200, response.DumpToString());
   }
 
   ADD_CORS(Rebuild)
