@@ -38,7 +38,7 @@ int64_t Json::GetInt(const std::string& key) const {
 }
 
 double Json::GetDouble(const std::string& key) const {
-  if (doc_.contains(key) && doc_[key].is_number_float()) {
+  if (doc_.contains(key) && (doc_[key].is_number_float() || doc_[key].is_number_integer())) {
     return doc_[key].get<double>();
   }
   return 0.0;
