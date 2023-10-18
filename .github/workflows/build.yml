@@ -1,4 +1,4 @@
-name: Build Vectordb
+name: Build Vectordb Docker Image for linux/amd64 and linux/arm64
 
 on:
   push:
