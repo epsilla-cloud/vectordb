@@ -10,9 +10,11 @@ RUN scripts/install_oatpp_modules.sh
 RUN scripts/setup-dev.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(nproc) && chmod +x vectordb
 
+
 FROM ubuntu:22.04
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse ca-certificates
+
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
