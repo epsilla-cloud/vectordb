@@ -7,7 +7,6 @@ ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
 RUN scripts/install_oatpp_modules.sh
-RUN scripts/setup-dev.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(nproc) && chmod +x vectordb
 
 
