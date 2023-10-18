@@ -33,10 +33,31 @@ jobs:
         echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "SHA: ${SHA_TAG}"
         cd ./engine
-        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} .
-        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}
+        echo "\n\nBuild docker image for amd64 firstly\n\n"
+        
+        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .
+        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64
+
+
+
+        echo "\n\nBuild allinone docker image both for amd64 and arm64\n\n"
+        
+        wget https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
+        chmod +x buildx-v0.11.2.linux-amd64
+        mkdir -p $HOME/.docker/cli-plugins
+        mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
+        docker buildx create --use
+        docker buildx ls
+        docker buildx build --push --platform linux/amd64,linux/arm64 -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} .
+        
+        docker pull ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}
         docker tag  ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} ${DOCKER_HUB_REPOSITORY}:latest
         docker push ${DOCKER_HUB_REPOSITORY}:latest
+
+
+        
+
+        
         
 
 
