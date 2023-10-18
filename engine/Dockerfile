@@ -12,9 +12,13 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(npro
 
 
 FROM ubuntu:22.04
+ARG TARGETARCH
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse ca-certificates
-
+    apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse ca-certificates && \
+    wget --no-check-certificate https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-${TARGETARCH} && \
+    chmod +x geesefs-linux-${TARGETARCH} && \
+    mv geesefs-linux-${TARGETARCH} /usr/local/bin/geesefs && \
+    geesefs --version
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
