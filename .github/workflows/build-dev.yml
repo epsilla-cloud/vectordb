@@ -36,6 +36,7 @@ jobs:
         chmod +x buildx-v0.11.2.linux-amd64
         mkdir -p $HOME/.docker/cli-plugins
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
+        docker buildx create --use
 
         
         cd ./engine
