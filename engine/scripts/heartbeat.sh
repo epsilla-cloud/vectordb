@@ -6,6 +6,9 @@ STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
 
+DB_RELEASE_VERSION=${RELEASE_VERSION:-latest} 
+
+
 SENTRY_DSN=`curl -s $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
 SENTRY_SECRET=`echo $SENTRY_DSN | cut -d '/' -f3 | cut -d '@' -f1`
@@ -38,7 +41,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     \"logger\": \"docker\",
     \"server_name\": \"${HOSTNAME}\",
     \"tags\": {
-      \"version\": \"latest\",
+      \"version\": \"${DB_RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
       \"timestamp\": \"${TIMESTAMP}\",
