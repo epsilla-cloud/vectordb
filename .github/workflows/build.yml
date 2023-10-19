@@ -30,14 +30,15 @@ jobs:
         SHA_TAG: ${{ github.sha }}
       run: |
         export IMAGE_TAG=${{ steps.date.outputs.date }}
+        export IMAGE_TAG_LATEST="latest"
         echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "SHA: ${SHA_TAG}"
+        
         cd ./engine
         echo "\n\nBuild docker image for amd64 firstly\n\n"
         
-        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .
-        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64
-
+        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}-amd64 .
+        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}-amd64
 
 
         echo "\n\nBuild allinone docker image both for amd64 and arm64\n\n"
@@ -48,11 +49,9 @@ jobs:
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
         docker buildx create --use
         docker buildx ls
-        docker buildx build --push --platform linux/amd64,linux/arm64 -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} .
+        docker buildx build --build-arg="RELEASE_VERSION=${IMAGE_TAG}" --push --platform linux/amd64,linux/arm64 -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}  --label "org.opencontainers.image.version"=$IMAGE_TAG .
         
-        docker pull ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}
-        docker tag  ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} ${DOCKER_HUB_REPOSITORY}:latest
-        docker push ${DOCKER_HUB_REPOSITORY}:latest
+
 
 
         
