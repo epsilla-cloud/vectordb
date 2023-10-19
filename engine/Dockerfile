@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 as builder
+FROM ubuntu:23.10 as builder
 
 RUN apt-get update && \
     apt-get install -y python3 python3-pip git cmake build-essential libboost-all-dev sudo
@@ -11,7 +11,7 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(npro
 
 
 
-FROM ubuntu:22.04
+FROM ubuntu:23.10
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
 ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
