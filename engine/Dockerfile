@@ -10,6 +10,7 @@ RUN scripts/install_oatpp_modules.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(nproc) && chmod +x vectordb
 
 
+
 FROM ubuntu:22.04
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
@@ -22,10 +23,11 @@ RUN apt-get update && \
     chmod +x geesefs-linux-${TARGETARCH} && \
     mv geesefs-linux-${TARGETARCH} /usr/local/bin/geesefs && \
     geesefs --version && \
-    apt-get clean all && rm -rf /var/apt/lists/* /var/cache/apt/*
-
+    apt-get clean all && \
+    rm -rf /var/apt/lists/* /var/cache/apt/*
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
 
 ENTRYPOINT ["/vectordb"]
+
