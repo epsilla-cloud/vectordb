@@ -6,7 +6,7 @@ STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
 
-DB_RELEASE_VERSION=${RELEASE_VERSION:-latest} 
+RELEASE_VERSION=${DB_RELEASE_VERSION:-latest} 
 
 
 SENTRY_DSN=`curl -s $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
@@ -41,7 +41,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     \"logger\": \"docker\",
     \"server_name\": \"${HOSTNAME}\",
     \"tags\": {
-      \"version\": \"${DB_RELEASE_VERSION}\",
+      \"version\": \"${RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
       \"timestamp\": \"${TIMESTAMP}\",
