@@ -7,7 +7,7 @@ on:
 jobs:
   build:
   
-    name: Build Vectordb
+    name: Build All-in-One Vectordb Docker Image
     runs-on: ubuntu-latest
 
     steps:
