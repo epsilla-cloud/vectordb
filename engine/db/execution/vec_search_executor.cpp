@@ -847,10 +847,6 @@ Status VecSearchExecutor::SearchByAttribute(
   std::vector<int64_t> ids;
   int64_t id_num;
   table_segment->BatchPK2ID(primary_keys, ids, id_num);
-  for (auto i = 0; i < id_num; ++i) {
-    std::cout << ids[i] << " ";
-  }
-  std::cout << std::endl;
   if (id_num > 0) {
     for (int64_t i = 0; i < id_num; ++i) {
       int64_t id = ids[i];
