@@ -6,7 +6,7 @@ STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
 
-RELEASE_VERSION=${DB_RELEASE_VERSION:-latest} 
+RELEASE_VERSION=${ENV_RELEASE_VERSION:-latest} 
 
 
 SENTRY_DSN=`curl -s $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
