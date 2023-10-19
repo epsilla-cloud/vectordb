@@ -30,6 +30,9 @@ jobs:
         DOCKER_HUB_REPOSITORY: epsilla/vectordb
         SHA_TAG: ${{ github.sha }}
       run: |
+        export IMAGE_TAG=${{ steps.date.outputs.date }}
+        export IMAGE_TAG_LATEST="latest"
+        echo "IMAGE_TAG: ${IMAGE_TAG}"
         echo "SHA: ${SHA_TAG}"
 
         wget https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
@@ -40,7 +43,8 @@ jobs:
 
         
         cd ./engine
-        docker buildx build --push --platform linux/amd64,linux/arm64 -t epsilla/vectordb:dev .
+        docker buildx build --push --platform linux/amd64,linux/arm64 -t epsilla/vectordb:dev --label "org.opencontainers.image.version"=$IMAGE_TAG
+ .
 
 
 
