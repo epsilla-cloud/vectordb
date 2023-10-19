@@ -48,6 +48,10 @@ class DBServer {
       const std::string& db_name,
       const std::string& table_name,
       std::vector<std::string>& query_fields,
+      vectordb::Json &primary_keys,
+      const std::string& filter,
+      const int64_t skip,
+      const int64_t limit,
       vectordb::Json& result);
 
   void StartRebuild() {

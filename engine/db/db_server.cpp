@@ -215,6 +215,10 @@ Status DBServer::Search(const std::string& db_name,
 Status DBServer::Project(const std::string& db_name,
                          const std::string& table_name,
                          std::vector<std::string>& query_fields,
+                         vectordb::Json &primary_keys,
+                         const std::string& filter,
+                         const int64_t skip,
+                         const int64_t limit,
                          vectordb::Json& result) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
@@ -224,9 +228,19 @@ Status DBServer::Project(const std::string& db_name,
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
+
+  // TODO: support ID list filter
+
+  // Filter validation
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  if (!expr_parse_status.ok()) {
+    return expr_parse_status;
+  }
+
   std::vector<int64_t> ids;
   std::vector<double> distances;
-  return table->Project(query_fields, -1, ids, result, false, distances);
+  return table->SearchByAttribute(query_fields, expr_nodes, skip, limit, result);
 }
 
 }  // namespace engine

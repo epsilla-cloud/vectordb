@@ -816,6 +816,47 @@ Status VecSearchExecutor::Search(
   return Status::OK();
 }
 
+Status VecSearchExecutor::SearchByAttribute(
+    vectordb::engine::TableSegmentMVP* table_segment,
+    const size_t skip,
+    const size_t raw_limit,
+    std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
+    int64_t& result_size) {
+  // TODO: leverage multithread to accelerate
+  int64_t counter = -1;
+  int64_t total_vector = table_segment->record_number_;
+  ConcurrentBitset &deleted = *(table_segment->deleted_);
+  vectordb::query::expr::ExprEvaluator expr_evaluator(
+      filter_nodes,
+      table_segment->field_name_mem_offset_map_,
+      table_segment->primitive_offset_,
+      table_segment->string_num_,
+      table_segment->attribute_table_,
+      table_segment->string_table_);
+  int filter_root_index = filter_nodes.size() - 1;
+  result_size = 0;
+  int64_t limit = raw_limit;
+  if (limit > total_vector) {
+    limit = total_vector;
+  }
+  if (limit > L_master_) {
+    search_result_.resize(limit);
+  }
+  for (int64_t id = 0; id < total_vector; ++id) {
+    if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+      continue;
+    }
+    counter++;
+    if (counter >= skip && counter < skip + limit) {
+      search_result_[result_size++] = id;
+    }
+    if (counter >= skip + limit) {
+      break;
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace execution
 }  // namespace engine
 }  // namespace vectordb
