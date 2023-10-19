@@ -37,8 +37,8 @@ jobs:
         cd ./engine
         echo "\n\nBuild docker image for amd64 firstly\n\n"
         
-        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}-amd64 .
-        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}-amd64
+        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .
+        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64
 
 
         echo "\n\nBuild allinone docker image both for amd64 and arm64\n\n"
