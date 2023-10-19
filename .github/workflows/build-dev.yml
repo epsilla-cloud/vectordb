@@ -43,8 +43,8 @@ jobs:
 
         
         cd ./engine
-        docker buildx build --push --platform linux/amd64,linux/arm64 -t epsilla/vectordb:dev --label "org.opencontainers.image.version"=$IMAGE_TAG
- .
+        docker buildx build --build-arg="RELEASE_VERSION=${IMAGE_TAG}" --push --platform linux/amd64,linux/arm64 -t epsilla/vectordb:dev --label "org.opencontainers.image.version"=$IMAGE_TAG .
+
 
 
 
