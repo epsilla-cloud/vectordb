@@ -13,7 +13,7 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make -j $(npro
 FROM ubuntu:22.04
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
-ENV DB_RELEASE_VERSION=$RELEASE_VERSION
+ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse ca-certificates && \
