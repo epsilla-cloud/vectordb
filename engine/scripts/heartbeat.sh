@@ -58,7 +58,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     \"api_key\": \"${POSTHOG_API_KEY}\",
     \"distinct_id\": \"${DISTINCT_ID}\",
     \"properties\": {
-      \"version\": \"latest\",
+      \"version\": \"${RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\"
     }
@@ -79,6 +79,7 @@ curl -X POST \
   \"level\": \"info\",
   \"server_name\": \"${HOSTNAME}\",
   \"tags\": {
+    \"version\": \"${RELEASE_VERSION}\",
     \"internal_ip\": \"${INTERNAL_IP}\",
     \"external_ip\": \"${EXTERNAL_IP}\",
     \"heart_beat\": \"${DATE_TAG}\",
@@ -99,7 +100,7 @@ curl -X POST -L --header "Content-Type: application/json" \
     \"api_key\": \"${POSTHOG_API_KEY}\",
     \"distinct_id\": \"${DISTINCT_ID}\",
     \"properties\": {
-      \"version\": \"latest\",
+      \"version\": \"${RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\"
     }
