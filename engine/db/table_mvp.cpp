@@ -224,8 +224,7 @@ Status TableMVP::Search(const std::string &field_name,
 
 Status TableMVP::SearchByAttribute(
     std::vector<std::string> &query_fields,
-    // int64_t idlist_size,        // -1 means project all.
-    // std::vector<int64_t> &ids,  // doesn't matter if idlist_size is -1.
+    vectordb::Json &primary_keys,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     const int64_t skip,
     const int64_t limit,
@@ -244,8 +243,13 @@ Status TableMVP::SearchByAttribute(
 
   // Search.
   int64_t result_num = 0;
-  executor.exec_->SearchByAttribute(table_segment_.get(), skip, limit,
-                         filter_nodes, result_num);
+  executor.exec_->SearchByAttribute(
+    table_segment_.get(),
+    skip,
+    limit,
+    primary_keys,
+    filter_nodes,
+    result_num);
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,
               false, executor.exec_->distance_);

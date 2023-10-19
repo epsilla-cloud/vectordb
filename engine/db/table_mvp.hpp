@@ -55,8 +55,7 @@ class TableMVP {
 
   Status SearchByAttribute(
       std::vector<std::string> &query_fields,
-      // int64_t idlist_size,        // -1 means project all.
-      // std::vector<int64_t> &ids,  // doesn't matter if idlist_size is -1.
+      vectordb::Json &primary_keys,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       const int64_t skip,
       const int64_t limit,

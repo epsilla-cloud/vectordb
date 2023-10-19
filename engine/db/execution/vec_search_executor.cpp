@@ -820,6 +820,7 @@ Status VecSearchExecutor::SearchByAttribute(
     vectordb::engine::TableSegmentMVP* table_segment,
     const size_t skip,
     const size_t raw_limit,
+    vectordb::Json &primary_keys,
     std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
     int64_t& result_size) {
   // TODO: leverage multithread to accelerate
@@ -842,16 +843,40 @@ Status VecSearchExecutor::SearchByAttribute(
   if (limit > L_master_) {
     search_result_.resize(limit);
   }
-  for (int64_t id = 0; id < total_vector; ++id) {
-    if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
-      continue;
+  // Convert primary keys to ids
+  std::vector<int64_t> ids;
+  int64_t id_num;
+  table_segment->BatchPK2ID(primary_keys, ids, id_num);
+  for (auto i = 0; i < id_num; ++i) {
+    std::cout << ids[i] << " ";
+  }
+  std::cout << std::endl;
+  if (id_num > 0) {
+    for (int64_t i = 0; i < id_num; ++i) {
+      int64_t id = ids[i];
+      if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+        continue;
+      }
+      counter++;
+      if (counter >= skip && counter < skip + limit) {
+        search_result_[result_size++] = id;
+      }
+      if (counter >= skip + limit) {
+        break;
+      }
     }
-    counter++;
-    if (counter >= skip && counter < skip + limit) {
-      search_result_[result_size++] = id;
-    }
-    if (counter >= skip + limit) {
-      break;
+  } else {
+    for (int64_t id = 0; id < total_vector; ++id) {
+      if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+        continue;
+      }
+      counter++;
+      if (counter >= skip && counter < skip + limit) {
+        search_result_[result_size++] = id;
+      }
+      if (counter >= skip + limit) {
+        break;
+      }
     }
   }
   return Status::OK();
