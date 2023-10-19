@@ -37,7 +37,16 @@ jobs:
         cd ./engine
         echo "\n\nBuild docker image for amd64 firstly\n\n"
         
-        docker build --pull -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .
+        docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
+                            --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
+                            --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \
+                            --label "org.opencontainers.image.source"="https://github.com/epsilla-cloud/vectordb" \
+                            --label "org.opencontainers.image.title"="Epsilla Vector Database" \
+                            --label "org.opencontainers.image.url"="https://www.epsilla.com" \
+                            --label "org.opencontainers.image.vendor"="Epsilla" \
+                            --label "org.opencontainers.image.version"=${IMAGE_TAG} \        
+                            -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .
+                            
         docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64
 
 
