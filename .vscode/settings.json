@@ -95,7 +95,8 @@
     "source_location": "cpp",
     "any": "cpp",
     "ranges": "cpp",
-    "forward_list": "cpp"
+    "forward_list": "cpp",
+    "valarray": "cpp"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, IndentWidth: 2, ColumnLimit: 0}"

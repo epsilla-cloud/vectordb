@@ -42,6 +42,9 @@ class TableSegmentMVP {
 
   Status DeleteByPK(Json& records, int64_t wal_id);
 
+  // Convert a primary key to an internal id
+  bool PK2ID(Json& record, size_t& id);
+
   // Save the table segment to disk.
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
 
