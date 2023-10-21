@@ -53,6 +53,14 @@ class TableMVP {
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       bool with_distance);
 
+  Status SearchByAttribute(
+      std::vector<std::string> &query_fields,
+      vectordb::Json &primary_keys,
+      std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+      const int64_t skip,
+      const int64_t limit,
+      vectordb::Json &result);
+
   Status Project(
       std::vector<std::string> &query_fields,
       int64_t idlist_size,        // -1 means project all.

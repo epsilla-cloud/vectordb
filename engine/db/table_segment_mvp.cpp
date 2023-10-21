@@ -298,6 +298,28 @@ Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
   return Status(DB_SUCCESS, "successfully deleted " + std::to_string(deleted_record) + " records.");
 }
 
+// Convert a primary key to an internal id
+bool TableSegmentMVP::PK2ID(Json& record, size_t& id) {
+  if (isIntPK()) {
+    auto fieldType = pkType();
+    auto pk = record.GetInt();
+    switch (pkType()) {
+      case meta::FieldType::INT1:
+        return primary_key_.getKey(static_cast<int8_t>(pk), id);
+      case meta::FieldType::INT2:
+        return primary_key_.getKey(static_cast<int16_t>(pk), id);
+      case meta::FieldType::INT4:
+        return primary_key_.getKey(static_cast<int32_t>(pk), id);
+      case meta::FieldType::INT8:
+        return primary_key_.getKey(static_cast<int64_t>(pk), id);
+    }
+  } else if (isStringPK()) {
+    auto pk = record.GetString();
+    return primary_key_.getKey(pk, id);
+  }
+  return false;
+}
+
 Status TableSegmentMVP::DeleteByStringPK(const std::string& pk) {
   size_t result = 0;
   auto found = primary_key_.getKey(pk, result);

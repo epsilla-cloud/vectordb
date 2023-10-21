@@ -191,6 +191,14 @@ class VecSearchExecutor {
       const size_t limit,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
       int64_t& result_size);
+
+  Status SearchByAttribute(
+      vectordb::engine::TableSegmentMVP* table_segment,
+      const size_t skip,
+      const size_t limit,
+      vectordb::Json &primary_keys,
+      std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
+      int64_t& result_size);
 };  // Class VecSearchExecutor
 
 }  // namespace execution
