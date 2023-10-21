@@ -298,52 +298,26 @@ Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
   return Status(DB_SUCCESS, "successfully deleted " + std::to_string(deleted_record) + " records.");
 }
 
-Status TableSegmentMVP::BatchPK2ID(Json& records, std::vector<int64_t>& ids, int64_t& id_num) {
-  id_num = 0;
-  int64_t record_size = records.GetSize();
-  if (record_size == 0) {
-    std::cout << "No records to convert." << std::endl;
-    return Status::OK();
-  }
-  ids.resize(record_size);
+// Convert a primary key to an internal id
+bool TableSegmentMVP::PK2ID(Json& record, size_t& id) {
   if (isIntPK()) {
     auto fieldType = pkType();
-    for (auto i = 0; i < record_size; ++i) {
-      auto pkField = records.GetArrayElement(i);
-      auto pk = pkField.GetInt();
-
-      size_t result = 0;
-      bool found = false;
-      switch (pkType()) {
-        case meta::FieldType::INT1:
-          found = primary_key_.getKey(static_cast<int8_t>(pk), result);
-          break;
-        case meta::FieldType::INT2:
-          found = primary_key_.getKey(static_cast<int16_t>(pk), result);
-          break;
-        case meta::FieldType::INT4:
-          found = primary_key_.getKey(static_cast<int32_t>(pk), result);
-          break;
-        case meta::FieldType::INT8:
-          found = primary_key_.getKey(static_cast<int64_t>(pk), result);
-          break;
-      }
-      if (found) {
-        ids[id_num++] = result;
-      }
+    auto pk = record.GetInt();
+    switch (pkType()) {
+      case meta::FieldType::INT1:
+        return primary_key_.getKey(static_cast<int8_t>(pk), id);
+      case meta::FieldType::INT2:
+        return primary_key_.getKey(static_cast<int16_t>(pk), id);
+      case meta::FieldType::INT4:
+        return primary_key_.getKey(static_cast<int32_t>(pk), id);
+      case meta::FieldType::INT8:
+        return primary_key_.getKey(static_cast<int64_t>(pk), id);
     }
   } else if (isStringPK()) {
-    for (auto i = 0; i < record_size; ++i) {
-      auto pkField = records.GetArrayElement(i);
-      auto pk = pkField.GetString();
-      size_t result = 0;
-      bool found = primary_key_.getKey(pk, result);
-      if (found) {
-        ids[id_num++] = result;
-      }
-    }
+    auto pk = record.GetString();
+    return primary_key_.getKey(pk, id);
   }
-  return Status(DB_SUCCESS, "successfully converted " + std::to_string(id_num) + " records.");
+  return false;
 }
 
 Status TableSegmentMVP::DeleteByStringPK(const std::string& pk) {
