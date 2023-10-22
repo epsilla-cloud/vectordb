@@ -579,11 +579,31 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
-    // TODO: support provide id list.
+    std::string filter;
+    if (parsedBody.HasMember("filter")) {
+      filter = parsedBody.GetString("filter");
+    }
+
+    // Set a large number (larger than maximal segment size)
+    // so by default project out everything.
+    int64_t limit = 1 << 30;
+    if (parsedBody.HasMember("limit")) {
+      limit = parsedBody.GetInt("limit");
+    }
+
+    int64_t skip = 0;
+    if (parsedBody.HasMember("skip")) {
+      skip = parsedBody.GetInt("skip");
+    }
+
+    vectordb::Json pks;
+    if (parsedBody.HasMember("primaryKeys")) {
+      pks = parsedBody.GetArray("primaryKeys");
+    }
 
     vectordb::Json result;
     vectordb::Status get_status = db_server->Project(
-        db_name, table_name, query_fields, result);
+        db_name, table_name, query_fields, pks, filter, skip, limit, result);
     if (!get_status.ok()) {
       status_dto->statusCode = Status::CODE_500.code;
       status_dto->message = get_status.message();

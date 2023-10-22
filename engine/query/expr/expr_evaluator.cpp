@@ -59,7 +59,6 @@ int64_t ExprEvaluator::GetIntFieldValue(const std::string& field_name, const int
     default:
       result = 0;
   }
-  std::cout << result << std::endl;
   return result;
 }
 

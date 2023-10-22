@@ -222,6 +222,43 @@ Status TableMVP::Search(const std::string &field_name,
   return Status::OK();
 }
 
+Status TableMVP::SearchByAttribute(
+    std::vector<std::string> &query_fields,
+    vectordb::Json &primary_keys,
+    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+    const int64_t skip,
+    const int64_t limit,
+    vectordb::Json &result) {
+  // TODO: create a separate pool for search by attribute.
+  int64_t field_offset = 0;
+  // [Note] the following invocation is wrong
+  //   execution::RAIIVecSearchExecutor(executor_pool_[field_offset],
+  //   executor_pool_[field_offset]->acquire);
+  // because the value of executor_pool_[field_offset] could be different when
+  // evaluating twice, which will result in memory leak or core dump
+  std::unique_lock<std::mutex> lock(executor_pool_mutex_);
+  auto pool = executor_pool_.at(field_offset);
+  auto executor = execution::RAIIVecSearchExecutor(pool, pool->acquire());
+  lock.unlock();
+
+  // Search.
+  int64_t result_num = 0;
+  executor.exec_->SearchByAttribute(
+    table_segment_.get(),
+    skip,
+    limit,
+    primary_keys,
+    filter_nodes,
+    result_num);
+  auto status =
+      Project(query_fields, result_num, executor.exec_->search_result_, result,
+              false, executor.exec_->distance_);
+  if (!status.ok()) {
+    return status;
+  }
+  return Status::OK();
+}
+
 Status TableMVP::Project(
     std::vector<std::string> &query_fields,
     int64_t idlist_size,        // -1 means project all.
