@@ -6,6 +6,9 @@ STARTUP_FILE=".startup_file"
 CONFIG_URL="https://config.epsilla.com/candidate.json"
 QUERY_URL="https://api.ipify.org"
 
+RELEASE_VERSION=${ENV_RELEASE_VERSION:-latest} 
+
+
 SENTRY_DSN=`curl -s $CONFIG_URL | grep heartbeat | awk -F '"' '{print $(NF-1)}'`
 SENTRY_HOST=`echo $SENTRY_DSN | sed -e "s/[^/]*\/\/\([^@]*@\)\?\([^:/]*\).*/\2/"`
 SENTRY_SECRET=`echo $SENTRY_DSN | cut -d '/' -f3 | cut -d '@' -f1`
@@ -38,7 +41,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     \"logger\": \"docker\",
     \"server_name\": \"${HOSTNAME}\",
     \"tags\": {
-      \"version\": \"latest\",
+      \"version\": \"${RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\",
       \"timestamp\": \"${TIMESTAMP}\",
@@ -55,7 +58,7 @@ if [ ! -f "${STARTUP_FILE}" ]; then
     \"api_key\": \"${POSTHOG_API_KEY}\",
     \"distinct_id\": \"${DISTINCT_ID}\",
     \"properties\": {
-      \"version\": \"latest\",
+      \"version\": \"${RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\"
     }
@@ -76,6 +79,7 @@ curl -X POST \
   \"level\": \"info\",
   \"server_name\": \"${HOSTNAME}\",
   \"tags\": {
+    \"version\": \"${RELEASE_VERSION}\",
     \"internal_ip\": \"${INTERNAL_IP}\",
     \"external_ip\": \"${EXTERNAL_IP}\",
     \"heart_beat\": \"${DATE_TAG}\",
@@ -96,7 +100,7 @@ curl -X POST -L --header "Content-Type: application/json" \
     \"api_key\": \"${POSTHOG_API_KEY}\",
     \"distinct_id\": \"${DISTINCT_ID}\",
     \"properties\": {
-      \"version\": \"latest\",
+      \"version\": \"${RELEASE_VERSION}\",
       \"internal_ip\": \"${INTERNAL_IP}\",
       \"external_ip\": \"${EXTERNAL_IP}\"
     }
