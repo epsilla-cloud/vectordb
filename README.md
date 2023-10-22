@@ -3,11 +3,12 @@
 
 <img width="275" alt="Epsilla Logo" src="https://epsilla-misc.s3.amazonaws.com/epsilla-horizontal.png">
 
-**A scalable, high-performance, and cost-effective vector database**
+**A 10x faster, cheaper, and better vector database**
 
 <a href="https://epsilla-inc.gitbook.io/epsilladb/">Documentation</a> •
 <a href="https://discord.gg/cDaY2CxZc5">Discord</a> •
 <a href="https://twitter.com/epsilla_inc">Twitter</a> •
+<a href="https://blog.epsilla.com">Blog</a> •
 <a href="https://forms.gle/z73ra1sGBxH9wiUR8">Feedback</a>
 
 </div>
