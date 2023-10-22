@@ -41,7 +41,11 @@ class TableMVP {
 
   Status Insert(vectordb::Json &records);
 
-  Status DeleteByPK(vectordb::Json &records);
+  Status Delete(
+    vectordb::Json &records,
+    const std::string& filter,
+    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes
+  );
 
   Status Search(
       const std::string &field_name,
