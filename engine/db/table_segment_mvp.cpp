@@ -260,39 +260,73 @@ bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
   return deleted_->test(id);
 }
 
-Status TableSegmentMVP::DeleteByPK(Json& records, int64_t wal_id) {
+Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes, int64_t wal_id) {
   wal_global_id_ = wal_id;
   size_t deleted_record = 0;
-  size_t new_record_size = records.GetSize();
-  if (new_record_size == 0) {
-    std::cout << "No records to delete." << std::endl;
-    return Status::OK();
-  }
-  if (isIntPK()) {
-    auto fieldType = pkType();
-    for (auto i = 0; i < new_record_size; ++i) {
+  size_t pk_list_size = records.GetSize();
+  vectordb::query::expr::ExprEvaluator expr_evaluator(
+    filter_nodes,
+    field_name_mem_offset_map_,
+    primitive_offset_,
+    string_num_,
+    attribute_table_,
+    string_table_);
+  int filter_root_index = filter_nodes.size() - 1;
+
+  if (pk_list_size > 0) {
+    // Delete by the pk list.
+    for (auto i = 0; i < pk_list_size; ++i) {
       auto pkField = records.GetArrayElement(i);
-      auto pk = pkField.GetInt();
-      switch (pkType()) {
-        case meta::FieldType::INT1:
-          deleted_record += DeleteByIntPK(static_cast<int8_t>(pk)).ok();
-          break;
-        case meta::FieldType::INT2:
-          deleted_record += DeleteByIntPK(static_cast<int16_t>(pk)).ok();
-          break;
-        case meta::FieldType::INT4:
-          deleted_record += DeleteByIntPK(static_cast<int32_t>(pk)).ok();
-          break;
-        case meta::FieldType::INT8:
-          deleted_record += DeleteByIntPK(static_cast<int64_t>(pk)).ok();
-          break;
+      if (isIntPK()) {
+        auto fieldType = pkType();
+        auto pk = pkField.GetInt();
+        switch (pkType()) {
+          case meta::FieldType::INT1:
+            deleted_record += DeleteByIntPK(static_cast<int8_t>(pk), expr_evaluator, filter_root_index).ok();
+            break;
+          case meta::FieldType::INT2:
+            deleted_record += DeleteByIntPK(static_cast<int16_t>(pk), expr_evaluator, filter_root_index).ok();
+            break;
+          case meta::FieldType::INT4:
+            deleted_record += DeleteByIntPK(static_cast<int32_t>(pk), expr_evaluator, filter_root_index).ok();
+            break;
+          case meta::FieldType::INT8:
+            deleted_record += DeleteByIntPK(static_cast<int64_t>(pk), expr_evaluator, filter_root_index).ok();
+            break;
+        }
+      } else if (isStringPK()) {
+        auto pk = pkField.GetString();
+        deleted_record += DeleteByStringPK(pk, expr_evaluator, filter_root_index).ok();
       }
     }
-  } else if (isStringPK()) {
-    for (auto i = 0; i < new_record_size; ++i) {
-      auto pkField = records.GetArrayElement(i);
-      auto pk = pkField.GetString();
-      deleted_record += DeleteByStringPK(pk).ok();
+  } else {
+    // Delete by scanning the whole segment.
+    for (auto id = 0; id < record_number_; ++id) {
+      if (isIntPK()) {
+        auto offset = field_id_mem_offset_map_[pkFieldIdx()] + id * primitive_offset_;
+        auto pk = &attribute_table_[offset];
+        auto fieldType = pkType();
+        switch (pkType()) {
+          case meta::FieldType::INT1:
+            deleted_record += DeleteByIntPK(static_cast<int8_t>(*pk), expr_evaluator, filter_root_index).ok();
+            break;
+          case meta::FieldType::INT2:
+            deleted_record += DeleteByIntPK(static_cast<int16_t>(*pk), expr_evaluator, filter_root_index).ok();
+            break;
+          case meta::FieldType::INT4:
+            deleted_record += DeleteByIntPK(static_cast<int32_t>(*pk), expr_evaluator, filter_root_index).ok();
+            break;
+          case meta::FieldType::INT8:
+            deleted_record += DeleteByIntPK(static_cast<int64_t>(*pk), expr_evaluator, filter_root_index).ok();
+            break;
+        }
+      } else if (isStringPK()) {
+        auto string_offset = field_id_mem_offset_map_[pkFieldIdx()] + id * string_num_;
+        auto pk = string_table_[string_offset];
+        deleted_record += DeleteByStringPK(pk, expr_evaluator, filter_root_index).ok();
+      } else {
+        deleted_record += DeleteByID(id, expr_evaluator, filter_root_index).ok();
+      }
     }
   }
   return Status(DB_SUCCESS, "successfully deleted " + std::to_string(deleted_record) + " records.");
@@ -320,15 +354,32 @@ bool TableSegmentMVP::PK2ID(Json& record, size_t& id) {
   return false;
 }
 
-Status TableSegmentMVP::DeleteByStringPK(const std::string& pk) {
+Status TableSegmentMVP::DeleteByStringPK(
+  const std::string& pk,
+  vectordb::query::expr::ExprEvaluator& evaluator,
+  int filter_root_index
+) {
   size_t result = 0;
   auto found = primary_key_.getKey(pk, result);
-  if (found) {
+  if (found && evaluator.LogicalEvaluate(filter_root_index, result)) {
     deleted_->set(result);
     primary_key_.removeKey(pk);
     return Status::OK();
   }
-  return Status(RECORD_NOT_FOUND, "could not find record with primary key: " + pk);
+  return Status(RECORD_NOT_FOUND, "Record with primary key not exist or skipped by filter: " + pk);
+}
+
+Status TableSegmentMVP::DeleteByID(
+  const size_t id,
+  vectordb::query::expr::ExprEvaluator& evaluator,
+  int filter_root_index
+) {
+  // Caller needs to guarantee the id is within record range.
+  if (evaluator.LogicalEvaluate(filter_root_index, id)) {
+    deleted_->set(id);
+    return Status::OK();
+  }
+  return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + id);
 }
 
 // Status TableSegmentMVP::DoubleSize() {

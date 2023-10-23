@@ -1,3 +1,5 @@
+#pragma once
+
 #include <any>
 #include <unordered_map>
 #include <vector>
