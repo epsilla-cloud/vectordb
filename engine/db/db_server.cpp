@@ -134,7 +134,12 @@ Status DBServer::Insert(const std::string& db_name,
   return table->Insert(records);
 }
 
-Status DBServer::DeleteByPK(const std::string& db_name, const std::string& table_name, vectordb::Json& pkList) {
+Status DBServer::Delete(
+  const std::string& db_name,
+  const std::string& table_name,
+  vectordb::Json& pkList,
+  const std::string& filter
+) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -143,46 +148,56 @@ Status DBServer::DeleteByPK(const std::string& db_name, const std::string& table
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  int pkIdx = 0;
-  for (; pkIdx < table->table_schema_.fields_.size(); pkIdx++) {
-    if (table->table_schema_.fields_[pkIdx].is_primary_key_) {
-      break;
+  // Semantic check primary keys list.
+  if (pkList.GetSize() > 0) {
+    int pkIdx = 0;
+    for (; pkIdx < table->table_schema_.fields_.size(); pkIdx++) {
+      if (table->table_schema_.fields_[pkIdx].is_primary_key_) {
+        break;
+      }
+    }
+    if (pkIdx == table->table_schema_.fields_.size()) {
+      return Status(DB_UNEXPECTED_ERROR, "Primary key not found: " + table_name);
+    }
+
+    // simple sanity check
+    auto pkField = table->table_schema_.fields_[pkIdx];
+    size_t pkListSize = pkList.GetSize();
+    if (pkListSize == 0) {
+      std::cout << "No pk to delete." << std::endl;
+      return Status::OK();
+    }
+    switch (pkField.field_type_) {
+      case meta::FieldType::INT1:  // fall through
+      case meta::FieldType::INT2:  // fall through
+      case meta::FieldType::INT4:  // fall through
+      case meta::FieldType::INT8:
+        for (int i = 0; i < pkListSize; i++) {
+          if (!pkList.GetArrayElement(i).IsNumber()) {
+            return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
+          }
+        }
+        break;
+      case meta::FieldType::STRING:
+        for (int i = 0; i < pkListSize; i++) {
+          if (!pkList.GetArrayElement(i).IsString()) {
+            return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
+          }
+        }
+        break;
+      default:
+        return Status(DB_UNEXPECTED_ERROR, "unexpected Primary key type.");
     }
   }
-  if (pkIdx == table->table_schema_.fields_.size()) {
-    return Status(DB_UNEXPECTED_ERROR, "Primary key not found: " + table_name);
+
+  // Filter validation
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  if (!expr_parse_status.ok()) {
+    return expr_parse_status;
   }
 
-  // simple sanity check
-  auto pkField = table->table_schema_.fields_[pkIdx];
-  size_t pkListSize = pkList.GetSize();
-  if (pkListSize == 0) {
-    std::cout << "No pk to delete." << std::endl;
-    return Status::OK();
-  }
-  switch (pkField.field_type_) {
-    case meta::FieldType::INT1:  // fall through
-    case meta::FieldType::INT2:  // fall through
-    case meta::FieldType::INT4:  // fall through
-    case meta::FieldType::INT8:
-      for (int i = 0; i < pkListSize; i++) {
-        if (!pkList.GetArrayElement(i).IsNumber()) {
-          return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
-        }
-      }
-      break;
-    case meta::FieldType::STRING:
-      for (int i = 0; i < pkListSize; i++) {
-        if (!pkList.GetArrayElement(i).IsString()) {
-          return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
-        }
-      }
-      break;
-    default:
-      return Status(DB_UNEXPECTED_ERROR, "unexpected Primary key type.");
-  }
-
-  return table->DeleteByPK(pkList);
+  return table->Delete(pkList, filter, expr_nodes);
 }
 
 Status DBServer::Search(const std::string& db_name,

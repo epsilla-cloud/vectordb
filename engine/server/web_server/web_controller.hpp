@@ -384,15 +384,30 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->message = "Missing table name in your payload.";
       return createDtoResponse(Status::CODE_400, dto);
     }
-    if (!requestBody.HasMember("primaryKeys")) {
+
+    vectordb::Json pks;
+    pks.LoadFromString("[]");
+    if (requestBody.HasMember("primaryKeys")) {
+      pks = requestBody.GetArray("primaryKeys");
+      if (pks.GetSize() == 0) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "If the primaryKeys field is provided, it cannot be empty.";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    std::string filter;
+    if (requestBody.HasMember("filter")) {
+      filter = requestBody.GetString("filter");
+    }
+
+    if (!requestBody.HasMember("primaryKeys") && !requestBody.HasMember("filter")) {
       dto->statusCode = Status::CODE_400.code;
-      dto->message = "Missing primary key list to delete in your payload.";
+      dto->message = "Must provide primary key list or filter in your payload.";
       return createDtoResponse(Status::CODE_400, dto);
     }
 
     auto table = requestBody.GetString("table");
-    auto pks = requestBody.GetArray("primaryKeys");
-    auto status = db_server->DeleteByPK(db_name, table, pks);
+    auto status = db_server->Delete(db_name, table, pks, filter);
     auto responseCode = Status::CODE_200;
     if (status.ok()) {
       dto->statusCode = Status::CODE_200.code;
@@ -597,8 +612,14 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     vectordb::Json pks;
+    pks.LoadFromString("[]");
     if (parsedBody.HasMember("primaryKeys")) {
       pks = parsedBody.GetArray("primaryKeys");
+      if (pks.GetSize() == 0) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "If the primaryKeys field is provided, it cannot be empty.";
+        return createDtoResponse(Status::CODE_400, status_dto);
+      }
     }
 
     vectordb::Json result;
