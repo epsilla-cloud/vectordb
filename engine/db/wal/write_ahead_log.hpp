@@ -1,3 +1,5 @@
+#pragma once
+
 #include <omp.h>
 #include <unistd.h>
 
@@ -11,6 +13,10 @@
 #include "utils/atomic_counter.hpp"
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
+
+#include "query/expr/expr_evaluator.hpp"
+#include "query/expr/expr_types.hpp"
+#include "query/expr/expr.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -76,7 +82,11 @@ class WriteAheadLog {
     return next;
   }
 
-  void Replay(meta::TableSchema &table_schema, std::shared_ptr<TableSegmentMVP> segment) {
+  void Replay(
+    meta::TableSchema &table_schema,
+    std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
+    std::shared_ptr<TableSegmentMVP> segment
+  ) {
     std::vector<std::filesystem::path> files;
     GetSortedLogFiles(files);
     for (auto pt = 0; pt < files.size(); ++pt) {
@@ -103,7 +113,7 @@ class WriteAheadLog {
         std::string content = line.substr(second_space + 1);
 
         // Otherwise, replay the entry
-        ApplyEntry(table_schema, segment, global_id, type, content);
+        ApplyEntry(table_schema, field_name_type_map, segment, global_id, type, content);
       }
       // Close the file.
       in.close();
@@ -153,7 +163,14 @@ class WriteAheadLog {
   }
 
  private:
-  void ApplyEntry(meta::TableSchema &table_schema, std::shared_ptr<TableSegmentMVP> segment, int64_t global_id, LogEntryType &type, std::string &content) {
+  void ApplyEntry(
+    meta::TableSchema &table_schema,
+    std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
+    std::shared_ptr<TableSegmentMVP> segment,
+    int64_t global_id,
+    LogEntryType &type,
+    std::string &content
+  ) {
     vectordb::Json record;
     record.LoadFromString(content);
     switch (type) {
@@ -165,7 +182,20 @@ class WriteAheadLog {
         break;
       }
       case LogEntryType::DELETE: {
-        auto status = segment->DeleteByPK(record, global_id);
+        vectordb::Json pks;
+        std::string filter;
+        if (content[0] == '{') {
+          // New version: supports filter
+          pks = record.GetArray("pk");
+          filter = record.GetString("filter");
+        } else {
+          // Old version: supports only pk list.
+          pks = record;
+        }
+        std::vector<query::expr::ExprNodePtr> expr_nodes;
+        vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, field_name_type_map);
+  
+        auto status = segment->Delete(pks, expr_nodes, global_id);
         if (!status.ok()) {
           std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
         }

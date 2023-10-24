@@ -30,7 +30,12 @@ class DBServer {
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
   Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
-  Status DeleteByPK(const std::string& db_name, const std::string& table_name, vectordb::Json& pkList);
+  Status Delete(
+    const std::string& db_name,
+    const std::string& table_name,
+    vectordb::Json& pkList,
+    const std::string& filter
+  );
   Status Search(
     const std::string& db_name,
     const std::string& table_name,

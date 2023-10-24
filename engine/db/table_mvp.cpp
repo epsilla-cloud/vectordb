@@ -27,7 +27,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
 
   // Replay operations in write ahead log.
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_);
-  wal_->Replay(table_schema, table_segment_);
+  wal_->Replay(table_schema, field_name_type_map_, table_segment_);
 
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     if (table_schema_.fields_[i].field_type_ == meta::FieldType::VECTOR_FLOAT ||
@@ -161,10 +161,18 @@ Status TableMVP::Insert(vectordb::Json &record) {
   return table_segment_->Insert(table_schema_, record, wal_id);
 }
 
-Status TableMVP::DeleteByPK(vectordb::Json &records) {
+Status TableMVP::Delete(
+  vectordb::Json &records,
+  const std::string& filter,
+  std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes
+) {
+  vectordb::Json delete_wal;
+  delete_wal.LoadFromString("{}");
+  delete_wal.SetObject("pk", records);
+  delete_wal.SetString("filter", filter);
   int64_t wal_id =
-      wal_->WriteEntry(LogEntryType::DELETE, records.DumpToString());
-  return table_segment_->DeleteByPK(records, wal_id);
+      wal_->WriteEntry(LogEntryType::DELETE, delete_wal.DumpToString());
+  return table_segment_->Delete(records, filter_nodes, wal_id);
 }
 
 Status TableMVP::Search(const std::string &field_name,

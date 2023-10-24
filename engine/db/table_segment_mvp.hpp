@@ -12,6 +12,9 @@
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
+#include "query/expr/expr_evaluator.hpp"
+#include "query/expr/expr_types.hpp"
+
 namespace vectordb {
 namespace engine {
 
@@ -40,7 +43,7 @@ class TableSegmentMVP {
   Status Insert(meta::TableSchema& table_schema, Json& records);
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
 
-  Status DeleteByPK(Json& records, int64_t wal_id);
+  Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes, int64_t wal_id);
 
   // Convert a primary key to an internal id
   bool PK2ID(Json& record, size_t& id);
@@ -96,19 +99,21 @@ class TableSegmentMVP {
   // than the owner, so so don't need to worry about invalid pointer here.
   meta::TableSchema schema;
 
-  Status DeleteByStringPK(const std::string& pk);
+  Status DeleteByStringPK(const std::string& pk, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index);
 
   template <typename T>
-  Status DeleteByIntPK(T pk) {
+  Status DeleteByIntPK(T pk, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index) {
     size_t result = 0;
     auto found = primary_key_.getKey(pk, result);
-    if (found) {
+    if (found && evaluator.LogicalEvaluate(filter_root_index, result)) {
       deleted_->set(result);
       primary_key_.removeKey(pk);
       return Status::OK();
     }
-    return Status(RECORD_NOT_FOUND, "could not find record with primary key: " + pk);
+    return Status(RECORD_NOT_FOUND, "Record with primary key not exist or skipped by filter: " + pk);
   }
+
+  Status DeleteByID(const size_t id, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index);
 
   // std::shared_ptr<AttributeTable> attribute_table_;  // The attribute table in memory (exclude vector attributes and string attributes).
   // std::shared_ptr<std::string*> string_table_;       // The string attribute table in memory.
