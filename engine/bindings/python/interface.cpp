@@ -290,7 +290,8 @@ static PyObject *delete_by_pk(PyObject *self, PyObject *args, PyObject *kwargs) 
   records.LoadFromString(std::string(utf8_str));
   Py_XDECREF(json_str);
 
-  auto status = db->DeleteByPK(db_name, tableName, records);
+  // TODO: suppport delete by filter.
+  auto status = db->Delete(db_name, tableName, records, "");
   std::cerr << status.message() << std::endl;
   return PyLong_FromLong(int(status.code()));
 }
