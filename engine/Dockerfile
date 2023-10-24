@@ -18,11 +18,6 @@ ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse ca-certificates && \
-    echo "====== Install geesefs ======" && \
-    wget --no-check-certificate https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-${TARGETARCH} && \
-    chmod +x geesefs-linux-${TARGETARCH} && \
-    mv geesefs-linux-${TARGETARCH} /usr/local/bin/geesefs && \
-    geesefs --version && \
     apt-get clean all && \
     rm -rf /var/apt/lists/* /var/cache/apt/*
 COPY --from=builder /vectordb/build/vectordb /vectordb
