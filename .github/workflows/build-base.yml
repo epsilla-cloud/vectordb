@@ -2,7 +2,6 @@ name: Build Base Image
 
 on:
   push:
-    branches: [ "dev" ]
     paths: ['engine/Dockerfile.base']
 
 jobs:
@@ -27,7 +26,7 @@ jobs:
           
     - name: Build
       env:
-        DOCKER_HUB_REPOSITORY: epsilla/vectordb
+        DOCKER_HUB_REPOSITORY: epsilla/base
         SHA_TAG: ${{ github.sha }}
       run: |
         export IMAGE_TAG=${{ steps.date.outputs.date }}
