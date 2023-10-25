@@ -3,7 +3,6 @@ FROM ubuntu:23.10 as builder
 RUN apt-get update && \
     apt-get install -y python3 python3-pip git cmake build-essential libboost-all-dev sudo
 ADD ./ /vectordb
-
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
 RUN scripts/install_oatpp_modules.sh
@@ -15,7 +14,6 @@ FROM ubuntu:23.10
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
 ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl wget net-tools iproute2 supervisor libgomp1 libboost-all-dev s3fs fuse ca-certificates && \
     apt-get clean all && \
