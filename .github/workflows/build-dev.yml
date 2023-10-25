@@ -3,7 +3,7 @@ name: Build Vectordb
 on:
   push:
     branches: [ "dev" ]
-    paths: ['engine/Dockerfile']
+    paths: ['engine/Dockerfile', 'engine/Dockerfile.base']
 
 jobs:
   build:
@@ -43,6 +43,12 @@ jobs:
 
         
         cd ./engine
+
+        docker buildx build --platform linux/amd64,linux/arm64 \
+                            --push \
+                            -f Dockerfile.base \
+                            -t epsilla/base:latest .
+
         docker buildx build --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
                             --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
@@ -52,8 +58,11 @@ jobs:
                             --label "org.opencontainers.image.url"="https://www.epsilla.com" \
                             --label "org.opencontainers.image.vendor"="Epsilla" \
                             --label "org.opencontainers.image.version"=${IMAGE_TAG} \
+                            --pull \
                             --push \
                             -t epsilla/vectordb:dev .
+
+
 
 
 
