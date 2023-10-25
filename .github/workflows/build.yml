@@ -31,15 +31,12 @@ jobs:
       run: |
         export IMAGE_TAG=${{ steps.date.outputs.date }}
         export IMAGE_TAG_LATEST="latest"
-        echo "IMAGE_TAG: ${IMAGE_TAG}"
-        echo "SHA: ${SHA_TAG}"
+        echo "IMAGE_TAG: ${IMAGE_TAG}";
+        echo "SHA: ${SHA_TAG}";
 
+        pwd;ls -la;
 
-
-        echo "\n\nBuild docker image for amd64 firstly\n\n";
-        
         cd ./engine
-        
         docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
                             --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
                             --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \
