@@ -1,6 +1,10 @@
 FROM ubuntu:23.10
 
+ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
+ADD ./scripts/install_oatpp_modules.sh /vectordb
+WORKDIR /vectordb
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 python3-pip sudo curl wget net-tools iproute2 supervisor cmake build-essential libgomp1 libboost-all-dev s3fs fuse ca-certificates && \
+    apt-get install -y --no-install-recommends python3 python3-pip libpython3-dev sudo curl wget net-tools iproute2 supervisor cmake build-essential libgomp1 libboost-all-dev s3fs fuse ca-certificates && \
+    ./install_oatpp_modules.sh
     apt-get clean all && \
     rm -rf /var/apt/lists/* /var/cache/apt/*
