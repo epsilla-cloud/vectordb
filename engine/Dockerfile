@@ -13,7 +13,7 @@ ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
-RUN apt-get purge  -y --auto-remove sudo wget python3 python3-pip libpython3-dev git cmake build-essential && \
+RUN apt-get purge  -y --auto-remove wget python3 python3-pip libpython3-dev git cmake build-essential && \
     apt-get clean all && \
     rm -rf /var/apt/lists/* /var/cache/apt/*
 ENTRYPOINT ["/vectordb"]
