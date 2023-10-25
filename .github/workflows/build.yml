@@ -37,9 +37,8 @@ jobs:
         pwd;ls -la;
         cd engine;
         pwd;ls -la;
-        docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \   
-                            -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .;
-        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64
+        docker build --pull -f Dockerfile -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .;
+        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64;
 
         
 
