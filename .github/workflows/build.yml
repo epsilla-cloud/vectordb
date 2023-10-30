@@ -70,7 +70,7 @@ jobs:
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST} .
 
-        docker inspect ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}
+        docker buildx inspect ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST}
                             
         
 
