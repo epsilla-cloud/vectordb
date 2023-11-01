@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
   status = server.Start(port, rebuild);
   if (status.ok()) {
     std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
-    std::cout << "Server running on http://localhost:" << port << std::endl;
+    std::cout << "Server running on http://0.0.0.0:" << port << std::endl;
   } else {
     std::cout << status.message() << std::endl;
     goto FAIL;
