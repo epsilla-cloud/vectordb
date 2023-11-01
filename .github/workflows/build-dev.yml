@@ -62,7 +62,6 @@ jobs:
                             --push \
                             -t epsilla/vectordb:dev .
 
-        docker buildx inspect epsilla/vectordb:dev
 
 
 
