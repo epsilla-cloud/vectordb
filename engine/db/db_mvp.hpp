@@ -14,7 +14,7 @@ namespace engine {
 
 class DBMVP {
  public:
-  explicit DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale);
+  explicit DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale, bool is_leader);
 
   ~DBMVP() {}
 
@@ -30,12 +30,20 @@ class DBMVP {
     }
   }
 
+  void SetLeader(bool is_leader) {
+    is_leader_ = is_leader;
+    for (auto table : tables_) {
+      table->SetLeader(is_leader);
+    }
+  }
+
  public:
   std::string db_catalog_path_;                                   // The path to the db catalog.
   // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> table_name_to_id_map_;  // The table name to table id map.
   std::vector<std::shared_ptr<TableMVP>> tables_;                    // The tables in this database.
   int64_t init_table_scale_;
+  std::atomic<bool> is_leader_;
 };
 
 using DBMVPPtr = std::shared_ptr<DBMVP>;

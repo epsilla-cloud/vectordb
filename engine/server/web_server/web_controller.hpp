@@ -656,6 +656,26 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
+  ADD_CORS(SetLeader)
+
+  ENDPOINT("POST", "api/setleader", SetLeader, BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    bool is_leader = parsedBody.GetBool("leader");
+    db_server->SetLeader(is_leader);
+
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = std::string("Set leader as ") + (is_leader ? "true" : "false") + " successfully.";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
 /**
  *  Finish ENDPOINTs generation ('ApiController' codegen)
  */

@@ -10,10 +10,11 @@ namespace vectordb {
 namespace engine {
 
 TableMVP::TableMVP(meta::TableSchema &table_schema,
-                   const std::string &db_catalog_path, int64_t init_table_scale)
+                   const std::string &db_catalog_path, int64_t init_table_scale, bool is_leader)
     : table_schema_(table_schema),
       // executors_num_(executors_num),
-      table_segment_(nullptr) {
+      table_segment_(nullptr),
+      is_leader_(is_leader) {
   db_catalog_path_ = db_catalog_path;
   // Construct field name to field type map.
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
@@ -26,7 +27,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
       table_schema, db_catalog_path, init_table_scale);
 
   // Replay operations in write ahead log.
-  wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_);
+  wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_, is_leader_);
   wal_->Replay(table_schema, field_name_type_map_, table_segment_);
 
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
@@ -82,12 +83,15 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
 
-  // Write the table data to disk.
-  std::cout << "Save table segment." << std::endl;
-  table_segment_->SaveTableSegment(table_schema_, db_catalog_path);
+  // Only leader sync table to disk.
+  if (is_leader_) {
+    // Write the table data to disk.
+    std::cout << "Save table segment." << std::endl;
+    table_segment_->SaveTableSegment(table_schema_, db_catalog_path);
 
-  // Clean up old WAL files.
-  wal_->CleanUpOldFiles();
+    // Clean up old WAL files.
+    wal_->CleanUpOldFiles();
+  }
 
   int64_t index = 0;
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
@@ -105,22 +109,39 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       // Rebuild the ann graph.
       std::cout << "Rebuild ANN graph for attribute: "
                 << table_schema_.fields_[i].name_ << std::endl;
-      // auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(
-      //     db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
-      auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>();
-      new_ann->BuildFromVectorTable(
-          table_segment_
-              ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                   [table_schema_.fields_[i].name_]],
-          record_number, table_schema_.fields_[i].vector_dimension_,
-          table_schema_.fields_[i].metric_type_);
-      std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
-          ann_graph_segment_[index];
-      ann_graph_segment_[index] = new_ann;
-      // Write the ANN graph to disk.
-      std::cout << "Save ANN graph segment." << std::endl;
-      ann_graph_segment_[index]->SaveANNGraph(
-          db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
+      if (is_leader_) {
+        std::cout << "leader" << std::endl;
+        // For leader, rebuild the ann graph.
+        auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(false);
+        new_ann->BuildFromVectorTable(
+            table_segment_
+                ->vector_tables_[table_segment_->field_name_mem_offset_map_
+                                    [table_schema_.fields_[i].name_]],
+            record_number, table_schema_.fields_[i].vector_dimension_,
+            table_schema_.fields_[i].metric_type_);
+        std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
+            ann_graph_segment_[index];
+        ann_graph_segment_[index] = new_ann;
+        // Write the ANN graph to disk.
+        std::cout << "Save ANN graph segment." << std::endl;
+        ann_graph_segment_[index]->SaveANNGraph(
+            db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
+      } else {
+        std::cout << "follower" << std::endl;
+        // For follower, directly reload the ann graph from disk.
+        auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(
+            db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
+        // Check if the ann graph has went ahead of the table. If so, skip.
+        if (new_ann->record_number_ > record_number) {
+          std::cout << "Skip sync ANN graph for attribute: "
+                    << table_schema_.fields_[i].name_ << std::endl;
+          ++index;
+          continue;
+        }
+        std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
+            ann_graph_segment_[index];
+        ann_graph_segment_[index] = new_ann;
+      }
 
       // Replace the executors.
       auto pool = std::make_shared<execution::ExecutorPool>();
@@ -383,6 +404,11 @@ Status TableMVP::Project(
     result.AddObjectToArray(std::move(record));
   }
   return Status::OK();
+}
+
+void TableMVP::SetLeader(bool is_leader) {
+  wal_->SetLeader(is_leader);
+  is_leader_ = is_leader;
 }
 
 TableMVP::~TableMVP() {}

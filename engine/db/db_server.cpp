@@ -39,7 +39,7 @@ Status DBServer::LoadDB(const std::string& db_name,
       return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
     }
 
-    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale);
+    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_);
     db->SetWALEnabled(wal_enabled);
     dbs_.push_back(db);
     db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;

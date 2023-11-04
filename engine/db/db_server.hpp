@@ -78,6 +78,13 @@ class DBServer {
     return Status::OK();
   }
 
+  void SetLeader(bool is_leader) {
+    is_leader_ = is_leader;
+    for (auto db : dbs_) {
+      db->SetLeader(is_leader);
+    }
+  }
+
  private:
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
@@ -100,6 +107,8 @@ class DBServer {
   };
 
   Status Rebuild();
+
+  std::atomic<bool> is_leader_;
 };
 
 }  // namespace engine

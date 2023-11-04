@@ -32,6 +32,7 @@ int main(int argc, char *argv[]) {
                                          {"help", no_argument, nullptr, 'h'},
                                          {"port", required_argument, 0, 'p'},
                                          {"rebuild", required_argument, 0, 'r'},
+                                         {"leader", required_argument, 0, 'l'},
                                          {nullptr, 0, nullptr, 0}};
 
   int option_index = 0;
@@ -50,7 +51,8 @@ int main(int argc, char *argv[]) {
   int value;
   uint16_t port = 8888;
   bool rebuild = true;
-  while ((value = getopt_long(argc, argv, "c:p:r:h", long_options, &option_index)) != -1) {
+  bool is_leader = true;
+  while ((value = getopt_long(argc, argv, "c:p:r:l:h", long_options, &option_index)) != -1) {
     switch (value) {
       case 'c': {
         char *config_filename_ptr = strdup(optarg);
@@ -69,6 +71,11 @@ int main(int argc, char *argv[]) {
         rebuild = start_rebuild[0] == 't' || start_rebuild[0] == 'T';
         break;
       }
+      case 'l': {
+        std::string leader = optarg;
+        is_leader = leader[0] == 't' || leader[0] == 'T';
+        break;
+      }
       case 'h':
         print_help(app_name);
         return EXIT_SUCCESS;
@@ -80,7 +87,7 @@ int main(int argc, char *argv[]) {
 
   server.Init(config_filename);
 
-  status = server.Start(port, rebuild);
+  status = server.Start(port, rebuild, is_leader);
   if (status.ok()) {
     std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
     std::cout << "Server running on http://0.0.0.0:" << port << std::endl;
