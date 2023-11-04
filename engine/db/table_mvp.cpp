@@ -105,8 +105,9 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       // Rebuild the ann graph.
       std::cout << "Rebuild ANN graph for attribute: "
                 << table_schema_.fields_[i].name_ << std::endl;
-      auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(
-          db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
+      // auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(
+      //     db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
+      auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>();
       new_ann->BuildFromVectorTable(
           table_segment_
               ->vector_tables_[table_segment_->field_name_mem_offset_map_
