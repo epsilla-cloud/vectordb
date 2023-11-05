@@ -81,6 +81,7 @@ class DBServer {
 
   void SetLeader(bool is_leader) {
     is_leader_ = is_leader;
+    meta_->SetLeader(is_leader_);
     for (auto db : dbs_) {
       db->SetLeader(is_leader);
     }

@@ -138,9 +138,25 @@ void DumpDatabaseSchemaToJson(const DatabaseSchema& db_schema, vectordb::Json& j
   }
 }
 
-Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
+int64_t GetNewTableId(const DatabaseSchema& db) {
+  int64_t max_id = -1;
+  for (const auto& table : db.tables_) {
+    if (table.id_ > max_id) {
+      max_id = table.id_;
+    }
+  }
+  return max_id + 1;
+}
+
+}  // namespace
+
+Status BasicMetaImpl::SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
   // Skip the default database
   if (db.name_ == DEFAULT_DB_NAME) {
+    return Status::OK();
+  }
+  // Skip for follower.
+  if (!is_leader_) {
     return Status::OK();
   }
 
@@ -153,18 +169,6 @@ Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) {
   // Write the string to the file
   return server::CommonUtil::AtomicWriteToFile(file_path, json_string);
 }
-
-int64_t GetNewTableId(const DatabaseSchema& db) {
-  int64_t max_id = -1;
-  for (const auto& table : db.tables_) {
-    if (table.id_ > max_id) {
-      max_id = table.id_;
-    }
-  }
-  return max_id + 1;
-}
-
-}  // namespace
 
 BasicMetaImpl::BasicMetaImpl() {
   DatabaseSchema default_db;
@@ -257,7 +261,9 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
     return Status(DB_NOT_FOUND, "Database not found: " + db_name);
   }
   auto path = it->second.path_;
-  server::CommonUtil::DeleteDirectory(path);  // Completely remove the database.
+  if (is_leader_) {
+    server::CommonUtil::DeleteDirectory(path);  // Completely remove the database.
+  }
   loaded_databases_paths_.erase(path);
   databases_.erase(db_name);
   return Status::OK();
@@ -363,6 +369,7 @@ Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table
   table_schema.id_ = GetNewTableId(db);
 
   db.tables_.push_back(table_schema);
+
   // Flush the change of the database schema to disk.
   status = SaveDBToFile(db, db.path_ + "/" + DB_CATALOG_FILE_NAME);
 
@@ -424,6 +431,11 @@ Status BasicMetaImpl::DropTable(const std::string& db_name, const std::string& t
 
   return Status(TABLE_NOT_FOUND, "Table not found: " + table_name);
 }
+
+void BasicMetaImpl::SetLeader(bool is_leader) {
+  is_leader_ = is_leader;
+}
+
 
 }  // namespace meta
 }  // namespace engine

@@ -37,10 +37,12 @@ Status DBMVP::DeleteTable(const std::string& table_name) {
   tables_[it->second] = nullptr;  // Set the shared_ptr to null
   table_name_to_id_map_.erase(it);
 
-  // Delete table from disk.
-  // TODO: verify if rebuild will have conflict on disk file in 2 threads.
-  std::string table_path = db_catalog_path_ + "/" + std::to_string(table_id);
-  server::CommonUtil::DeleteDirectory(table_path);  // Completely remove the table.
+  if (is_leader_) {
+    // Delete table from disk.
+    // TODO: verify if rebuild will have conflict on disk file in 2 threads.
+    std::string table_path = db_catalog_path_ + "/" + std::to_string(table_id);
+    server::CommonUtil::DeleteDirectory(table_path);  // Completely remove the table.
+  }
 
   return Status::OK();
 }

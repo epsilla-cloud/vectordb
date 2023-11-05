@@ -1,6 +1,7 @@
 // basic_meta_impl.hpp
 #pragma once
 
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -33,9 +34,14 @@ class BasicMetaImpl : public Meta {
 
   Status DropTable(const std::string& db_name, const std::string& table_name) override;
 
+  Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path);
+
+  void SetLeader(bool is_leader) override;
  private:
   std::unordered_map<std::string, DatabaseSchema> databases_;
   std::unordered_set<std::string> loaded_databases_paths_;  // We cannot allow loading the same database twice
+  // If the segment is leader (handle sync to storage) or follower (passively sync from storage)
+  std::atomic<bool> is_leader_;
 };  // BasicMetaImpl
 
 }  // namespace meta
