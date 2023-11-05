@@ -364,6 +364,52 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, status_dto);
   }
 
+  ADD_CORS(InsertRecordsPrepare)
+
+  ENDPOINT("POST", "/api/{db_name}/data/insertprepare", InsertRecordsPrepare,
+           PATH(String, db_name, "db_name"),
+           BODY_STRING(String, body)) {
+    auto status_dto = StatusDto::createShared();
+
+    vectordb::Json parsedBody;
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    if (!parsedBody.HasMember("table")) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "table is missing in your payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    vectordb::Json pks;
+    pks.LoadFromString("[]");
+    if (parsedBody.HasMember("primaryKeys")) {
+      pks = parsedBody.GetArray("primaryKeys");
+    }
+
+    std::string table_name = parsedBody.GetString("table");
+
+    vectordb::Json result;
+    vectordb::Status insert_status = db_server->InsertPrepare(db_name, table_name, pks, result);
+
+    if (!insert_status.ok()) {
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = insert_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "");
+    response.SetObject("result", result);
+    return createResponse(Status::CODE_200, response.DumpToString());
+  }
+
   ADD_CORS(DeleteRecordsByPK)
 
   ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByPK,

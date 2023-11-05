@@ -586,6 +586,69 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   return Status(DB_SUCCESS, msg);
 }
 
+Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result) {
+  // Put the segment capacity and current occupation.
+  result.SetInt("capacity", size_limit_);
+  result.SetInt("recordNumber", record_number_);
+
+  // Check which primary keys already exist.
+  auto pk_list_size = pks.GetSize();
+  if (pk_list_size > 0) {
+    Json masks;
+    masks.LoadFromString("[]");
+    uint32_t mask;
+    size_t temp;
+    for (auto i = 0; i < pk_list_size; ++i) {
+      size_t mod = i % 32;
+      if (mod == 0) {
+        mask = 4294967295;
+      }
+      auto pk = pks.GetArrayElement(i);
+      if (isIntPK()) {
+        auto fieldType = pkType();
+        auto val = pk.GetInt();
+        switch (pkType()) {
+          case meta::FieldType::INT1:
+            if (primary_key_.getKey(static_cast<int8_t>(val), temp)) {
+              mask -= 1 << mod;
+            }
+            break;
+          case meta::FieldType::INT2:
+            if (primary_key_.getKey(static_cast<int16_t>(val), temp)) {
+              mask -= 1 << mod;
+            }
+            break;
+          case meta::FieldType::INT4:
+            if (primary_key_.getKey(static_cast<int32_t>(val), temp)) {
+              mask -= 1 << mod;
+            }
+            break;
+          case meta::FieldType::INT8:
+            if (primary_key_.getKey(static_cast<int64_t>(val), temp)) {
+              mask -= 1 << mod;
+            }
+            break;
+        }
+      } else if (isStringPK()) {
+        auto val = pk.GetString();
+        if (primary_key_.getKey(val, temp)) {
+          mask -= 1 << mod;
+        }
+      }
+      if (mod == 31) {
+        masks.AddIntToArray(mask);
+      }
+    }
+    if (pk_list_size % 32 != 0) {
+      masks.AddIntToArray(mask);
+    }
+    result.SetObject("masks", masks);
+  }
+
+  return Status(DB_SUCCESS, "");
+}
+
+
 // Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
 //   if (skip_sync_disk_) {
 //     return Status::OK();

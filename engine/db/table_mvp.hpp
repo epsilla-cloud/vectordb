@@ -41,6 +41,8 @@ class TableMVP {
 
   Status Insert(vectordb::Json &records);
 
+  Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
+
   Status Delete(
     vectordb::Json &records,
     const std::string& filter,

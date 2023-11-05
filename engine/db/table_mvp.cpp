@@ -183,6 +183,10 @@ Status TableMVP::Insert(vectordb::Json &record) {
   return table_segment_->Insert(table_schema_, record, wal_id);
 }
 
+Status TableMVP::InsertPrepare(vectordb::Json &pks, vectordb::Json &result) {
+  return table_segment_->InsertPrepare(table_schema_, pks, result);
+}
+
 Status TableMVP::Delete(
   vectordb::Json &records,
   const std::string& filter,

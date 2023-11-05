@@ -134,6 +134,21 @@ Status DBServer::Insert(const std::string& db_name,
   return table->Insert(records);
 }
 
+Status DBServer::InsertPrepare(const std::string& db_name,
+                               const std::string& table_name,
+                               vectordb::Json& pks,
+                               vectordb::Json& result) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  return table->InsertPrepare(pks, result);
+}
+
 Status DBServer::Delete(
   const std::string& db_name,
   const std::string& table_name,
