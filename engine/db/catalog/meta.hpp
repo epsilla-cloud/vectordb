@@ -36,6 +36,8 @@ class Meta {
   virtual Status GetTable(const std::string& db_name, const std::string& table_name, TableSchema& response) = 0;
 
   virtual Status DropTable(const std::string& db_name, const std::string& table_name) = 0;
+
+  virtual void SetLeader(bool is_leader) = 0;
 };  // MetaData
 
 using MetaPtr = std::shared_ptr<Meta>;
