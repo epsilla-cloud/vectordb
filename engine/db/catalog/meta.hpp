@@ -29,7 +29,7 @@ class Meta {
 
   virtual Status DropDatabase(const std::string& db_name) = 0;
 
-  virtual Status CreateTable(const std::string& db_name, TableSchema& table_schema) = 0;
+  virtual Status CreateTable(const std::string& db_name, TableSchema& table_schema, size_t& table_id) = 0;
 
   virtual Status HasTable(const std::string& db_name, const std::string& table_name, bool& response) = 0;
 

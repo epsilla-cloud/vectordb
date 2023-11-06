@@ -152,6 +152,11 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, dto);
     }
 
+    bool return_table_id = false;
+    if (parsedBody.HasMember("returnTableId")) {
+      return_table_id = parsedBody.GetBool("returnTableId");
+    }
+
     vectordb::engine::meta::TableSchema table_schema;
     if (!parsedBody.HasMember("name")) {
       dto->statusCode = Status::CODE_400.code;
@@ -223,7 +228,8 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
-    vectordb::Status status = db_server->CreateTable(db_name, table_schema);
+    size_t table_id;
+    vectordb::Status status = db_server->CreateTable(db_name, table_schema, table_id);
 
     if (!status.ok()) {
       auto status_code = Status::CODE_500;
@@ -236,9 +242,19 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->message = status.message();
       return createDtoResponse(status_code, dto);
     }
-    dto->statusCode = Status::CODE_200.code;
-    dto->message = "Create " + table_schema.name_ + " successfully.";
-    return createDtoResponse(Status::CODE_200, dto);
+
+    if (return_table_id) {
+      auto res_dto = ObjectRespDto::createShared();
+      res_dto->statusCode = Status::CODE_200.code;
+      res_dto->message = "Create " + table_schema.name_ + " successfully.";
+      oatpp::parser::json::mapping::ObjectMapper mapper;
+      res_dto->result = mapper.readFromString<oatpp::Any>("{\"tableId\": " + std::to_string(table_id) + "}");
+      return createDtoResponse(Status::CODE_200, res_dto);
+    } else {
+      dto->statusCode = Status::CODE_200.code;
+      dto->message = "Create " + table_schema.name_ + " successfully.";
+      return createDtoResponse(Status::CODE_200, dto);
+    }
   }
 
   ADD_CORS(DropTable)

@@ -77,9 +77,9 @@ std::shared_ptr<DBMVP> DBServer::GetDB(const std::string& db_name) {
 }
 
 Status DBServer::CreateTable(const std::string& db_name,
-                             meta::TableSchema& table_schema) {
+                             meta::TableSchema& table_schema, size_t& table_id) {
   // Create table in meta.
-  vectordb::Status status = meta_->CreateTable(db_name, table_schema);
+  vectordb::Status status = meta_->CreateTable(db_name, table_schema, table_id);
   if (!status.ok()) {
     return status;
   }

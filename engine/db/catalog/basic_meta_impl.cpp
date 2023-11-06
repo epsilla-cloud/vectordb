@@ -346,7 +346,7 @@ Status ValidateSchema(TableSchema& table_schema) {
   return Status::OK();
 }
 
-Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema) {
+Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema, size_t& table_id) {
   // Table name cannot be duplicated.
   bool has_table = false;
   auto status = HasTable(db_name, table_schema.name_, has_table);
@@ -367,6 +367,7 @@ Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table
 
   // TODO: a better way to assign table id.
   table_schema.id_ = GetNewTableId(db);
+  table_id = table_schema.id_;
 
   db.tables_.push_back(table_schema);
 
