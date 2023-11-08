@@ -75,6 +75,10 @@ status_code, response = client.query(
 )
 ```
 
+## Epsilla Cloud
+
+Try our fully managed vector DBaaS at <a href="https://cloud.epsilla.com/">Epsilla Cloud</a>
+
 ## Quick Start with Epsilla Python Bindings Lib, without launching epsilla vector database
 
 **1. Build Epsilla Python Bindings lib package**
