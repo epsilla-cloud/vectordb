@@ -26,7 +26,7 @@ class BasicMetaImpl : public Meta {
 
   Status DropDatabase(const std::string& db_name) override;
 
-  Status CreateTable(const std::string& db_name, TableSchema& table_schema) override;
+  Status CreateTable(const std::string& db_name, TableSchema& table_schema, size_t& table_id) override;
 
   Status HasTable(const std::string& db_name, const std::string& table_name, bool& response) override;
 

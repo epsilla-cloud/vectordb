@@ -42,6 +42,7 @@ class TableSegmentMVP {
 
   Status Insert(meta::TableSchema& table_schema, Json& records);
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
+  Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
 
   Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes, int64_t wal_id);
 
