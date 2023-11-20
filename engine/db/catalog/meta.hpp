@@ -29,13 +29,15 @@ class Meta {
 
   virtual Status DropDatabase(const std::string& db_name) = 0;
 
-  virtual Status CreateTable(const std::string& db_name, TableSchema& table_schema) = 0;
+  virtual Status CreateTable(const std::string& db_name, TableSchema& table_schema, size_t& table_id) = 0;
 
   virtual Status HasTable(const std::string& db_name, const std::string& table_name, bool& response) = 0;
 
   virtual Status GetTable(const std::string& db_name, const std::string& table_name, TableSchema& response) = 0;
 
   virtual Status DropTable(const std::string& db_name, const std::string& table_name) = 0;
+
+  virtual void SetLeader(bool is_leader) = 0;
 };  // MetaData
 
 using MetaPtr = std::shared_ptr<Meta>;

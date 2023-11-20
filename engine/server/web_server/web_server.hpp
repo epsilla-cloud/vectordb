@@ -18,6 +18,7 @@ class WebServer {
   std::shared_ptr<std::thread> thread_ptr_;
   uint16_t port_;
   bool rebuild_;
+  std::atomic<bool> is_leader_;
 
  private:
   WebServer() {
@@ -45,6 +46,10 @@ class WebServer {
 
   void SetRebuild(bool rebuild) {
     rebuild_ = rebuild;
+  }
+
+  void SetLeader(bool is_leader) {
+    is_leader_ = is_leader;
   }
 };
 }  // namespace web
