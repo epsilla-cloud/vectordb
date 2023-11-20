@@ -34,12 +34,14 @@ constexpr const int RebuildThreads = 4;
 
 class TableMVP {
  public:
-  explicit TableMVP(meta::TableSchema &table_schema, const std::string &db_catalog_path, int64_t init_table_scale /*, int64_t executors_num*/);
+  explicit TableMVP(meta::TableSchema &table_schema, const std::string &db_catalog_path, int64_t init_table_scale, bool is_leader /*, int64_t executors_num*/);
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
 
   Status Insert(vectordb::Json &records);
+
+  Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
 
   Status Delete(
     vectordb::Json &records,
@@ -77,6 +79,8 @@ class TableMVP {
     wal_->SetEnabled(enabled);
   }
 
+  void SetLeader(bool is_leader);
+
   ~TableMVP();
 
  public:
@@ -96,6 +100,9 @@ class TableMVP {
 
   // One write ahead log per table.
   std::shared_ptr<WriteAheadLog> wal_;
+
+  // If the segment is leader (handle sync to storage) or follower (passively sync from storage)
+  std::atomic<bool> is_leader_;
 };
 
 }  // namespace engine

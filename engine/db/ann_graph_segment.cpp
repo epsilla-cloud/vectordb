@@ -28,8 +28,8 @@ struct NSGConfig {
 // Recommended default: 45, 50, 300, 100
 const NSGConfig Default_NSG_Config(45, 50, 300, 100);
 
-ANNGraphSegment::ANNGraphSegment()
-    : skip_sync_disk_(true),
+ANNGraphSegment::ANNGraphSegment(bool skip_sync_disk)
+    : skip_sync_disk_(skip_sync_disk),
       first_record_id_(0),
       record_number_(0),
       offset_table_(nullptr),

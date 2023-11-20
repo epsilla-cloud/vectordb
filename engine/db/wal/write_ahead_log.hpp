@@ -32,9 +32,10 @@ enum LogEntryType {
 
 class WriteAheadLog {
  public:
-  WriteAheadLog(std::string base_path, int64_t table_id)
+  WriteAheadLog(std::string base_path, int64_t table_id, bool is_leader)
       : logs_folder_(base_path + "/" + std::to_string(table_id) + "/wal/"),
-        last_rotation_time_(std::chrono::system_clock::now()) {
+        last_rotation_time_(std::chrono::system_clock::now()),
+        is_leader_(is_leader) {
     // Load the last ID from the disk
     std::ifstream id_file(logs_folder_ + "/last_id.txt");
     if (id_file.is_open()) {
@@ -43,26 +44,30 @@ class WriteAheadLog {
       global_counter_.SetValue(last_global_id);
       id_file.close();
     }
-    auto mkdir_status = server::CommonUtil::CreateDirectory(logs_folder_);
-    if (!mkdir_status.ok()) {
-      throw mkdir_status.message();
+    if (is_leader_) {
+      auto mkdir_status = server::CommonUtil::CreateDirectory(logs_folder_);
+      if (!mkdir_status.ok()) {
+        throw mkdir_status.message();
+      }
+      RotateFile();
     }
-    RotateFile();
   }
 
   ~WriteAheadLog() {
     if (file_ != nullptr) {
       fclose(file_);
     }
-    // Save the last ID to the disk
-    std::ofstream id_file(logs_folder_ + "/last_id.txt");
-    id_file << global_counter_.Get();
-    id_file.close();
+    if (is_leader_) {
+      // Save the last ID to the disk
+      std::ofstream id_file(logs_folder_ + "/last_id.txt");
+      id_file << global_counter_.Get();
+      id_file.close();
+    }
   }
 
   int64_t WriteEntry(LogEntryType type, const std::string &entry) {
     // Skip WAL for realtime scenario
-    if (!enabled_) {
+    if (!enabled_ || !is_leader_) {
       return global_counter_.Get();
     }
 
@@ -117,15 +122,19 @@ class WriteAheadLog {
       }
       // Close the file.
       in.close();
-      // Delete the file if the whole file is already in table.
-      if (!update && pt < files.size() - 1) {
-        server::CommonUtil::RemoveFile(file.string());
+      if (is_leader_) {
+        // Delete the file if the whole file is already in table.
+        if (!update && pt < files.size() - 1) {
+          server::CommonUtil::RemoveFile(file.string());
+        }
       }
     }
-    // Save the last ID to the disk
-    std::ofstream id_file(logs_folder_ + "/last_id.txt");
-    id_file << global_counter_.Get();
-    id_file.close();
+    if (is_leader_) {
+      // Save the last ID to the disk
+      std::ofstream id_file(logs_folder_ + "/last_id.txt");
+      id_file << global_counter_.Get();
+      id_file.close();
+    }
   }
 
   void CleanUpOldFiles() {
@@ -160,6 +169,13 @@ class WriteAheadLog {
 
   void SetEnabled(bool enabled) {
     enabled_ = enabled;
+  }
+
+  void SetLeader(bool is_leader) {
+    is_leader_ = is_leader;
+    if (is_leader) {
+      RotateFile();
+    }
   }
 
  private:
@@ -261,6 +277,7 @@ class WriteAheadLog {
   FILE *file_ = nullptr;
   AtomicCounter global_counter_;
   bool enabled_ = true;
+  std::atomic<bool> is_leader_;
 };
 }  // namespace engine
 }  // namespace vectordb

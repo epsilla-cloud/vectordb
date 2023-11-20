@@ -15,7 +15,7 @@ namespace engine {
 class ANNGraphSegment {
  public:
   // Default constructor just for table level init. Used by default table.
-  explicit ANNGraphSegment();
+  explicit ANNGraphSegment(bool skip_disk_sync);
   // Load segment from disk.
   explicit ANNGraphSegment(const std::string& db_catalog_path, int64_t table_id, int64_t field_id);
   // Create an in-memory segment.

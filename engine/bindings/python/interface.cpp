@@ -171,7 +171,8 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
   Py_DECREF(tableFieldsListPtr);
 
   // TODO: add auto embedding here
-  auto status = db->CreateTable(db_name, schema);
+  size_t table_id;
+  auto status = db->CreateTable(db_name, schema, table_id);
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
     return NULL;

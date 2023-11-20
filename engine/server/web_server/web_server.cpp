@@ -37,6 +37,7 @@ Status WebServer::StartService() {
     if (rebuild_) {
       user_controller->db_server->StartRebuild();
     }
+    user_controller->db_server->SetLeader(is_leader_);
     auto router = components.http_router.getObject();
     router->addController(user_controller);
 

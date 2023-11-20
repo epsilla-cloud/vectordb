@@ -39,7 +39,7 @@ Status DBServer::LoadDB(const std::string& db_name,
       return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
     }
 
-    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale);
+    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_);
     db->SetWALEnabled(wal_enabled);
     dbs_.push_back(db);
     db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
@@ -77,9 +77,9 @@ std::shared_ptr<DBMVP> DBServer::GetDB(const std::string& db_name) {
 }
 
 Status DBServer::CreateTable(const std::string& db_name,
-                             meta::TableSchema& table_schema) {
+                             meta::TableSchema& table_schema, size_t& table_id) {
   // Create table in meta.
-  vectordb::Status status = meta_->CreateTable(db_name, table_schema);
+  vectordb::Status status = meta_->CreateTable(db_name, table_schema, table_id);
   if (!status.ok()) {
     return status;
   }
@@ -132,6 +132,21 @@ Status DBServer::Insert(const std::string& db_name,
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
   return table->Insert(records);
+}
+
+Status DBServer::InsertPrepare(const std::string& db_name,
+                               const std::string& table_name,
+                               vectordb::Json& pks,
+                               vectordb::Json& result) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  return table->InsertPrepare(pks, result);
 }
 
 Status DBServer::Delete(
