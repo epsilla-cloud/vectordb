@@ -68,8 +68,11 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
                 ->vector_tables_[table_segment_->field_name_mem_offset_map_
                                      [table_schema_.fields_[i].name_]],
             space_.back()->get_dist_func(),
-            space_.back()->get_dist_func_param(), IntraQueryThreads,
-            MasterQueueSize, LocalQueueSize, GlobalSyncInterval));
+            space_.back()->get_dist_func_param(),
+            IntraQueryThreads,
+            MasterQueueSize,
+            LocalQueueSize,
+            GlobalSyncInterval));
       }
       executor_pool_.push_back(pool);
     }
@@ -202,7 +205,7 @@ Status TableMVP::Delete(
 
 Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
-                        int64_t query_dimension, const float *query_data,
+                        int64_t query_dimension, const QueryData query_data,
                         const int64_t limit, vectordb::Json &result,
                         std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
                         bool with_distance) {

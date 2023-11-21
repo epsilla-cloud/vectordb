@@ -12,6 +12,7 @@
 #include "db/index/space_cosine.hpp"
 #include "db/index/space_ip.hpp"
 #include "db/index/space_l2.hpp"
+#include "db/sparse_vector.hpp"
 #include "db/table_segment_mvp.hpp"
 #include "db/wal/write_ahead_log.hpp"
 #include "utils/atomic_counter.hpp"
@@ -44,16 +45,15 @@ class TableMVP {
   Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
 
   Status Delete(
-    vectordb::Json &records,
-    const std::string& filter,
-    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes
-  );
+      vectordb::Json &records,
+      const std::string &filter,
+      std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes);
 
   Status Search(
       const std::string &field_name,
       std::vector<std::string> &query_fields,
       int64_t query_dimension,
-      const float *query_data,
+      const QueryData query_data,
       const int64_t limit,
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,

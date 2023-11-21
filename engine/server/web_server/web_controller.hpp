@@ -13,6 +13,7 @@
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
 #include "db/db_server.hpp"
+#include "db/sparse_vector.hpp"
 #include "db/table_mvp.hpp"
 #include "server/web_server/dto/db_dto.hpp"
 #include "server/web_server/dto/status_dto.hpp"
@@ -593,7 +594,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         field_name,
         query_fields,
         vector_size,
-        query_vector,
+        vectordb::engine::QueryData(&query_vector[0]),
         limit,
         result,
         filter,
