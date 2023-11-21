@@ -1,4 +1,4 @@
-name: Build Vectordb
+name: Build Vectordb in dev
 
 on:
   push:
