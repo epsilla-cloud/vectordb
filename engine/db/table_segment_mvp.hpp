@@ -8,12 +8,12 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/unique_key.hpp"
+#include "query/expr/expr_evaluator.hpp"
+#include "query/expr/expr_types.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
-#include "query/expr/expr_evaluator.hpp"
-#include "query/expr/expr_types.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -44,7 +44,7 @@ class TableSegmentMVP {
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
 
-  Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes, int64_t wal_id);
+  Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id);
 
   // Convert a primary key to an internal id
   bool PK2ID(Json& record, size_t& id);
@@ -66,10 +66,10 @@ class TableSegmentMVP {
   std::atomic<int64_t> wal_global_id_;                                 // The consumed global wal id.
   int64_t primitive_num_;
   int64_t primitive_offset_;
-  int64_t string_num_;
+  int64_t var_len_attr_num_;
   int64_t vector_num_;
-  char* attribute_table_;      // The attribute table in memory (exclude vector attributes and string attributes).
-  std::string* string_table_;  // The string attribute table in memory.
+  char* attribute_table_;                           // The attribute table in memory (exclude vector attributes and string attributes).
+  std::vector<unsigned char>* var_len_attr_table_;  // The variable length attribute table in memory.
   // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
   std::vector<int64_t> vector_dims_;
   float** vector_tables_;      // The vector attribute tables. Each vector attribute has its own vector table.
@@ -117,7 +117,7 @@ class TableSegmentMVP {
   Status DeleteByID(const size_t id, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index);
 
   // std::shared_ptr<AttributeTable> attribute_table_;  // The attribute table in memory (exclude vector attributes and string attributes).
-  // std::shared_ptr<std::string*> string_table_;       // The string attribute table in memory.
+  // std::shared_ptr<std::string*> var_len_attr_table_;       // The string attribute table in memory.
   // // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
   // std::vector<int64_t> vector_dims_;
   // std::vector<std::shared_ptr<float*>> vector_tables_;  // The vector attribute tables. Each vector attribute has its own vector table.

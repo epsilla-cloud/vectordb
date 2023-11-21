@@ -33,6 +33,9 @@ enum class FieldType {
   VECTOR_FLOAT = 40,
   VECTOR_DOUBLE = 41,
 
+  SPARSE_VECTOR_FLOAT = 50,
+  SPARSE_VECTOR_DOUBLE = 51,
+
   UNKNOWN = 999,
 };
 
