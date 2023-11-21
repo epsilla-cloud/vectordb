@@ -116,7 +116,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
         new_ann->BuildFromVectorTable(
             table_segment_
                 ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                    [table_schema_.fields_[i].name_]],
+                                     [table_schema_.fields_[i].name_]],
             record_number, table_schema_.fields_[i].vector_dimension_,
             table_schema_.fields_[i].metric_type_);
         std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
@@ -188,10 +188,9 @@ Status TableMVP::InsertPrepare(vectordb::Json &pks, vectordb::Json &result) {
 }
 
 Status TableMVP::Delete(
-  vectordb::Json &records,
-  const std::string& filter,
-  std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes
-) {
+    vectordb::Json &records,
+    const std::string &filter,
+    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes) {
   vectordb::Json delete_wal;
   delete_wal.LoadFromString("{}");
   delete_wal.SetObject("pk", records);
@@ -278,12 +277,12 @@ Status TableMVP::SearchByAttribute(
   // Search.
   int64_t result_num = 0;
   executor.exec_->SearchByAttribute(
-    table_segment_.get(),
-    skip,
-    limit,
-    primary_keys,
-    filter_nodes,
-    result_num);
+      table_segment_.get(),
+      skip,
+      limit,
+      primary_keys,
+      filter_nodes,
+      result_num);
   auto status =
       Project(query_fields, result_num, executor.exec_->search_result_, result,
               false, executor.exec_->distance_);
@@ -382,17 +381,21 @@ Status TableMVP::Project(
           case meta::FieldType::STRING: {
             auto string_offset =
                 table_segment_->field_name_mem_offset_map_[field] +
-                id * table_segment_->string_num_;
+                id * table_segment_->var_len_attr_num_;
             record.SetString(field,
-                             table_segment_->string_table_[string_offset]);
+                             std::string(
+                                 table_segment_->var_len_attr_table_[string_offset].begin(),
+                                 table_segment_->var_len_attr_table_[string_offset].end()));
             break;
           }
           case meta::FieldType::JSON: {
             auto json_offset =
                 table_segment_->field_name_mem_offset_map_[field] +
-                id * table_segment_->string_num_;
+                id * table_segment_->var_len_attr_num_;
             vectordb::Json json;
-            json.LoadFromString(table_segment_->string_table_[json_offset]);
+            json.LoadFromString(std::string(
+                table_segment_->var_len_attr_table_[json_offset].begin(),
+                table_segment_->var_len_attr_table_[json_offset].end()));
             record.SetObject(field, json);
             break;
           }

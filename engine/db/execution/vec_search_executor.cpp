@@ -738,9 +738,9 @@ Status VecSearchExecutor::Search(
       filter_nodes,
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
-      table_segment->string_num_,
+      table_segment->var_len_attr_num_,
       table_segment->attribute_table_,
-      table_segment->string_table_);
+      table_segment->var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
   // TODO: support larger search results
@@ -835,9 +835,9 @@ Status VecSearchExecutor::SearchByAttribute(
       filter_nodes,
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
-      table_segment->string_num_,
+      table_segment->var_len_attr_num_,
       table_segment->attribute_table_,
-      table_segment->string_table_);
+      table_segment->var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
   result_size = 0;
   int64_t limit = raw_limit;
