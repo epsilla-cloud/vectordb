@@ -2,7 +2,7 @@ name: Build Base Docker Image
 
 on:
   push:
-    branches: [ "*" ]
+    branches: [ "dev" ]
     paths: ['engine/Dockerfile.base']
 
 jobs:
