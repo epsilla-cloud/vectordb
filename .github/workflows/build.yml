@@ -3,6 +3,7 @@ name: Build Vectordb Docker Image for linux/amd64 and linux/arm64
 on:
   push:
     branches: [ "main" ]
+    paths: ['engine/VERSION']
 
 jobs:
   build:
@@ -29,24 +30,28 @@ jobs:
         DOCKER_HUB_REPOSITORY: epsilla/vectordb
         SHA_TAG: ${{ github.sha }}
       run: |
-        export IMAGE_TAG=${{ steps.date.outputs.date }}
-        export IMAGE_TAG_LATEST="latest"
+        export IMAGE_TAG=${{ steps.date.outputs.date }};
+        export IMAGE_TAG_LATEST="latest";
         echo "IMAGE_TAG: ${IMAGE_TAG}";
         echo "SHA: ${SHA_TAG}";
 
         cd engine;
+        export RELEASE_TAG=`cat VERSION`;
+        echo "RELEASE_TAG: ${RELEASE_TAG}";
+
         
-        echo "========Build docker image for amd64 firstly========";
-        docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
-                     --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
-                     --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \
-                     --label "org.opencontainers.image.source"="https://github.com/epsilla-cloud/vectordb" \
-                     --label "org.opencontainers.image.title"="Epsilla Vector Database" \
-                     --label "org.opencontainers.image.url"="https://epsilla.com" \
-                     --label "org.opencontainers.image.vendor"="Epsilla" \
-                     --label "org.opencontainers.image.version"=${IMAGE_TAG} \
-                     -f Dockerfile -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .;
-        docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64;
+        
+        # echo "========Build docker image for amd64 firstly========";
+        # docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
+        #              --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
+        #              --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \
+        #              --label "org.opencontainers.image.source"="https://github.com/epsilla-cloud/vectordb" \
+        #              --label "org.opencontainers.image.title"="Epsilla Vector Database" \
+        #              --label "org.opencontainers.image.url"="https://epsilla.com" \
+        #              --label "org.opencontainers.image.vendor"="Epsilla" \
+        #              --label "org.opencontainers.image.version"=${IMAGE_TAG} \
+        #              -f Dockerfile -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .;
+        # docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64;
 
 
         echo "========Build allinone docker image both for amd64 and arm64========"
@@ -57,7 +62,8 @@ jobs:
         docker buildx create --use
         docker buildx ls
 
-        docker buildx build --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
+
+        docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
                             --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
                             --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \
@@ -65,10 +71,11 @@ jobs:
                             --label "org.opencontainers.image.title"="Epsilla Vector Database" \
                             --label "org.opencontainers.image.url"="https://epsilla.com" \
                             --label "org.opencontainers.image.vendor"="Epsilla" \
-                            --label "org.opencontainers.image.version"=${IMAGE_TAG} \
+                            --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
                             --push \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} \
+                            -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST} .
 
                             

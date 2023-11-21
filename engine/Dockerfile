@@ -14,4 +14,3 @@ COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
 ENTRYPOINT ["/vectordb"]
-
