@@ -3,7 +3,7 @@ name: Build Vectordb in dev
 on:
   push:
     branches: [ "dev" ]
-    paths: ['engine/Dockerfile', 'engine/Dockerfile.base', 'engine/VERSION']
+    paths: ['engine/Dockerfile', 'engine/VERSION']
 
 jobs:
   build:
@@ -46,11 +46,6 @@ jobs:
         export RELEASE_TAG=`cat VERSION`;
         echo "RELEASE_TAG: ${RELEASE_TAG}";
 
-        
-        docker buildx build --platform linux/amd64,linux/arm64 \
-                            --push \
-                            -f Dockerfile.base \
-                            -t epsilla/base:latest .
 
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
