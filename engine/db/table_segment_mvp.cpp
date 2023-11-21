@@ -5,7 +5,9 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
+#include "db/sparse_vector.hpp"
 #include "utils/common_util.hpp"
 
 namespace vectordb {
@@ -29,7 +31,9 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
       return 1;
     case meta::FieldType::STRING:
     case meta::FieldType::JSON:
-      // String or json attribute requires a 8-byte pointer to the string table.
+    case meta::FieldType::SPARSE_VECTOR_DOUBLE:
+    case meta::FieldType::SPARSE_VECTOR_FLOAT:
+      // Variable length attribute requires a 8-byte pointer to the string table.
       return 8;
     case meta::FieldType::VECTOR_FLOAT:
     case meta::FieldType::VECTOR_DOUBLE:
@@ -49,10 +53,12 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   primitive_offset_ = 0;
   schema = table_schema;
 
-  // Get how many primitive, vectors, and strings attributes.
+  // Get how many primitive, vectors, and variable-length attributes (string, sparse vectors).
   for (auto& field_schema : table_schema.fields_) {
     if (field_schema.field_type_ == meta::FieldType::STRING ||
-        field_schema.field_type_ == meta::FieldType::JSON) {
+        field_schema.field_type_ == meta::FieldType::JSON ||
+        field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
+        field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
       field_id_mem_offset_map_[field_schema.id_] = var_len_attr_num_;
       field_name_mem_offset_map_[field_schema.name_] = var_len_attr_num_;
       if (field_schema.is_primary_key_) {
@@ -484,27 +490,35 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         // TODO(bugless): use const value rather than literal values
         auto indices = record.GetArray("indices");
         auto values = record.GetArray("values");
-
+        auto nonZeroValueSize = indices.GetSize();
         if (indices.GetSize() != values.GetSize()) {
           std::cerr << "mismatched indices array length (" << indices.GetSize() << ") and value array length (" << values.GetSize() << "), skipping." << std::endl;
           skipped_entry++;
           goto LOOP_END;
         }
 
+        std::unique_ptr<SparseVectorElement[]> buffer(new SparseVectorElement[nonZeroValueSize]);
+
         float sum = 0;
         for (auto j = 0; j < indices.GetSize(); ++j) {
+          size_t index = static_cast<size_t>(values.GetArrayElement(j).GetInt());
           float value = static_cast<float>((float)(values.GetArrayElement(j).GetDouble()));
           sum += value * value;
-          std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
+          buffer[j].index = index;
+          buffer[j].value = value;
         }
         // covert to length
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           sum = std::sqrt(sum);
           // normalize value
           for (auto j = 0; j < field.vector_dimension_; ++j) {
-            vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j] /= sum;
+            buffer[j].value /= sum;
           }
         }
+        var_len_attr_table_[cursor * var_len_attr_num_ + field_id_mem_offset_map_[field.id_]] =
+            std::vector<unsigned char>(
+                (unsigned char*)(buffer.get()),
+                (unsigned char*)(buffer.get()) + nonZeroValueSize * sizeof(SparseVectorElement));
       } else if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.

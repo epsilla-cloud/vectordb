@@ -150,11 +150,10 @@ Status DBServer::InsertPrepare(const std::string& db_name,
 }
 
 Status DBServer::Delete(
-  const std::string& db_name,
-  const std::string& table_name,
-  vectordb::Json& pkList,
-  const std::string& filter
-) {
+    const std::string& db_name,
+    const std::string& table_name,
+    vectordb::Json& pkList,
+    const std::string& filter) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -218,7 +217,8 @@ Status DBServer::Delete(
 Status DBServer::Search(const std::string& db_name,
                         const std::string& table_name, std::string& field_name,
                         std::vector<std::string>& query_fields,
-                        int64_t query_dimension, const float* query_data,
+                        int64_t query_dimension,
+                        const QueryData query_data,
                         const int64_t limit, vectordb::Json& result,
                         const std::string& filter,
                         bool with_distance) {
@@ -245,7 +245,7 @@ Status DBServer::Search(const std::string& db_name,
 Status DBServer::Project(const std::string& db_name,
                          const std::string& table_name,
                          std::vector<std::string>& query_fields,
-                         vectordb::Json &primary_keys,
+                         vectordb::Json& primary_keys,
                          const std::string& filter,
                          const int64_t skip,
                          const int64_t limit,

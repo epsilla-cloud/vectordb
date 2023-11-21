@@ -8,6 +8,7 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
+#include "db/sparse_vector.hpp"
 #include "db/table_mvp.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
@@ -32,29 +33,27 @@ class DBServer {
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
   Status InsertPrepare(const std::string& db_name, const std::string& table_name, vectordb::Json& pks, vectordb::Json& result);
   Status Delete(
-    const std::string& db_name,
-    const std::string& table_name,
-    vectordb::Json& pkList,
-    const std::string& filter
-  );
+      const std::string& db_name,
+      const std::string& table_name,
+      vectordb::Json& pkList,
+      const std::string& filter);
   Status Search(
-    const std::string& db_name,
-    const std::string& table_name,
-    std::string& field_name,
-    std::vector<std::string>& query_fields,
-    int64_t query_dimension,
-    const float* query_data,
-    const int64_t limit,
-    vectordb::Json& result,
-    const std::string& filter,
-    bool with_distance
-  );
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& field_name,
+      std::vector<std::string>& query_fields,
+      int64_t query_dimension,
+      const QueryData query_data,
+      const int64_t limit,
+      vectordb::Json& result,
+      const std::string& filter,
+      bool with_distance);
 
   Status Project(
       const std::string& db_name,
       const std::string& table_name,
       std::vector<std::string>& query_fields,
-      vectordb::Json &primary_keys,
+      vectordb::Json& primary_keys,
       const std::string& filter,
       const int64_t skip,
       const int64_t limit,

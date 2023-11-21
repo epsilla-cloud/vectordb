@@ -14,6 +14,7 @@
 #include "db/ann_graph_segment.hpp"
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
+#include "db/sparse_vector.hpp"
 #include "db/table_segment_mvp.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
@@ -119,7 +120,7 @@ class VecSearchExecutor {
   int64_t ExpandOneCandidate(
       const int worker_id,
       const int64_t cand_id,
-      const float* query_data,
+      const QueryData query_data,
       const float& dist_bound,
       // float& dist_thresh,
       std::vector<Candidate>& set_L,
@@ -147,7 +148,7 @@ class VecSearchExecutor {
       int64_t& last_k) const;
 
   void InitializeSetLPara(
-      const float* query_data,
+      const QueryData query_data,
       const int64_t L,
       std::vector<Candidate>& set_L,
       const int64_t set_L_start,
@@ -165,7 +166,7 @@ class VecSearchExecutor {
       const int64_t L) const;
 
   void SearchImpl(
-      const float* query_data,
+      const QueryData query_data,
       const int64_t K,
       const int64_t L,
       std::vector<Candidate>& set_L,
@@ -178,7 +179,7 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(
-      const float* query_data,
+      const QueryData query_data,
       const int64_t start,
       const int64_t end,
       const ConcurrentBitset& deleted,
@@ -186,7 +187,7 @@ class VecSearchExecutor {
       vectordb::engine::TableSegmentMVP* table_segment,
       const int root_node_index);
   Status Search(
-      const float* query_data,
+      const QueryData query_data,
       vectordb::engine::TableSegmentMVP* table_segment,
       const size_t limit,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
@@ -196,7 +197,7 @@ class VecSearchExecutor {
       vectordb::engine::TableSegmentMVP* table_segment,
       const size_t skip,
       const size_t limit,
-      vectordb::Json &primary_keys,
+      vectordb::Json& primary_keys,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
       int64_t& result_size);
 };  // Class VecSearchExecutor
