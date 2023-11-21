@@ -9,6 +9,7 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 #include "db/ann_graph_segment.hpp"
@@ -26,6 +27,8 @@ namespace execution {
 
 constexpr const int BruteforceThreshold = 512;
 
+using DistFunc = std::variant<DenseVecDistFunc<float>, SparseVecDistFunc>;
+
 class VecSearchExecutor {
  public:
   std::shared_ptr<ANNGraphSegment> ann_index_;  // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
@@ -38,7 +41,7 @@ class VecSearchExecutor {
   float* vector_table_;     // The vector table for each node consecutively stored.
 
   // Distance calculation function
-  DISTFUNC<float> fstdistfunc_;
+  DistFunc fstdistfunc_;
   void* dist_func_param_;
 
   // Query parameters
@@ -64,7 +67,7 @@ class VecSearchExecutor {
       int64_t* offset_table,
       int64_t* neighbor_list,
       float* vector_table,
-      DISTFUNC<float> fstdistfunc,
+      DistFunc fstdistfunc,
       void* dist_func_param,
       int num_threads,
       int64_t L_master,

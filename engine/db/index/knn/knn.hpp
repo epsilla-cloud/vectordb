@@ -25,7 +25,7 @@ class OracleL2 {
  private:
   size_t dim;
   std::unique_ptr<SpaceInterface<float>> space;
-  DISTFUNC<float> fstdistfunc_;
+  DenseVecDistFunc<float> fstdistfunc_;
   void* dist_func_param_;
   float* m;
 
