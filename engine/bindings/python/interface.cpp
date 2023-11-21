@@ -137,7 +137,9 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
     Py_DECREF(dataTypeValue);
 
     if (field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
-        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT) {
+        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT ||
+        field.field_type_ == vectordb::engine::meta::FieldType::SPARSE_VECTOR_DOUBLE ||
+        field.field_type_ == vectordb::engine::meta::FieldType::SPARSE_VECTOR_FLOAT) {
       PyObject *dimensionsKey = PyUnicode_DecodeUTF8(tableSchemaKey_dimensions.c_str(), tableSchemaKey_dimensions.size(), "strict");
       PyObject *dimensionsValue = PyDict_GetItem(dict_obj, dimensionsKey);
       if (dimensionsValue == NULL) {

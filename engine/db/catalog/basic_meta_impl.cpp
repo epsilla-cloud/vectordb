@@ -306,7 +306,10 @@ Status ValidateSchema(TableSchema& table_schema) {
       return Status(DB_UNEXPECTED_ERROR, "Type of " + field.name_ + " is not valid.");
     }
 
-    if (field.field_type_ == FieldType::VECTOR_DOUBLE || field.field_type_ == FieldType::VECTOR_FLOAT) {
+    if (field.field_type_ == FieldType::VECTOR_DOUBLE ||
+        field.field_type_ == FieldType::VECTOR_FLOAT ||
+        field.field_type_ == FieldType::SPARSE_VECTOR_DOUBLE ||
+        field.field_type_ == FieldType::SPARSE_VECTOR_FLOAT) {
       has_vector_field = true;
       // 6. Vector fields must have dimension and metric
       // 7. Dimension must be positive
@@ -323,12 +326,11 @@ Status ValidateSchema(TableSchema& table_schema) {
     }
     if (!has_primary_key && field.is_primary_key_) {
       if (
-        field.field_type_ != FieldType::INT1 &&
-        field.field_type_ != FieldType::INT2 &&
-        field.field_type_ != FieldType::INT4 &&
-        field.field_type_ != FieldType::INT8 &&
-        field.field_type_ != FieldType::STRING
-      ) {
+          field.field_type_ != FieldType::INT1 &&
+          field.field_type_ != FieldType::INT2 &&
+          field.field_type_ != FieldType::INT4 &&
+          field.field_type_ != FieldType::INT8 &&
+          field.field_type_ != FieldType::STRING) {
         return Status(DB_UNEXPECTED_ERROR, "Primary key can only be set to a field with type TINYINT, SMALLINT, INT, BIGINT, or STRING.");
       }
       has_primary_key = true;
@@ -436,7 +438,6 @@ Status BasicMetaImpl::DropTable(const std::string& db_name, const std::string& t
 void BasicMetaImpl::SetLeader(bool is_leader) {
   is_leader_ = is_leader;
 }
-
 
 }  // namespace meta
 }  // namespace engine
