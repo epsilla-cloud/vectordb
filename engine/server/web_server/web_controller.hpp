@@ -152,6 +152,11 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, dto);
     }
 
+    bool return_table_id = false;
+    if (parsedBody.HasMember("returnTableId")) {
+      return_table_id = parsedBody.GetBool("returnTableId");
+    }
+
     vectordb::engine::meta::TableSchema table_schema;
     if (!parsedBody.HasMember("name")) {
       dto->statusCode = Status::CODE_400.code;
@@ -223,7 +228,8 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
-    vectordb::Status status = db_server->CreateTable(db_name, table_schema);
+    size_t table_id;
+    vectordb::Status status = db_server->CreateTable(db_name, table_schema, table_id);
 
     if (!status.ok()) {
       auto status_code = Status::CODE_500;
@@ -236,9 +242,19 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->message = status.message();
       return createDtoResponse(status_code, dto);
     }
-    dto->statusCode = Status::CODE_200.code;
-    dto->message = "Create " + table_schema.name_ + " successfully.";
-    return createDtoResponse(Status::CODE_200, dto);
+
+    if (return_table_id) {
+      auto res_dto = ObjectRespDto::createShared();
+      res_dto->statusCode = Status::CODE_200.code;
+      res_dto->message = "Create " + table_schema.name_ + " successfully.";
+      oatpp::parser::json::mapping::ObjectMapper mapper;
+      res_dto->result = mapper.readFromString<oatpp::Any>("{\"tableId\": " + std::to_string(table_id) + "}");
+      return createDtoResponse(Status::CODE_200, res_dto);
+    } else {
+      dto->statusCode = Status::CODE_200.code;
+      dto->message = "Create " + table_schema.name_ + " successfully.";
+      return createDtoResponse(Status::CODE_200, dto);
+    }
   }
 
   ADD_CORS(DropTable)
@@ -362,6 +378,52 @@ class WebController : public oatpp::web::server::api::ApiController {
     status_dto->statusCode = Status::CODE_200.code;
     status_dto->message = "Insert data to " + table_name + " successfully. " + insert_status.message();
     return createDtoResponse(Status::CODE_200, status_dto);
+  }
+
+  ADD_CORS(InsertRecordsPrepare)
+
+  ENDPOINT("POST", "/api/{db_name}/data/insertprepare", InsertRecordsPrepare,
+           PATH(String, db_name, "db_name"),
+           BODY_STRING(String, body)) {
+    auto status_dto = StatusDto::createShared();
+
+    vectordb::Json parsedBody;
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    if (!parsedBody.HasMember("table")) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "table is missing in your payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    vectordb::Json pks;
+    pks.LoadFromString("[]");
+    if (parsedBody.HasMember("primaryKeys")) {
+      pks = parsedBody.GetArray("primaryKeys");
+    }
+
+    std::string table_name = parsedBody.GetString("table");
+
+    vectordb::Json result;
+    vectordb::Status insert_status = db_server->InsertPrepare(db_name, table_name, pks, result);
+
+    if (!insert_status.ok()) {
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = insert_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "");
+    response.SetObject("result", result);
+    return createResponse(Status::CODE_200, response.DumpToString());
   }
 
   ADD_CORS(DeleteRecordsByPK)
@@ -653,6 +715,26 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     dto->statusCode = Status::CODE_200.code;
     dto->message = "Rebuild finished!";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(SetLeader)
+
+  ENDPOINT("POST", "api/setleader", SetLeader, BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    bool is_leader = parsedBody.GetBool("leader");
+    db_server->SetLeader(is_leader);
+
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = std::string("Set leader as ") + (is_leader ? "true" : "false") + " successfully.";
     return createDtoResponse(Status::CODE_200, dto);
   }
 

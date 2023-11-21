@@ -712,7 +712,7 @@ bool VecSearchExecutor::BruteForceSearch(
           num_result = 0;
   // remove the invalid entries
   for (; iter < end - start; ++iter) {
-    if (!deleted.test(iter) && expr_evaluator.LogicalEvaluate(root_node_index, iter)) {
+    if (!deleted.test(iter + start) && expr_evaluator.LogicalEvaluate(root_node_index, iter + start)) {
       if (iter != num_result) {
         brute_force_queue_[num_result] = brute_force_queue_[iter];
       }
@@ -777,16 +777,20 @@ Status VecSearchExecutor::Search(
       // Merge the brute force results into the search result.
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       auto bruteForceQueueSize = std::min({brute_force_queue_.size(), limit});
-      MergeTwoQueuesInto1stQueueSeqFixed(
-          set_L_,
-          master_queue_start,
-          searchLimit,
-          brute_force_queue_,
-          0,
-          bruteForceQueueSize);
-
+      size_t candidateNum;
+      if (bruteForceQueueSize > 0) {
+        MergeTwoQueuesInto1stQueueSeqFixed(
+            set_L_,
+            master_queue_start,
+            searchLimit,
+            brute_force_queue_,
+            0,
+            bruteForceQueueSize);
+        candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
+      } else {
+        candidateNum = std::min({size_t(L_master_), size_t(total_indexed_vector_)});
+      }
       result_size = 0;
-      auto candidateNum = std::min({size_t(L_master_), size_t(total_vector)});
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
         auto id = set_L_[k_i + master_queue_start].id_;
         if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {

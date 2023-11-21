@@ -62,7 +62,8 @@ jobs:
         docker buildx create --use
         docker buildx ls
 
-        docker buildx build --build-arg="RELEASE_VERSION=${RELEASE_TAG}-${IMAGE_TAG}" \
+
+        docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
                             --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
                             --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \

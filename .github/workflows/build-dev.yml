@@ -2,7 +2,7 @@ name: Build Vectordb in dev
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: [ "dev", "distritubed-*" ]
     paths: ['engine/Dockerfile', 'engine/VERSION']
 
 jobs:
