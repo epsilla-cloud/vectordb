@@ -8,7 +8,7 @@ on:
 jobs:
   build:
   
-    name: Build Vectordb
+    name: Build Vectordb in dev
     runs-on: ubuntu-latest
 
     steps:
