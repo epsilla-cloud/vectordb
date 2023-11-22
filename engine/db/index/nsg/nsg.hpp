@@ -6,8 +6,10 @@
 #include <string>
 #include <vector>
 
+#include "db/ann_graph_segment.hpp"
 #include "db/index/nsg/distance.hpp"
 #include "db/index/nsg/neighbor.hpp"
+#include "db/sparse_vector.hpp"
 #include "utils/concurrent_bitset.hpp"
 
 namespace vectordb {
@@ -48,7 +50,7 @@ class NsgIndex {
   int32_t metric_type;  // enum Metric_Type
   Distance* distance_;
 
-  float* ori_data_;
+  VectorTable ori_data_;
   int64_t* ids_;
   Graph nsg;   // final graph
   Graph knng;  // reset after build
@@ -73,7 +75,7 @@ class NsgIndex {
 
   void SetKnnGraph(Graph& knng);
 
-  size_t Build(size_t nb, float* data, const int64_t* ids, const BuildParams& parameters);
+  size_t Build(size_t nb, VectorTable data, const int64_t* ids, const BuildParams& parameters);
 
   void Search(const float* query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist, int64_t* ids,
               SearchParams& params, ConcurrentBitsetPtr bitset = nullptr);
