@@ -28,7 +28,6 @@ namespace execution {
 constexpr const int BruteforceThreshold = 512;
 
 using DistFunc = std::variant<DenseVecDistFunc<float>, SparseVecDistFunc>;
-
 class VecSearchExecutor {
  public:
   std::shared_ptr<ANNGraphSegment> ann_index_;  // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
@@ -36,9 +35,9 @@ class VecSearchExecutor {
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
 
-  int64_t* offset_table_;   // The offset table for neighbor list for each node.
-  int64_t* neighbor_list_;  // The neighbor list for each node consecutively stored.
-  float* vector_table_;     // The vector table for each node consecutively stored.
+  int64_t* offset_table_;     // The offset table for neighbor list for each node.
+  int64_t* neighbor_list_;    // The neighbor list for each node consecutively stored.
+  VectorTable vector_table_;  // The vector table for each node consecutively stored.
 
   // Distance calculation function
   DistFunc fstdistfunc_;
@@ -66,7 +65,7 @@ class VecSearchExecutor {
       std::shared_ptr<ANNGraphSegment> ann_index,
       int64_t* offset_table,
       int64_t* neighbor_list,
-      float* vector_table,
+      std::variant<DenseVector, VariableLenAttrTable*> vector_table,
       DistFunc fstdistfunc,
       void* dist_func_param,
       int num_threads,
