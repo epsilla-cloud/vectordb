@@ -506,9 +506,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         // Insert vector attribute.
         auto sparseVecObject = record.GetObject(field.name_);
 
-        // TODO(bugless): use const value rather than literal values
-        auto indices = record.GetArray("indices");
-        auto values = record.GetArray("values");
+        auto indices = record.GetArray(SparseVecObjIndicesKey);
+        auto values = record.GetArray(SparseVecObjValuesKey);
         auto nonZeroValueSize = indices.GetSize();
         if (indices.GetSize() != values.GetSize()) {
           std::cerr << "mismatched indices array length (" << indices.GetSize() << ") and value array length (" << values.GetSize() << "), skipping." << std::endl;
@@ -922,12 +921,36 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
   // Print out var_len_attr_table_
   std::cout << "var_len_attr_table_:  \n";
   for (size_t recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
-    for (size_t attrIdx = 0; attrIdx < var_len_attr_num_; ++attrIdx) {
-      size_t offset = recordIdx * var_len_attr_num_ + attrIdx;
-      // TODO(bugless): handle sparse vector
-      std::cout << std::string(var_len_attr_table_[attrIdx][recordIdx].begin(), var_len_attr_table_[attrIdx][recordIdx].end()) << ", ";
+    for (auto& field : table_schema.fields_) {
+      if (field.field_type_ == meta::FieldType::STRING ||
+          field.field_type_ == meta::FieldType::JSON ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        switch (field.field_type_) {
+          case meta::FieldType::STRING:
+          case meta::FieldType::JSON:
+            std::cout << std::string(
+                             var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx].begin(),
+                             var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx].end())
+                      << ", "
+                      << std::endl;
+            break;
+          case meta::FieldType::SPARSE_VECTOR_FLOAT:
+          case meta::FieldType::SPARSE_VECTOR_DOUBLE: {
+            auto numNonZeroElem = var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx].size() / sizeof(SparseVectorElement);
+            auto elemPtr = reinterpret_cast<SparseVectorElement*>(&var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx][0]);
+            for (int i = 0; i < numNonZeroElem; i++) {
+              std::cout << elemPtr->index << ":" << elemPtr->value << ",";
+            }
+            std::cout << std::endl;
+            break;
+          }
+          default:
+            // do nothing
+            break;
+        }
+      }
     }
-    std::cout << "\n";
   }
 
   std::cout << "vector_dims_:  \n";

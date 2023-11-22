@@ -14,6 +14,9 @@ struct SparseVectorElement {
   float value;
 };
 
+constexpr const char SparseVecObjIndicesKey[] = "indices",
+                     SparseVecObjValuesKey[] = "values";
+
 using DenseVector = float *;
 using SparseVector = SparseVectorElement *;
 using QueryData = std::variant<DenseVector, SparseVector>;
