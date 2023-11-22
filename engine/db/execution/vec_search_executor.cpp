@@ -383,7 +383,7 @@ void VecSearchExecutor::PickTopMUnchecked(
 int64_t VecSearchExecutor::ExpandOneCandidate(
     const int worker_id,
     const int64_t cand_id,
-    const QueryData query_data,
+    const Vector query_data,
     const float &dist_bound,
     // float &dist_thresh,
     std::vector<Candidate> &set_L,
@@ -444,7 +444,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 }
 
 void VecSearchExecutor::InitializeSetLPara(
-    const QueryData query_data,
+    const Vector query_data,
     const int64_t L,
     std::vector<Candidate> &set_L,
     const int64_t set_L_start,
@@ -521,7 +521,7 @@ void VecSearchExecutor::PrepareInitIds(
 }
 
 void VecSearchExecutor::SearchImpl(
-    const QueryData query_data,
+    const Vector query_data,
     const int64_t K,
     const int64_t L,
     std::vector<Candidate> &set_L,
@@ -719,7 +719,7 @@ void VecSearchExecutor::SearchImpl(
 }
 
 bool VecSearchExecutor::BruteForceSearch(
-    const QueryData query_data,
+    const Vector query_data,
     const int64_t start,
     const int64_t end,
     const ConcurrentBitset &deleted,
@@ -772,7 +772,7 @@ bool VecSearchExecutor::BruteForceSearch(
 }
 
 Status VecSearchExecutor::Search(
-    const QueryData query_data,
+    const Vector query_data,
     vectordb::engine::TableSegmentMVP *table_segment,
     const size_t limit,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,

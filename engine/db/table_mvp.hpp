@@ -53,7 +53,7 @@ class TableMVP {
       const std::string &field_name,
       std::vector<std::string> &query_fields,
       int64_t query_dimension,
-      const QueryData query_data,
+      const Vector query_data,
       const int64_t limit,
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
