@@ -6,7 +6,9 @@
 #include <boost/program_options.hpp>
 #include <iomanip>
 #include <iostream>
+#include <variant>
 
+#include "db/index/index.hpp"
 #include "db/index/knn/nndescent.hpp"
 #include "db/index/space_cosine.hpp"
 #include "db/index/space_ip.hpp"
@@ -25,41 +27,65 @@ class OracleL2 {
  private:
   size_t dim;
   std::unique_ptr<SpaceInterface<float>> space;
-  DenseVecDistFunc<float> fstdistfunc_;
-  void* dist_func_param_;
+  DistFunc fstdistfunc_;
+  void *dist_func_param_;
   VectorTable m;
 
  public:
   OracleL2(size_t dim_, VectorTable m_, meta::MetricType metricType) : dim(dim_) {
-    switch (metricType) {
-      case meta::MetricType::EUCLIDEAN:
-        space = std::make_unique<L2Space>(dim_);
-        break;
-      case meta::MetricType::COSINE:
-        space = std::make_unique<CosineSpace>(dim_);
-        break;
-      case meta::MetricType::DOT_PRODUCT:
-        space = std::make_unique<InnerProductSpace>(dim_);
-        break;
-      default:
-        space = std::make_unique<L2Space>(dim_);
-    }
-    fstdistfunc_ = space->get_dist_func();
-    dist_func_param_ = space->get_dist_func_param();
     m = m_;
+
+    if (std::holds_alternative<DenseVector>(m_)) {
+      switch (metricType) {
+        case meta::MetricType::EUCLIDEAN:
+          space = std::make_unique<L2Space>(dim_);
+          break;
+        case meta::MetricType::COSINE:
+          space = std::make_unique<CosineSpace>(dim_);
+          break;
+        case meta::MetricType::DOT_PRODUCT:
+          space = std::make_unique<InnerProductSpace>(dim_);
+          break;
+        default:
+          space = std::make_unique<L2Space>(dim_);
+          break;
+      }
+      fstdistfunc_ = space->get_dist_func();
+      dist_func_param_ = space->get_dist_func_param();
+    } else {
+      // hold sparse vector
+      switch (metricType) {
+        case meta::MetricType::EUCLIDEAN:
+          fstdistfunc_ = GetL2Dist;
+          break;
+        case meta::MetricType::COSINE:
+        case meta::MetricType::DOT_PRODUCT:  // after standarization, it's equivalent as cosine
+          fstdistfunc_ = GetCosineDist;
+          break;
+        default:
+          fstdistfunc_ = GetL2Dist;
+          break;
+      }
+    }
   }
   float operator()(int i, int j) const __attribute__((noinline));
 };
 
 float OracleL2::operator()(int p, int q) const {
   // std::cout << fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_) << " ";
-  return fstdistfunc_(std::get<DenseVector>(m) + p * dim, std::get<DenseVector>(m) + q * dim, dist_func_param_);
+  if (std::holds_alternative<DenseVector>(m)) {
+    return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(m) + p * dim, std::get<DenseVector>(m) + q * dim, dist_func_param_);
+  } else {
+    auto &v1 = std::get<VariableLenAttrTable *>(m)->at(p);
+    auto &v2 = std::get<VariableLenAttrTable *>(m)->at(q);
+    return std::get<SparseVecDistFunc>(fstdistfunc_)(*(reinterpret_cast<SparseVector *>(&v1[0])), *(reinterpret_cast<SparseVector *>(&v2[0])));
+  }
 }
 }  // namespace
 
 class KNNGraph {
  public:
-  KNNGraph(int N, int D, int K, VectorTable data, Graph& knng, meta::MetricType metricType) {
+  KNNGraph(int N, int D, int K, VectorTable data, Graph &knng, meta::MetricType metricType) {
     int I = 1000;
     float T = 0.001;
     float S = 1;
@@ -82,11 +108,11 @@ class KNNGraph {
     }
 
     // Convert the graph.
-    const vector<KNN>& nn = nndes.getNN();
+    const vector<KNN> &nn = nndes.getNN();
 #pragma omp parallel for
     for (size_t id = 0; id < nn.size(); ++id) {
-      const KNN& knn = nn[id];
-      BOOST_FOREACH (KNN::Element const& e, knn) {
+      const KNN &knn = nn[id];
+      BOOST_FOREACH (KNN::Element const &e, knn) {
         if (e.key != KNNEntry::BAD) {
           knng.at(id).emplace_back(e.key);
         }

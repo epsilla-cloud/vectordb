@@ -406,7 +406,21 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
     }
 
     ++tmp_count_computation;
-    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * nb_id, std::get<DenseVector>(query_data), dist_func_param_);
+    float dist;
+    if (std::holds_alternative<DenseVector>(vector_table_)) {
+      dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+          std::get<DenseVector>(vector_table_) + dimension_ * nb_id,
+          std::get<DenseVector>(query_data),
+          dist_func_param_);
+    } else {
+      // it holds sparse vector
+      auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(nb_id);
+      auto &qVec = std::get<SparseVector>(query_data);
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
+          *(reinterpret_cast<SparseVector *>(&vec[0])),
+          std::get<SparseVector>(query_data));
+    }
+
     if (dist > dist_bound) {
       // if (dist > dist_bound || dist > dist_thresh) {
       continue;
@@ -450,9 +464,15 @@ void VecSearchExecutor::InitializeSetLPara(
     ++tmp_count_computation;
 
     float dist;
-    dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+    dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+        std::get<DenseVector>(vector_table_) + dimension_ * v_id,
+        std::get<DenseVector>(query_data),
+        dist_func_param_);
     if (std::holds_alternative<DenseVector>(vector_table_)) {
-      dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+      dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+          std::get<DenseVector>(vector_table_) + dimension_ * v_id,
+          std::get<DenseVector>(query_data),
+          dist_func_param_);
     } else {
       // it holds sparse vector
       auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(v_id);
@@ -709,10 +729,25 @@ bool VecSearchExecutor::BruteForceSearch(
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
+  float dist;
+  if (std::holds_alternative<DenseVector>(vector_table_)) {
 #pragma omp parallel for
-  for (int64_t v_id = start; v_id < end; ++v_id) {
-    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
-    brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+    for (int64_t v_id = start; v_id < end; ++v_id) {
+      float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+          std::get<DenseVector>(vector_table_) + dimension_ * v_id,
+          std::get<DenseVector>(query_data),
+          dist_func_param_);
+      brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+    }
+  } else {
+    // it holds sparse vector
+    for (int64_t v_id = start; v_id < end; ++v_id) {
+      auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(v_id);
+      float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
+          *(reinterpret_cast<SparseVector *>(&vec[0])),
+          std::get<SparseVector>(query_data));
+      brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+    }
   }
 
   // compacting the result with 2 pointers by removing the deleted entries

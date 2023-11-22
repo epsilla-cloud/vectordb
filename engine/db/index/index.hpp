@@ -1,11 +1,13 @@
 #pragma once
 
 #include "db/index/distances.hpp"
-
+#include "db/sparse_vector.hpp"
 namespace vectordb {
 
 template <typename MTYPE>
 using DenseVecDistFunc = MTYPE (*)(const void*, const void*, const void*);
+
+using DistFunc = std::variant<DenseVecDistFunc<float>, engine::SparseVecDistFunc>;
 
 template <typename MTYPE>
 class SpaceInterface {

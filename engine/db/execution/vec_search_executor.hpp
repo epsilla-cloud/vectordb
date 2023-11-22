@@ -27,7 +27,6 @@ namespace execution {
 
 constexpr const int BruteforceThreshold = 512;
 
-using DistFunc = std::variant<DenseVecDistFunc<float>, SparseVecDistFunc>;
 class VecSearchExecutor {
  public:
   std::shared_ptr<ANNGraphSegment> ann_index_;  // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
