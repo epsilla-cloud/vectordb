@@ -3,7 +3,7 @@
 namespace vectordb {
 namespace engine {
 
-float GetCosineDist(const SparseVector v1, const SparseVector v2) {
+float GetCosineDist(const SparseVector &v1, const SparseVector &v2) {
   float dot_prod = 0, v1_prod = 0, v2_prod = 0;
   for (int i = 0; i < v1.size; i++) {
     v1_prod += v1.data[i].value * v1.data[i].value;
@@ -25,7 +25,7 @@ float GetCosineDist(const SparseVector v1, const SparseVector v2) {
   return dot_prod / std::sqrt(v1_prod * v2_prod);
 }
 
-float GetL2Dist(const SparseVector v1, const SparseVector v2) {
+float GetL2Dist(const SparseVector &v1, const SparseVector &v2) {
   float sum = 0;
   for (int i1 = 0, i2 = 0; i1 < v1.size && i2 < v2.size;) {
     if (v1.data[i1].index == v2.data[i2].index) {
