@@ -14,13 +14,17 @@ struct SparseVectorElement {
   float value;
 };
 
+struct SparseVector {
+  size_t size;                  // non-zero values
+  SparseVectorElement data[0];  // fixed-size element
+};
+
 constexpr const char SparseVecObjIndicesKey[] = "indices",
                      SparseVecObjValuesKey[] = "values";
 
 using DenseVector = float *;
-using SparseVector = SparseVectorElement *;
 using QueryData = std::variant<DenseVector, SparseVector>;
-using SparseVecDistFunc = std::function<float(const SparseVector &, size_t, const SparseVector &, size_t)>;
+using SparseVecDistFunc = std::function<float(const SparseVector, const SparseVector)>;
 using VariableLenAttrTable = std::vector<std::vector<unsigned char>>;
 float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
 

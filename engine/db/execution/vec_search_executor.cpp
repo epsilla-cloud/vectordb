@@ -448,7 +448,17 @@ void VecSearchExecutor::InitializeSetLPara(
   for (int64_t i = 0; i < L; i++) {
     int64_t v_id = init_ids[i];
     ++tmp_count_computation;
-    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+
+    float dist;
+    dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+    if (std::holds_alternative<DenseVector>(vector_table_)) {
+      dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+    } else {
+      // it holds sparse vector
+      auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(v_id);
+      auto &qVec = std::get<SparseVector>(query_data);
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(*(reinterpret_cast<SparseVector *>(&vec[0])), std::get<SparseVector>(query_data));
+    }
     set_L[set_L_start + i] = Candidate(v_id, dist, false);  // False means not checked.
   }
   // count_distance_computation_ += tmp_count_computation;
