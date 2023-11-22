@@ -15,5 +15,11 @@ elif [[ "$(uname -s)" == "Linux" ]]; then
 fi
 
 # Run cmake and make
-cmake ..
+if [[ "$1" == "-d" ]]; then
+    echo "building in debug mode"
+    cmake -DCMAKE_BUILD_TYPE=debug ..
+else
+    echo "building in release mode"
+    cmake -DCMAKE_BUILD_TYPE=Release ..
+fi
 make -j "${N_PROCESSOR}"
