@@ -937,10 +937,9 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             break;
           case meta::FieldType::SPARSE_VECTOR_FLOAT:
           case meta::FieldType::SPARSE_VECTOR_DOUBLE: {
-            auto numNonZeroElem = var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx].size() / sizeof(SparseVectorElement);
-            auto elemPtr = reinterpret_cast<SparseVectorElement*>(&var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx][0]);
-            for (int i = 0; i < numNonZeroElem; i++) {
-              std::cout << elemPtr->index << ":" << elemPtr->value << ",";
+            auto vec = reinterpret_cast<SparseVector*>(&var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx][0]);
+            for (int i = 0; i < vec->size; i++) {
+              std::cout << (vec->data[i].index) << ":" << vec->data[i].value << ",";
             }
             std::cout << std::endl;
             break;
