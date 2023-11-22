@@ -382,23 +382,17 @@ Status TableMVP::Project(
             break;
           }
           case meta::FieldType::STRING: {
-            auto string_offset =
-                table_segment_->field_name_mem_offset_map_[field] +
-                id * table_segment_->var_len_attr_num_;
             record.SetString(field,
                              std::string(
-                                 table_segment_->var_len_attr_table_[string_offset].begin(),
-                                 table_segment_->var_len_attr_table_[string_offset].end()));
+                                 table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].begin(),
+                                 table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].end()));
             break;
           }
           case meta::FieldType::JSON: {
-            auto json_offset =
-                table_segment_->field_name_mem_offset_map_[field] +
-                id * table_segment_->var_len_attr_num_;
             vectordb::Json json;
             json.LoadFromString(std::string(
-                table_segment_->var_len_attr_table_[json_offset].begin(),
-                table_segment_->var_len_attr_table_[json_offset].end()));
+                table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].begin(),
+                table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].end()));
             record.SetObject(field, json);
             break;
           }

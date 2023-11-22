@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "db/catalog/meta.hpp"
+#include "db/sparse_vector.hpp"
 #include "db/unique_key.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
@@ -68,8 +69,8 @@ class TableSegmentMVP {
   int64_t primitive_offset_;
   int64_t var_len_attr_num_;
   int64_t vector_num_;
-  char* attribute_table_;                           // The attribute table in memory (exclude vector attributes and string attributes).
-  std::vector<unsigned char>* var_len_attr_table_;  // The variable length attribute table in memory.
+  char* attribute_table_;                                        // The attribute table in memory (exclude vector attributes and string attributes).
+  std::vector<std::vector<unsigned char>>* var_len_attr_table_;  // The variable length attribute table in memory.
   // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
   std::vector<int64_t> vector_dims_;
   float** vector_tables_;      // The vector attribute tables. Each vector attribute has its own vector table.

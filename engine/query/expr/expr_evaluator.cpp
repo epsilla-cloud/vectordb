@@ -14,7 +14,7 @@ ExprEvaluator::ExprEvaluator(
     int64_t& primitive_offset,
     int64_t& string_num,
     char* attribute_table,
-    std::vector<unsigned char>* var_len_attr_table_)
+    std::vector<std::vector<unsigned char>>* var_len_attr_table_)
     : nodes_(nodes),
       field_name_mem_offset_map_(field_name_mem_offset_map),
       primitive_offset_(primitive_offset),
@@ -24,8 +24,8 @@ ExprEvaluator::ExprEvaluator(
 }
 
 std::string ExprEvaluator::GetStrFieldValue(const std::string& field_name, const int64_t& cand_ind) {
-  auto offset = field_name_mem_offset_map_[field_name] + cand_ind * var_len_attr_num_;
-  return std::string(var_len_attr_table_[offset].begin(), var_len_attr_table_[offset].end());
+  return std::string(var_len_attr_table_[field_name_mem_offset_map_[field_name]][cand_ind].begin(),
+                     var_len_attr_table_[field_name_mem_offset_map_[field_name]][cand_ind].end());
 }
 
 bool ExprEvaluator::GetBoolFieldValue(const std::string& field_name, const int64_t& cand_ind) {
