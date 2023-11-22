@@ -23,7 +23,7 @@ constexpr const char SparseVecObjIndicesKey[] = "indices",
                      SparseVecObjValuesKey[] = "values";
 
 using DenseVector = float *;
-using QueryData = std::variant<DenseVector, SparseVector>;
+using Vector = std::variant<DenseVector, SparseVector>;
 using SparseVecDistFunc = std::function<float(const SparseVector, const SparseVector)>;
 using VariableLenAttrTable = std::vector<std::vector<unsigned char>>;
 float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
