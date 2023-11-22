@@ -27,10 +27,10 @@ class OracleL2 {
   std::unique_ptr<SpaceInterface<float>> space;
   DenseVecDistFunc<float> fstdistfunc_;
   void* dist_func_param_;
-  float* m;
+  VectorTable m;
 
  public:
-  OracleL2(size_t dim_, float* m_, meta::MetricType metricType) : dim(dim_) {
+  OracleL2(size_t dim_, VectorTable m_, meta::MetricType metricType) : dim(dim_) {
     switch (metricType) {
       case meta::MetricType::EUCLIDEAN:
         space = std::make_unique<L2Space>(dim_);
@@ -53,13 +53,13 @@ class OracleL2 {
 
 float OracleL2::operator()(int p, int q) const {
   // std::cout << fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_) << " ";
-  return fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_);
+  return fstdistfunc_(std::get<DenseVector>(m) + p * dim, std::get<DenseVector>(m) + q * dim, dist_func_param_);
 }
 }  // namespace
 
 class KNNGraph {
  public:
-  KNNGraph(int N, int D, int K, float* data, Graph& knng, meta::MetricType metricType) {
+  KNNGraph(int N, int D, int K, VectorTable data, Graph& knng, meta::MetricType metricType) {
     int I = 1000;
     float T = 0.001;
     float S = 1;
