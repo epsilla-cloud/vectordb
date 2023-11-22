@@ -33,7 +33,7 @@ VecSearchExecutor::VecSearchExecutor(
     std::shared_ptr<ANNGraphSegment> ann_index,
     int64_t *offset_table,
     int64_t *neighbor_list,
-    float *vector_table,
+    std::variant<DenseVector, VariableLenAttrTable *> vector_table,
     DistFunc fstdistfunc,
     void *dist_func_param,
     int num_threads,
@@ -406,7 +406,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
     }
 
     ++tmp_count_computation;
-    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(vector_table_ + dimension_ * nb_id, std::get<DenseVector>(query_data), dist_func_param_);
+    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * nb_id, std::get<DenseVector>(query_data), dist_func_param_);
     if (dist > dist_bound) {
       // if (dist > dist_bound || dist > dist_thresh) {
       continue;
@@ -448,7 +448,7 @@ void VecSearchExecutor::InitializeSetLPara(
   for (int64_t i = 0; i < L; i++) {
     int64_t v_id = init_ids[i];
     ++tmp_count_computation;
-    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(vector_table_ + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
     set_L[set_L_start + i] = Candidate(v_id, dist, false);  // False means not checked.
   }
   // count_distance_computation_ += tmp_count_computation;
@@ -701,7 +701,7 @@ bool VecSearchExecutor::BruteForceSearch(
   }
 #pragma omp parallel for
   for (int64_t v_id = start; v_id < end; ++v_id) {
-    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(vector_table_ + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
+    float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(vector_table_) + dimension_ * v_id, std::get<DenseVector>(query_data), dist_func_param_);
     brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
   }
 

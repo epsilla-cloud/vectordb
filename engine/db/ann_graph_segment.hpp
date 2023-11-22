@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "db/sparse_vector.hpp"
 #include "db/catalog/meta.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
@@ -11,6 +12,8 @@
 
 namespace vectordb {
 namespace engine {
+
+using VectorTable = std::variant<DenseVector, VariableLenAttrTable*>;
 
 class ANNGraphSegment {
  public:
