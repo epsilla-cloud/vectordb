@@ -5,11 +5,11 @@ namespace engine {
 
 float GetCosineDist(const SparseVector v1, size_t size1, const SparseVector v2, size_t size2) {
   float dot_prod = 0, v1_prod = 0, v2_prod = 0;
-  for (auto const &e : v1) {
-    v1_prod += e.value * e.value;
+  for (int i = 0; i < size1; i++) {
+    v1_prod += v1[i].value * v1[i].value;
   }
-  for (auto const &e : v2) {
-    v2_prod += e.value * e.value;
+  for (int i = 0; i < size2; i++) {
+    v2_prod += v2[i].value * v2[i].value;
   }
   for (int i1 = 0, i2 = 0; i1 < size1 && i2 < size2;) {
     if (v1[i1].index == v2[i2].index) {

@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.10)
 project(vectordb)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
+# enable symbol flag for every build type
+# ref: https://stackoverflow.com/questions/55275743/cmake-build-types-release-debug-etc-compiler-flags
+set(CMAKE_CXX_FLAGS_INIT "-g")
 
 
 # get build time
