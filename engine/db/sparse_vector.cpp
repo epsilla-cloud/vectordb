@@ -25,7 +25,7 @@ float GetCosineDist(const SparseVector &v1, const SparseVector &v2) {
   return dot_prod / std::sqrt(v1_prod * v2_prod);
 }
 
-float GetL2Dist(const SparseVector &v1, const SparseVector &v2) {
+float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2) {
   float sum = 0;
   for (int i1 = 0, i2 = 0; i1 < v1.size && i2 < v2.size;) {
     if (v1.data[i1].index == v2.data[i2].index) {
@@ -41,7 +41,11 @@ float GetL2Dist(const SparseVector &v1, const SparseVector &v2) {
       i1++;
     }
   }
-  return std::sqrt(sum);
+  return sum;
+}
+
+float GetL2Dist(const SparseVector &v1, const SparseVector &v2) {
+  return std::sqrt(GetL2DistSqr(v1, v2));
 }
 
 }  // namespace engine
