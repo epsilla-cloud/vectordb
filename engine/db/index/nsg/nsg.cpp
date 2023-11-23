@@ -7,6 +7,7 @@
 #include <stack>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "db/index/nsg/nsg_helper.hpp"
 #include "utils/builder_suspend.hpp"
@@ -133,7 +134,7 @@ void NsgIndex::InitNavigationPoint() {
 }
 
 // Specify Link
-void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
+void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
                             boost::dynamic_bitset<>& has_calculated_dist) {
   auto& graph = knng;
   size_t buffer_size = search_length;
@@ -236,7 +237,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, s
 }
 
 // FindUnconnectedNode
-void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset) {
+void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset) {
   auto& graph = nsg;
   size_t buffer_size = search_length;
 
@@ -334,7 +335,7 @@ void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, s
   }
 }
 
-void NsgIndex::GetNeighbors(const float* query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* params) {
+void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* params) {
   size_t buffer_size = params ? params->search_length : search_length;
 
   if (buffer_size > ntotal) {
@@ -700,7 +701,7 @@ void NsgIndex::FindUnconnectedNode(boost::dynamic_bitset<>& has_linked, int64_t&
   nsg[root].push_back(id);
 }
 
-void NsgIndex::Search(const float* query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist,
+void NsgIndex::Search(const DenseVector query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist,
                       int64_t* ids, SearchParams& params, ConcurrentBitsetPtr bitset) {
   std::vector<std::vector<Neighbor>> resset(nq);
 
@@ -710,7 +711,7 @@ void NsgIndex::Search(const float* query, const unsigned& nq, const unsigned& di
   } else {
 #pragma omp parallel for
     for (unsigned int i = 0; i < nq; ++i) {
-      const float* single_query = query + i * dim;
+      const DenseVector single_query = query + i * dim;
       GetNeighbors(single_query, resset[i], nsg, &params);
     }
   }
