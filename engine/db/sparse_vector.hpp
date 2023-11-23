@@ -26,9 +26,11 @@ using DenseVector = float *;
 using Vector = std::variant<DenseVector, SparseVector>;
 using SparseVecDistFunc = std::function<float(const SparseVector, const SparseVector)>;
 using VariableLenAttrTable = std::vector<std::vector<unsigned char>>;
+
 float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
 
 float GetL2Dist(const SparseVector &v1, const SparseVector &v2);
+float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2);
 
 }  // namespace engine
 }  // namespace vectordb

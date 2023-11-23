@@ -223,16 +223,52 @@ DistanceIP::Compare(const float* a, const float* b, unsigned size) const {
 
 #else
 
-float DistanceL2::Compare(const float* a, const float* b, unsigned size) const {
+float DistanceL2::Compare(const DenseVector a, const DenseVector b, unsigned size) const {
   return fvec_L2sqr(a, b, (size_t)size);
 }
 
-float DistanceIP::Compare(const float* a, const float* b, unsigned size) const {
+float DistanceIP::Compare(const DenseVector a, const DenseVector b, unsigned size) const {
   return -(fvec_inner_product(a, b, (size_t)size));
 }
 
-float DistanceCosine::Compare(const float* a, const float* b, unsigned size) const {
+float DistanceCosine::Compare(const DenseVector a, const DenseVector b, unsigned size) const {
   return -(fvec_inner_product(a, b, (size_t)size));
+}
+
+float DistanceL2::Compare(const SparseVector a, const SparseVector b) const {
+  return GetL2DistSqr(a, b);
+}
+
+float DistanceL2::Compare(const Vector a, const Vector b) const {
+  if (std::holds_alternative<DenseVector>(a)) {
+    return DistanceL2::Compare(std::get<DenseVector>(a), std::get<DenseVector>(b));
+  } else {
+    return DistanceL2::Compare(std::get<SparseVector>(a), std::get<SparseVector>(b));
+  }
+}
+
+float DistanceIP::Compare(const SparseVector a, const SparseVector b) const {
+  return GetL2DistSqr(a, b);
+}
+
+float DistanceIP::Compare(const Vector a, const Vector b) const {
+  if (std::holds_alternative<DenseVector>(a)) {
+    return DistanceIP::Compare(std::get<DenseVector>(a), std::get<DenseVector>(b));
+  } else {
+    return DistanceIP::Compare(std::get<SparseVector>(a), std::get<SparseVector>(b));
+  }
+}
+
+float DistanceCosine::Compare(const SparseVector a, const SparseVector b) const {
+  return GetL2DistSqr(a, b);
+}
+
+float DistanceCosine::Compare(const Vector a, const Vector b) const {
+  if (std::holds_alternative<DenseVector>(a)) {
+    return DistanceCosine::Compare(std::get<DenseVector>(a), std::get<DenseVector>(b));
+  } else {
+    return DistanceCosine::Compare(std::get<SparseVector>(a), std::get<SparseVector>(b));
+  }
 }
 
 #endif
