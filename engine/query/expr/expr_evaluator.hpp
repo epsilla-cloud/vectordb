@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "db/sparse_vector.hpp"
 #include "expr_types.hpp"
 
 namespace vectordb {
@@ -18,7 +19,7 @@ class ExprEvaluator {
       int64_t& primitive_offset_,
       int64_t& var_len_attr_num_,
       char* attribute_table_,
-      std::vector<std::vector<unsigned char>>* var_len_attr_table_);
+      std::vector<engine::VariableLenAttrColumnContainer>& var_len_attr_table_);
 
   ~ExprEvaluator();
 
@@ -38,7 +39,7 @@ class ExprEvaluator {
   int64_t primitive_offset_;
   int64_t var_len_attr_num_;
   char* attribute_table_;
-  std::vector<std::vector<unsigned char>>* var_len_attr_table_;
+  std::vector<engine::VariableLenAttrColumnContainer>& var_len_attr_table_;
 };
 
 }  // namespace expr
