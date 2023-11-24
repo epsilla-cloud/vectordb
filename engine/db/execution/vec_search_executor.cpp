@@ -417,7 +417,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(nb_id);
       auto &qVec = std::get<SparseVector>(query_data);
       dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
-          CastToSparseVector(vecData),
+          std::get<SparseVector>(vecData),
           std::get<SparseVector>(query_data));
     }
 
@@ -477,7 +477,7 @@ void VecSearchExecutor::InitializeSetLPara(
       // it holds sparse vector
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       auto &qVec = std::get<SparseVector>(query_data);
-      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(CastToSparseVector(vecData), std::get<SparseVector>(query_data));
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(std::get<SparseVector>(vecData), std::get<SparseVector>(query_data));
     }
     set_L[set_L_start + i] = Candidate(v_id, dist, false);  // False means not checked.
   }
@@ -744,7 +744,7 @@ bool VecSearchExecutor::BruteForceSearch(
     for (int64_t v_id = start; v_id < end; ++v_id) {
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
-          CastToSparseVector(vecData),
+          std::get<SparseVector>(vecData),
           std::get<SparseVector>(query_data));
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }

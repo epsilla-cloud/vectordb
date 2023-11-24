@@ -78,7 +78,7 @@ float OracleL2::operator()(int p, int q) const {
   } else {
     auto &v1 = std::get<VariableLenAttrColumnContainer *>(m)->at(p);
     auto &v2 = std::get<VariableLenAttrColumnContainer *>(m)->at(q);
-    return std::get<SparseVecDistFunc>(fstdistfunc_)(CastToSparseVector(v1), CastToSparseVector(v2));
+    return std::get<SparseVecDistFunc>(fstdistfunc_)(std::get<SparseVector>(v1), std::get<SparseVector>(v2));
   }
 }
 }  // namespace

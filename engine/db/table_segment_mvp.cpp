@@ -974,7 +974,7 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             break;
           case meta::FieldType::SPARSE_VECTOR_FLOAT:
           case meta::FieldType::SPARSE_VECTOR_DOUBLE: {
-            auto vec = CastToSparseVector(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx]);
+            auto& vec = std::get<SparseVector>(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx]);
             for (int i = 0; i < vec.size(); i++) {
               std::cout << (vec[i].index) << ":" << vec[i].value << ",";
             }
