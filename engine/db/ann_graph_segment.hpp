@@ -16,7 +16,7 @@ namespace engine {
 using VectorColumnData = std::variant<
     DenseVectorColumnDataContainer,
     // pass pointer here to avoid unnecessary deep copy
-    SparseVectorColumnDataContainer*>;
+    VariableLenAttrColumnContainer*>;
 
 class ANNGraphSegment {
  public:

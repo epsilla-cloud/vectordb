@@ -102,7 +102,7 @@ void NsgIndex::InitNavigationPoint() {
   // calculate the center of vectors
   Vector center;
   std::unique_ptr<DenseVector> denseVectorPtr;
-  std::unique_ptr<SparseVector, SparseVectorDeleter> sparseVectorPtr;
+  SparseVector sparseVec;
   if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
     denseVectorPtr = std::make_unique<DenseVector>(new DenseVectorElement[dimension]);
     memset(denseVectorPtr.get(), 0, sizeof(DenseVectorElement) * dimension);
@@ -119,29 +119,20 @@ void NsgIndex::InitNavigationPoint() {
   } else {
     // sparse vector
     auto tempCenterVec = std::map<size_t, DenseVectorElement>();
-    auto tableData = std::get<SparseVectorColumnDataContainer*>(ori_data_);
-    size_t maxElem = 0;
-    for (int i = 0; i < ntotal; i++) {
-      maxElem = std::max(tableData[i].size(), maxElem);
-    }
+    auto tableData = std::get<VariableLenAttrColumnContainer*>(ori_data_);
     for (size_t i = 0; i < ntotal; i++) {
       auto vec = CastToSparseVector((*tableData)[i]);
-      for (size_t j = 0; j < vec.size; j++) {
-        tempCenterVec[vec.data[j].index] = vec.data[j].value;
+      for (size_t j = 0; j < vec.size(); j++) {
+        tempCenterVec[vec[j].index] = vec[j].value;
       }
     }
     for (auto& elem : tempCenterVec) {
       elem.second /= ntotal;
     }
-    sparseVectorPtr = std::unique_ptr<SparseVector, SparseVectorDeleter>(
-        reinterpret_cast<SparseVector*>(operator new(sizeof(SparseVector) + sizeof(float) * tempCenterVec.size())));
-    sparseVectorPtr.get()->size = tempCenterVec.size();
-
-    int elemIdx = 0;
     for (auto& elem : tempCenterVec) {
-      sparseVectorPtr.get()->data[elemIdx++] = SparseVectorElement{elem.first, elem.second};
+      sparseVec.push_back(SparseVectorElement{elem.first, elem.second});
     }
-    center = *sparseVectorPtr.get();
+    center = sparseVec;
   }
 
   // select navigation point

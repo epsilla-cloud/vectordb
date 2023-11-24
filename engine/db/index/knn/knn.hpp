@@ -76,8 +76,8 @@ float OracleL2::operator()(int p, int q) const {
   if (std::holds_alternative<DenseVector>(m)) {
     return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(m) + p * dim, std::get<DenseVector>(m) + q * dim, dist_func_param_);
   } else {
-    auto &v1 = std::get<SparseVectorColumnDataContainer *>(m)->at(p);
-    auto &v2 = std::get<SparseVectorColumnDataContainer *>(m)->at(q);
+    auto &v1 = std::get<VariableLenAttrColumnContainer *>(m)->at(p);
+    auto &v2 = std::get<VariableLenAttrColumnContainer *>(m)->at(q);
     return std::get<SparseVecDistFunc>(fstdistfunc_)(CastToSparseVector(v1), CastToSparseVector(v2));
   }
 }

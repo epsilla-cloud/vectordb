@@ -383,16 +383,12 @@ Status TableMVP::Project(
           }
           case meta::FieldType::STRING: {
             record.SetString(field,
-                             std::string(
-                                 table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].begin(),
-                                 table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].end()));
+                             std::get<std::string>(table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id]));
             break;
           }
           case meta::FieldType::JSON: {
             vectordb::Json json;
-            json.LoadFromString(std::string(
-                table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].begin(),
-                table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id].end()));
+            json.LoadFromString(std::get<std::string>(table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id]));
             record.SetObject(field, json);
             break;
           }
