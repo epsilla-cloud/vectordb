@@ -125,6 +125,7 @@ add_executable(
 target_link_libraries(
   db_test
   GTest::gtest_main
+  vectordb_lib
 )
 
 gtest_discover_tests(db_test)
