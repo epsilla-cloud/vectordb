@@ -198,7 +198,7 @@ Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t
   return Status::OK();
 }
 
-void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_table, int64_t n, int64_t dim, meta::MetricType metricType) {
+void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_column, int64_t n, int64_t dim, meta::MetricType metricType) {
   record_number_ = n;
 
   // Build a KNN graph using NN descent.
@@ -206,7 +206,7 @@ void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_table, int64_
   std::cout << "KNN" << std::endl;
   vectordb::engine::index::Graph knng(n);
   std::cout << "KNN graph" << std::endl;
-  vectordb::engine::index::KNNGraph graph(n, dim, k, vector_table, knng, metricType);
+  vectordb::engine::index::KNNGraph graph(n, dim, k, vector_column, knng, metricType);
   std::cout << "KNN graph finish" << std::endl;
 
   vectordb::engine::index::BuildParams b_params;
@@ -218,7 +218,7 @@ void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_table, int64_
 
   auto index_ = std::make_shared<vectordb::engine::index::NsgIndex>(dim, n, metric);
   index_->SetKnnGraph(knng);
-  int64_t total_graph_size = index_->Build(n, vector_table, nullptr, b_params);
+  int64_t total_graph_size = index_->Build(n, vector_column, nullptr, b_params);
 
   // Convert the graph.
   if (offset_table_ != nullptr) {
