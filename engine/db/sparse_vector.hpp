@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <functional>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -14,17 +15,8 @@ struct SparseVectorElement {
   float value;
 };
 
-struct SparseVector {
-  size_t size;                  // non-zero values
-  SparseVectorElement data[0];  // fixed-size element
-};
-
-struct SparseVectorDeleter {
-  void operator()(SparseVector *ptr) const {
-    // Note: Deallocate memory based on the correct size
-    operator delete(ptr, sizeof(SparseVector) + sizeof(float) * ptr->size);
-  }
-};
+// SparseVector assumes that the stored SparseVectorElement.index is increasing in the std::vector
+using SparseVector = std::vector<SparseVectorElement>;
 
 constexpr const char SparseVecObjIndicesKey[] = "indices",
                      SparseVecObjValuesKey[] = "values";
@@ -35,9 +27,8 @@ using DenseVectorElement = float;
 // TODO: Use a different type other than float* (e.g.: std::vector<DenseVector> or std::vector<DenseVectorElement>),
 // otherwise the type is confusing
 using DenseVectorColumnDataContainer = float *;
-using VariableLenAttrDataContainer = std::vector<unsigned char>;
-using VariableLenAttrColumnDataContainer = std::vector<VariableLenAttrDataContainer>;
-using SparseVectorColumnDataContainer = VariableLenAttrColumnDataContainer;
+using VariableLenAttr = std::variant<std::string, SparseVector>;
+using VariableLenAttrColumnContainer = std::vector<VariableLenAttr>;
 
 using Vector = std::variant<DenseVector, SparseVector>;
 using SparseVecDistFunc = std::function<float(const SparseVector, const SparseVector)>;
@@ -47,7 +38,7 @@ float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
 float GetL2Dist(const SparseVector &v1, const SparseVector &v2);
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2);
 
-SparseVector CastToSparseVector(VariableLenAttrDataContainer &vec);
+SparseVector &CastToSparseVector(VariableLenAttr &vec);
 
 }  // namespace engine
 }  // namespace vectordb

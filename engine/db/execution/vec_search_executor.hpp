@@ -64,7 +64,7 @@ class VecSearchExecutor {
       std::shared_ptr<ANNGraphSegment> ann_index,
       int64_t* offset_table,
       int64_t* neighbor_list,
-      std::variant<DenseVectorColumnDataContainer, SparseVectorColumnDataContainer*> vector_table,
+      std::variant<DenseVectorColumnDataContainer, VariableLenAttrColumnContainer*> vector_table,
       DistFunc fstdistfunc,
       void* dist_func_param,
       int num_threads,

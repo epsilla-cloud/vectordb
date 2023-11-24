@@ -33,7 +33,7 @@ VecSearchExecutor::VecSearchExecutor(
     std::shared_ptr<ANNGraphSegment> ann_index,
     int64_t *offset_table,
     int64_t *neighbor_list,
-    std::variant<DenseVectorColumnDataContainer, SparseVectorColumnDataContainer *> vector_table,
+    std::variant<DenseVectorColumnDataContainer, VariableLenAttrColumnContainer *> vector_table,
     DistFunc fstdistfunc,
     void *dist_func_param,
     int num_threads,
@@ -414,7 +414,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
           dist_func_param_);
     } else {
       // it holds sparse vector
-      auto &vecData = std::get<SparseVectorColumnDataContainer *>(vector_column_)->at(nb_id);
+      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(nb_id);
       auto &qVec = std::get<SparseVector>(query_data);
       dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
           CastToSparseVector(vecData),
@@ -475,7 +475,7 @@ void VecSearchExecutor::InitializeSetLPara(
           dist_func_param_);
     } else {
       // it holds sparse vector
-      auto &vecData = std::get<SparseVectorColumnDataContainer *>(vector_column_)->at(v_id);
+      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       auto &qVec = std::get<SparseVector>(query_data);
       dist = std::get<SparseVecDistFunc>(fstdistfunc_)(CastToSparseVector(vecData), std::get<SparseVector>(query_data));
     }
@@ -742,7 +742,7 @@ bool VecSearchExecutor::BruteForceSearch(
   } else {
     // it holds sparse vector
     for (int64_t v_id = start; v_id < end; ++v_id) {
-      auto &vecData = std::get<SparseVectorColumnDataContainer *>(vector_column_)->at(v_id);
+      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
           CastToSparseVector(vecData),
           std::get<SparseVector>(query_data));
