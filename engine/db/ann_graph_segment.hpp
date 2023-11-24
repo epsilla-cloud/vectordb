@@ -28,7 +28,7 @@ class ANNGraphSegment {
   explicit ANNGraphSegment(int64_t size_limit);
 
   // Build the ANN graph from vector table.
-  void BuildFromVectorTable(VectorColumnData vector_table, int64_t n, int64_t dim, meta::MetricType metricType);
+  void BuildFromVectorTable(VectorColumnData vector_column, int64_t n, int64_t dim, meta::MetricType metricType);
 
   void Debug();
 
