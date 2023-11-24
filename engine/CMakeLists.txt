@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(vectordb)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # enable symbol flag for every build type
 # ref: https://stackoverflow.com/questions/55275743/cmake-build-types-release-debug-etc-compiler-flags
 set(CMAKE_CXX_FLAGS_INIT "-g")
@@ -105,3 +106,26 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(vectordb_lib PUBLIC OpenMP::OpenMP_CXX)
     target_link_libraries(vectordb_dylib PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+FetchContent_MakeAvailable(googletest)
+include(GoogleTest)
+
+enable_testing()
+add_executable(
+  db_test
+  test/engine/db/sparse_vector.cpp
+)
+target_link_libraries(
+  db_test
+  GTest::gtest_main
+)
+
+gtest_discover_tests(db_test)
+
