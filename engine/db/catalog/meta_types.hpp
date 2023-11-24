@@ -75,24 +75,26 @@ struct DatabaseSchema {
   std::vector<TableSchema> tables_;
 };
 
-static const std::unordered_map<std::string, vectordb::engine::meta::FieldType> fieldTypeMap = {
-    {"TINYINT", vectordb::engine::meta::FieldType::INT1},
-    {"SMALLINT", vectordb::engine::meta::FieldType::INT2},
-    {"INT", vectordb::engine::meta::FieldType::INT4},
-    {"BIGINT", vectordb::engine::meta::FieldType::INT8},
-    {"FLOAT", vectordb::engine::meta::FieldType::FLOAT},
-    {"DOUBLE", vectordb::engine::meta::FieldType::DOUBLE},
-    {"STRING", vectordb::engine::meta::FieldType::STRING},
-    {"BOOL", vectordb::engine::meta::FieldType::BOOL},
-    {"JSON", vectordb::engine::meta::FieldType::JSON},
-    {"VECTOR_FLOAT", vectordb::engine::meta::FieldType::VECTOR_FLOAT},
-    {"VECTOR_DOUBLE", vectordb::engine::meta::FieldType::VECTOR_DOUBLE},
-    {"UNKNOWN", vectordb::engine::meta::FieldType::UNKNOWN}};
+static const std::unordered_map<std::string, FieldType> fieldTypeMap = {
+    {"TINYINT", FieldType::INT1},
+    {"SMALLINT", FieldType::INT2},
+    {"INT", FieldType::INT4},
+    {"BIGINT", FieldType::INT8},
+    {"FLOAT", FieldType::FLOAT},
+    {"DOUBLE", FieldType::DOUBLE},
+    {"STRING", FieldType::STRING},
+    {"BOOL", FieldType::BOOL},
+    {"JSON", FieldType::JSON},
+    {"VECTOR_FLOAT", FieldType::VECTOR_FLOAT},
+    {"VECTOR_DOUBLE", FieldType::VECTOR_DOUBLE},
+    {"SPARSE_VECTOR_FLOAT", FieldType::SPARSE_VECTOR_FLOAT},
+    {"SPARSE_VECTOR_DOUBLE", FieldType::SPARSE_VECTOR_DOUBLE},
+    {"UNKNOWN", FieldType::UNKNOWN}};
 
-static const std::unordered_map<std::string, vectordb::engine::meta::MetricType> metricTypeMap = {
-    {"EUCLIDEAN", vectordb::engine::meta::MetricType::EUCLIDEAN},
-    {"COSINE", vectordb::engine::meta::MetricType::COSINE},
-    {"DOT_PRODUCT", vectordb::engine::meta::MetricType::DOT_PRODUCT}};
+static const std::unordered_map<std::string, MetricType> metricTypeMap = {
+    {"EUCLIDEAN", MetricType::EUCLIDEAN},
+    {"COSINE", MetricType::COSINE},
+    {"DOT_PRODUCT", MetricType::DOT_PRODUCT}};
 
 }  // namespace meta
 }  // namespace engine
