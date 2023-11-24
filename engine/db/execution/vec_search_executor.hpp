@@ -34,9 +34,9 @@ class VecSearchExecutor {
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
 
-  int64_t* offset_table_;          // The offset table for neighbor list for each node.
-  int64_t* neighbor_list_;         // The neighbor list for each node consecutively stored.
-  VectorColumnData vector_table_;  // The vector table for each node consecutively stored.
+  int64_t* offset_table_;           // The offset table for neighbor list for each node.
+  int64_t* neighbor_list_;          // The neighbor list for each node consecutively stored.
+  VectorColumnData vector_column_;  // The vector column for each node consecutively stored.
 
   // Distance calculation function
   DistFunc fstdistfunc_;
