@@ -33,7 +33,7 @@ VecSearchExecutor::VecSearchExecutor(
     std::shared_ptr<ANNGraphSegment> ann_index,
     int64_t *offset_table,
     int64_t *neighbor_list,
-    std::variant<DenseVector, VariableLenAttrTable *> vector_table,
+    std::variant<DenseVectorColumnDataContainer, SparseVectorArrayDataContainer *> vector_table,
     DistFunc fstdistfunc,
     void *dist_func_param,
     int num_threads,
@@ -414,10 +414,10 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
           dist_func_param_);
     } else {
       // it holds sparse vector
-      auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(nb_id);
+      auto &vecData = std::get<SparseVectorArrayDataContainer *>(vector_table_)->at(nb_id);
       auto &qVec = std::get<SparseVector>(query_data);
       dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
-          *(reinterpret_cast<SparseVector *>(&vec[0])),
+          CastToSparseVector(vecData),
           std::get<SparseVector>(query_data));
     }
 
@@ -475,9 +475,9 @@ void VecSearchExecutor::InitializeSetLPara(
           dist_func_param_);
     } else {
       // it holds sparse vector
-      auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(v_id);
+      auto &vecData = std::get<SparseVectorArrayDataContainer *>(vector_table_)->at(v_id);
       auto &qVec = std::get<SparseVector>(query_data);
-      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(*(reinterpret_cast<SparseVector *>(&vec[0])), std::get<SparseVector>(query_data));
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(CastToSparseVector(vecData), std::get<SparseVector>(query_data));
     }
     set_L[set_L_start + i] = Candidate(v_id, dist, false);  // False means not checked.
   }
@@ -742,9 +742,9 @@ bool VecSearchExecutor::BruteForceSearch(
   } else {
     // it holds sparse vector
     for (int64_t v_id = start; v_id < end; ++v_id) {
-      auto &vec = std::get<VariableLenAttrTable *>(vector_table_)->at(v_id);
+      auto &vecData = std::get<SparseVectorArrayDataContainer *>(vector_table_)->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
-          *(reinterpret_cast<SparseVector *>(&vec[0])),
+          CastToSparseVector(vecData),
           std::get<SparseVector>(query_data));
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }

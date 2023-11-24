@@ -198,7 +198,7 @@ Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t
   return Status::OK();
 }
 
-void ANNGraphSegment::BuildFromVectorTable(VectorTable vector_table, int64_t n, int64_t dim, meta::MetricType metricType) {
+void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_table, int64_t n, int64_t dim, meta::MetricType metricType) {
   record_number_ = n;
 
   // Build a KNN graph using NN descent.

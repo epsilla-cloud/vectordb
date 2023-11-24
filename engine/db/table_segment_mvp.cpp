@@ -82,7 +82,7 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
     }
   }
 
-  var_len_attr_table_ = new VariableLenAttrTable[var_len_attr_num_];
+  var_len_attr_table_ = new VariableLenAttrColumnDataContainer[var_len_attr_num_];
 
   attribute_table_ = new char[size_limit * primitive_offset_];
 
@@ -937,9 +937,9 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             break;
           case meta::FieldType::SPARSE_VECTOR_FLOAT:
           case meta::FieldType::SPARSE_VECTOR_DOUBLE: {
-            auto vec = reinterpret_cast<SparseVector*>(&var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx][0]);
-            for (int i = 0; i < vec->size; i++) {
-              std::cout << (vec->data[i].index) << ":" << vec->data[i].value << ",";
+            auto vec = CastToSparseVector(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx]);
+            for (int i = 0; i < vec.size; i++) {
+              std::cout << (vec.data[i].index) << ":" << vec.data[i].value << ",";
             }
             std::cout << std::endl;
             break;
