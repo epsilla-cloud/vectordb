@@ -119,7 +119,7 @@ void NsgIndex::InitNavigationPoint() {
   } else {
     // sparse vector
     auto tempCenterVec = std::map<size_t, DenseVectorElement>();
-    auto tableData = std::get<SparseVectorArrayDataContainer*>(ori_data_);
+    auto tableData = std::get<SparseVectorColumnDataContainer*>(ori_data_);
     size_t maxElem = 0;
     for (int i = 0; i < ntotal; i++) {
       maxElem = std::max(tableData[i].size(), maxElem);

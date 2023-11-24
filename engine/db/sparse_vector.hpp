@@ -37,8 +37,7 @@ using DenseVectorElement = float;
 using DenseVectorColumnDataContainer = float *;
 using VariableLenAttrDataContainer = std::vector<unsigned char>;
 using VariableLenAttrColumnDataContainer = std::vector<VariableLenAttrDataContainer>;
-using SparseVectorArrayDataContainer = VariableLenAttrColumnDataContainer;
-using VectorArrayData = std::variant<DenseVectorColumnDataContainer, SparseVectorArrayDataContainer>;
+using SparseVectorColumnDataContainer = VariableLenAttrColumnDataContainer;
 
 using Vector = std::variant<DenseVector, SparseVector>;
 using SparseVecDistFunc = std::function<float(const SparseVector, const SparseVector)>;
