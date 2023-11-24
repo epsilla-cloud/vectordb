@@ -10,13 +10,6 @@
 #include "db/db_server.hpp"
 #include "server/web_server/web_controller.hpp"
 
-const std::string tableSchemaKey_name = "name",
-                  tableSchemaKey_dataType = "dataType",
-                  tableSchemaKey_dimensions = "dimensions",
-                  tableSchemaKey_metricType = "metricType",
-                  tableSchemaKey_autoEmbedding = "autoEmbedding",
-                  tableSchemaKey_isPrimaryKey = "primaryKey";
-
 PyMODINIT_FUNC
 PyInit_epsilla(void) {
   PyObject *m;
@@ -85,96 +78,56 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
   if (!PyArg_ParseTupleAndKeywords(args, kwargs, "sO", (char **)keywords, &tableNamePtr, &tableFieldsListPtr))
     return NULL;
 
-  vectordb::engine::meta::TableSchema schema;
-  schema.name_ = tableNamePtr;
+  PyObject *fieldKeyValue = PyUnicode_DecodeUTF8("fields", strlen("fields"), "ignore");
 
-  // Iterate through the list and extract dictionaries
-  Py_ssize_t list_size = PyList_Size(tableFieldsListPtr);
-  for (Py_ssize_t i = 0; i < list_size; ++i) {
-    PyObject *dict_obj = PyList_GetItem(tableFieldsListPtr, i);
-    vectordb::engine::meta::FieldSchema field;
-    field.id_ = i;
+  PyObject *schemaObj = PyDict_New();
+  PyDict_SetItemString(schemaObj, "name", PyUnicode_DecodeUTF8(tableNamePtr, strlen(tableNamePtr), "ignore"));
+  PyDict_SetItem(schemaObj, fieldKeyValue, tableFieldsListPtr);
 
-    if (!PyDict_Check(dict_obj)) {
-      PyErr_SetString(PyExc_TypeError, "List must contain dictionaries");
-      return NULL;
-    }
+  PyObject *json_module = PyImport_ImportModule("json");
 
-    PyObject *nameKey = PyUnicode_DecodeUTF8(tableSchemaKey_name.c_str(), tableSchemaKey_name.size(), "strict");
-    PyObject *nameValue = PyObject_Str(PyDict_GetItem(dict_obj, nameKey));
-    const char *fieldNamePtr = PyUnicode_AsUTF8(nameValue);
-    if (fieldNamePtr != NULL) {
-      field.name_ = fieldNamePtr;
-    } else {
-      PyErr_SetString(PyExc_TypeError, "invalid content: ID is not valid UTF8 string");
-      return NULL;
-    }
-    Py_DECREF(nameKey);
-    Py_DECREF(nameValue);
-
-    PyObject *isPkKey = PyUnicode_DecodeUTF8(tableSchemaKey_isPrimaryKey.c_str(), tableSchemaKey_isPrimaryKey.size(), "strict");
-    PyObject *isPkValue = PyDict_GetItem(dict_obj, isPkKey);
-    if (isPkValue != NULL) {
-      bool isPk = PyObject_IsTrue(isPkValue);
-      field.is_primary_key_ = isPk;
-    }
-    Py_XDECREF(isPkKey);
-    Py_XDECREF(isPkValue);
-
-    PyObject *dataTypeKey = PyUnicode_DecodeUTF8(tableSchemaKey_dataType.c_str(), tableSchemaKey_dataType.size(), "strict");
-    PyObject *dataTypeValue = PyObject_Str(PyDict_GetItem(dict_obj, dataTypeKey));
-    const char *dataTypePtr = PyUnicode_AsUTF8(dataTypeValue);
-
-    if (fieldNamePtr != NULL) {
-      std::string fieldType = dataTypePtr;
-      field.field_type_ = vectordb::server::web::WebUtil::GetFieldType(fieldType);
-    } else {
-      PyErr_SetString(PyExc_TypeError, "invalid content: field type is not valid UTF8 string");
-      return NULL;
-    }
-
-    Py_DECREF(dataTypeKey);
-    Py_DECREF(dataTypeValue);
-
-    if (field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
-        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT ||
-        field.field_type_ == vectordb::engine::meta::FieldType::SPARSE_VECTOR_DOUBLE ||
-        field.field_type_ == vectordb::engine::meta::FieldType::SPARSE_VECTOR_FLOAT) {
-      PyObject *dimensionsKey = PyUnicode_DecodeUTF8(tableSchemaKey_dimensions.c_str(), tableSchemaKey_dimensions.size(), "strict");
-      PyObject *dimensionsValue = PyDict_GetItem(dict_obj, dimensionsKey);
-      if (dimensionsValue == NULL) {
-        PyErr_SetString(PyExc_TypeError, "invalid parameter: vector field has no dimension");
-        return NULL;
-      }
-      if (PyLong_Check(dimensionsValue)) {
-        const long dimensions = PyLong_AsLong(dimensionsValue);
-        field.vector_dimension_ = dimensions;
-      } else {
-        PyErr_SetString(PyExc_TypeError, "invalid parameter: dimension is not int");
-        return NULL;
-      }
-      Py_DECREF(dimensionsKey);
-      Py_DECREF(dimensionsValue);
-
-      PyObject *metricTypeKey = PyUnicode_DecodeUTF8(tableSchemaKey_metricType.c_str(), tableSchemaKey_metricType.size(), "strict");
-      PyObject *metricTypeValue = PyDict_GetItem(dict_obj, metricTypeKey);
-
-      if (metricTypeValue != NULL) {
-        PyObject *metricTypeValueStr = PyObject_Str(metricTypeValue);
-        const char *metricTypeValueStrPtr = PyUnicode_AsUTF8(metricTypeValueStr);
-        std::string metricType = std::string(metricTypeValueStrPtr);
-        field.metric_type_ = vectordb::server::web::WebUtil::GetMetricType(metricType);
-      }
-    }
-    schema.fields_.push_back(field);
-    Py_DECREF(dict_obj);
+  if (json_module == NULL) {
+    PyErr_SetString(PyExc_Exception, "Unable to import json module");
+    return NULL;
   }
+
+  PyObject *dumps_func = PyObject_GetAttrString(json_module, "dumps");
+  Py_DECREF(json_module);
+
+  if (dumps_func == NULL || !PyCallable_Check(dumps_func)) {
+    PyErr_SetString(PyExc_Exception, "Unable to get address of json.dumps method");
+    Py_XDECREF(dumps_func);
+    return NULL;
+  }
+
+  PyObject *args_tuple = PyTuple_Pack(1, schemaObj);
+  PyObject *kwargs_dict = PyDict_New();  // You can pass keyword arguments here if needed
+
+  PyObject *json_str = PyObject_Call(dumps_func, args_tuple, kwargs_dict);
+
+  Py_DECREF(dumps_func);
+  Py_DECREF(args_tuple);
+  Py_DECREF(kwargs_dict);
+
+  if (json_str == NULL) {
+    PyErr_SetString(PyExc_Exception, "unable to dump records as JSON");
+    return NULL;
+  }
+
+  // Convert the PyObject to a C-style string (UTF-8)
+  const char *utf8_str = PyUnicode_AsUTF8(json_str);
+
+  if (utf8_str == NULL) {
+    return NULL;
+  }
+
+  std::string schema_json(utf8_str);
 
   Py_DECREF(tableFieldsListPtr);
 
   // TODO: add auto embedding here
   size_t table_id;
-  auto status = db->CreateTable(db_name, schema, table_id);
+  auto status = db->CreateTable(db_name, schema_json, table_id);
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
     return NULL;

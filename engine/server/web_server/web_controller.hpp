@@ -191,7 +191,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
       if (body_field.HasMember("dataType")) {
         std::string d_type;
-        field.field_type_ = WebUtil::GetFieldType(d_type.assign(body_field.GetString("dataType")));
+        field.field_type_ = engine::meta::GetFieldType(d_type.assign(body_field.GetString("dataType")));
       }
       if (
           field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
@@ -207,7 +207,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
       if (body_field.HasMember("metricType")) {
         std::string m_type;
-        field.metric_type_ = WebUtil::GetMetricType(m_type.assign(body_field.GetString("metricType")));
+        field.metric_type_ = engine::meta::GetMetricType(m_type.assign(body_field.GetString("metricType")));
         if (field.metric_type_ == vectordb::engine::meta::MetricType::UNKNOWN) {
           dto->statusCode = Status::CODE_400.code;
           dto->message = "invalid metric type: " + body_field.GetString("metricType");
