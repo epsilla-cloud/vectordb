@@ -29,10 +29,10 @@ class OracleL2 {
   std::unique_ptr<SpaceInterface<float>> space;
   DistFunc fstdistfunc_;
   void *dist_func_param_;
-  VectorTable m;
+  VectorColumnData m;
 
  public:
-  OracleL2(size_t dim_, VectorTable m_, meta::MetricType metricType) : dim(dim_) {
+  OracleL2(size_t dim_, VectorColumnData m_, meta::MetricType metricType) : dim(dim_) {
     m = m_;
 
     if (std::holds_alternative<DenseVector>(m_)) {
@@ -76,16 +76,16 @@ float OracleL2::operator()(int p, int q) const {
   if (std::holds_alternative<DenseVector>(m)) {
     return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(m) + p * dim, std::get<DenseVector>(m) + q * dim, dist_func_param_);
   } else {
-    auto &v1 = std::get<VariableLenAttrTable *>(m)->at(p);
-    auto &v2 = std::get<VariableLenAttrTable *>(m)->at(q);
-    return std::get<SparseVecDistFunc>(fstdistfunc_)(*(reinterpret_cast<SparseVector *>(&v1[0])), *(reinterpret_cast<SparseVector *>(&v2[0])));
+    auto &v1 = std::get<SparseVectorArrayDataContainer *>(m)->at(p);
+    auto &v2 = std::get<SparseVectorArrayDataContainer *>(m)->at(q);
+    return std::get<SparseVecDistFunc>(fstdistfunc_)(CastToSparseVector(v1), CastToSparseVector(v2));
   }
 }
 }  // namespace
 
 class KNNGraph {
  public:
-  KNNGraph(int N, int D, int K, VectorTable data, Graph &knng, meta::MetricType metricType) {
+  KNNGraph(int N, int D, int K, VectorColumnData data, Graph &knng, meta::MetricType metricType) {
     int I = 1000;
     float T = 0.001;
     float S = 1;

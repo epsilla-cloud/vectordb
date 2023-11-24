@@ -48,5 +48,9 @@ float GetL2Dist(const SparseVector &v1, const SparseVector &v2) {
   return std::sqrt(GetL2DistSqr(v1, v2));
 }
 
+SparseVector CastToSparseVector(VariableLenAttrDataContainer &vec) {
+  return *(reinterpret_cast<SparseVector *>(&vec[0]));
+}
+
 }  // namespace engine
 }  // namespace vectordb
