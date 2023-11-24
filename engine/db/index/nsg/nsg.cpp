@@ -121,7 +121,7 @@ void NsgIndex::InitNavigationPoint() {
     auto tempCenterVec = std::map<size_t, DenseVectorElement>();
     auto tableData = std::get<VariableLenAttrColumnContainer*>(ori_data_);
     for (size_t i = 0; i < ntotal; i++) {
-      auto vec = CastToSparseVector((*tableData)[i]);
+      auto& vec = std::get<SparseVector>((*tableData)[i]);
       for (size_t j = 0; j < vec.size(); j++) {
         tempCenterVec[vec[j].index] = vec[j].value;
       }

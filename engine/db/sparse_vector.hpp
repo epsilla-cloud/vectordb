@@ -31,14 +31,12 @@ using VariableLenAttr = std::variant<std::string, SparseVector>;
 using VariableLenAttrColumnContainer = std::vector<VariableLenAttr>;
 
 using Vector = std::variant<DenseVector, SparseVector>;
-using SparseVecDistFunc = std::function<float(const SparseVector, const SparseVector)>;
+using SparseVecDistFunc = std::function<float(const SparseVector &, const SparseVector &)>;
 
 float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
 
 float GetL2Dist(const SparseVector &v1, const SparseVector &v2);
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2);
-
-SparseVector &CastToSparseVector(VariableLenAttr &vec);
 
 }  // namespace engine
 }  // namespace vectordb
