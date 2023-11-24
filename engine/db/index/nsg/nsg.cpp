@@ -42,7 +42,7 @@ NsgIndex::~NsgIndex() {
   delete distance_;
 }
 
-size_t NsgIndex::Build(size_t nb, VectorTable data, const int64_t* ids, const BuildParams& parameters) {
+size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, const BuildParams& parameters) {
   std::cout << "Start build" << std::endl;
   ntotal = nb;
   // ori_data_ = new float[ntotal * dimension];
@@ -100,16 +100,48 @@ size_t NsgIndex::Build(size_t nb, VectorTable data, const int64_t* ids, const Bu
 
 void NsgIndex::InitNavigationPoint() {
   // calculate the center of vectors
-  auto center = new float[dimension];
-  memset(center, 0, sizeof(float) * dimension);
+  Vector center;
+  std::unique_ptr<DenseVector> denseVectorPtr;
+  std::unique_ptr<SparseVector, SparseVectorDeleter> sparseVectorPtr;
+  if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+    denseVectorPtr = std::make_unique<DenseVector>(new DenseVectorElement[dimension]);
+    memset(denseVectorPtr.get(), 0, sizeof(DenseVectorElement) * dimension);
 
-  for (size_t i = 0; i < ntotal; i++) {
-    for (size_t j = 0; j < dimension; j++) {
-      center[j] += std::get<DenseVector>(ori_data_)[i * dimension + j];
+    for (size_t i = 0; i < ntotal; i++) {
+      for (size_t j = 0; j < dimension; j++) {
+        (*denseVectorPtr.get())[j] += std::get<DenseVectorColumnDataContainer>(ori_data_)[i * dimension + j];
+      }
     }
-  }
-  for (size_t j = 0; j < dimension; j++) {
-    center[j] /= ntotal;
+    for (size_t j = 0; j < dimension; j++) {
+      (*denseVectorPtr.get())[j] /= ntotal;
+    }
+    center = *denseVectorPtr.get();
+  } else {
+    // sparse vector
+    auto tempCenterVec = std::map<size_t, DenseVectorElement>();
+    auto tableData = std::get<SparseVectorArrayDataContainer*>(ori_data_);
+    size_t maxElem = 0;
+    for (int i = 0; i < ntotal; i++) {
+      maxElem = std::max(tableData[i].size(), maxElem);
+    }
+    for (size_t i = 0; i < ntotal; i++) {
+      auto vec = CastToSparseVector((*tableData)[i]);
+      for (size_t j = 0; j < vec.size; j++) {
+        tempCenterVec[vec.data[j].index] = vec.data[j].value;
+      }
+    }
+    for (auto& elem : tempCenterVec) {
+      elem.second /= ntotal;
+    }
+    sparseVectorPtr = std::unique_ptr<SparseVector, SparseVectorDeleter>(
+        reinterpret_cast<SparseVector*>(operator new(sizeof(SparseVector) + sizeof(float) * tempCenterVec.size())));
+    sparseVectorPtr.get()->size = tempCenterVec.size();
+
+    int elemIdx = 0;
+    for (auto& elem : tempCenterVec) {
+      sparseVectorPtr.get()->data[elemIdx++] = SparseVectorElement{elem.first, elem.second};
+    }
+    center = *sparseVectorPtr.get();
   }
 
   // select navigation point
@@ -129,12 +161,10 @@ void NsgIndex::InitNavigationPoint() {
   //
   // float r1 = distance_->Compare(center, ori_data_ + navigation_point * dimension, dimension);
   // assert(r1 == resset[0].distance);
-
-  delete[] center;
 }
 
 // Specify Link
-void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
+void NsgIndex::GetNeighbors(const Vector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
                             boost::dynamic_bitset<>& has_calculated_dist) {
   auto& graph = knng;
   size_t buffer_size = search_length;
@@ -186,7 +216,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
         continue;
       }
 
-      float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + dimension * id, query, dimension);
+      float dist = distance_->Compare(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, std::get<DenseVector>(query), dimension);
       resset[i] = Neighbor(id, dist, false);
 
       //// difference from other GetNeighbors
@@ -211,7 +241,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
             continue;
           has_calculated_dist[id] = true;
 
-          float dist = distance_->Compare(query, std::get<DenseVector>(ori_data_) + dimension * id, dimension);
+          float dist = distance_->Compare(std::get<DenseVector>(query), std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, dimension);
           Neighbor nn(id, dist, false);
           fullset.push_back(nn);
 
@@ -237,7 +267,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
 }
 
 // FindUnconnectedNode
-void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset) {
+void NsgIndex::GetNeighbors(const Vector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset) {
   auto& graph = nsg;
   size_t buffer_size = search_length;
 
@@ -289,7 +319,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
         continue;
       }
 
-      float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + id * dimension, query, dimension);
+      float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + id * dimension, std::get<DenseVector>(query), dimension);
       resset[i] = Neighbor(id, dist, false);
     }
     std::sort(resset.begin(), resset.end());  // sort by distance
@@ -310,7 +340,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
             continue;
           has_calculated_dist[id] = true;
 
-          float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + dimension * id, query, dimension);
+          float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + dimension * id, std::get<DenseVector>(query), dimension);
           Neighbor nn(id, dist, false);
           fullset.push_back(nn);
 
@@ -335,7 +365,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
   }
 }
 
-void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* params) {
+void NsgIndex::GetNeighbors(const Vector query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* params) {
   size_t buffer_size = params ? params->search_length : search_length;
 
   if (buffer_size > ntotal) {
@@ -381,7 +411,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
         // THROW_MSG("Build Index Error, id > ntotal");
       }
 
-      float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + id * dimension, query, dimension);
+      float dist = distance_->Compare(std::get<DenseVector>(ori_data_) + id * dimension, std::get<DenseVector>(query), dimension);
       resset[i] = Neighbor(id, dist, false);
     }
     std::sort(resset.begin(), resset.end());  // sort by distance
@@ -402,7 +432,7 @@ void NsgIndex::GetNeighbors(const DenseVector query, std::vector<Neighbor>& ress
             continue;
           has_calculated_dist[id] = true;
 
-          float dist = distance_->Compare(query, std::get<DenseVector>(ori_data_) + dimension * id, dimension);
+          float dist = distance_->Compare(std::get<DenseVector>(query), std::get<DenseVector>(ori_data_) + dimension * id, dimension);
 
           if (dist >= resset[buffer_size - 1].distance)
             continue;
@@ -604,7 +634,7 @@ void NsgIndex::SelectEdge(unsigned& cursor, std::vector<Neighbor>& sort_pool, st
     bool should_link = true;
     for (size_t t = 0; t < result.size(); ++t) {
       float dist =
-          distance_->Compare(std::get<DenseVector>(ori_data_) + dimension * result[t].id, std::get<DenseVector>(ori_data_) + dimension * p.id, dimension);
+          distance_->Compare(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * result[t].id, std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * p.id, dimension);
 
       if (dist < p.distance) {
         should_link = false;
@@ -678,7 +708,7 @@ void NsgIndex::FindUnconnectedNode(boost::dynamic_bitset<>& has_linked, int64_t&
 
   // search unlinked-node's neighbor
   std::vector<Neighbor> tmp, pool;
-  GetNeighbors(std::get<DenseVector>(ori_data_) + dimension * id, tmp, pool);
+  GetNeighbors(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, tmp, pool);
   std::sort(pool.begin(), pool.end());
 
   size_t found = 0;
