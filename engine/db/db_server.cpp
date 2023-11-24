@@ -86,6 +86,83 @@ Status DBServer::CreateTable(const std::string& db_name,
   return GetDB(db_name)->CreateTable(table_schema);
 }
 
+Status DBServer::CreateTable(const std::string& db_name,
+                             std::string& table_schema_json, size_t& table_id) {
+  vectordb::Json parsedBody;
+  auto valid = parsedBody.LoadFromString(table_schema_json);
+  if (!valid) {
+    return Status{USER_ERROR, "Invalid JSON payload."};
+  }
+
+  bool return_table_id = false;
+  if (parsedBody.HasMember("returnTableId")) {
+    return_table_id = parsedBody.GetBool("returnTableId");
+  }
+
+  vectordb::engine::meta::TableSchema table_schema;
+  if (!parsedBody.HasMember("name")) {
+    return Status{USER_ERROR, "Missing table name in your payload."};
+  }
+  table_schema.name_ = parsedBody.GetString("name");
+
+  if (!parsedBody.HasMember("fields")) {
+    return Status{USER_ERROR, "Missing fields in your payload."};
+  }
+  size_t fields_size = parsedBody.GetArraySize("fields");
+  bool has_primary_key = false;
+  for (size_t i = 0; i < fields_size; i++) {
+    auto body_field = parsedBody.GetArrayElement("fields", i);
+    vectordb::engine::meta::FieldSchema field;
+    field.id_ = i;
+    field.name_ = body_field.GetString("name");
+    if (body_field.HasMember("primaryKey")) {
+      field.is_primary_key_ = body_field.GetBool("primaryKey");
+      if (field.is_primary_key_) {
+        if (has_primary_key) {
+          return Status{USER_ERROR, "At most one field can be primary key."};
+        }
+        has_primary_key = true;
+      }
+    }
+    if (body_field.HasMember("dataType")) {
+      std::string d_type;
+      field.field_type_ = engine::meta::GetFieldType(d_type.assign(body_field.GetString("dataType")));
+    }
+    if (
+        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
+        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT) {
+      if (!body_field.HasMember("dimensions")) {
+        return Status{USER_ERROR, "Vector field must have dimensions."};
+      }
+    }
+    if (body_field.HasMember("dimensions")) {
+      field.vector_dimension_ = body_field.GetInt("dimensions");
+    }
+    if (body_field.HasMember("metricType")) {
+      std::string m_type;
+      field.metric_type_ = engine::meta::GetMetricType(m_type.assign(body_field.GetString("metricType")));
+      if (field.metric_type_ == vectordb::engine::meta::MetricType::UNKNOWN) {
+        return Status{USER_ERROR, "invalid metric type: " + body_field.GetString("metricType")};
+      }
+    }
+    table_schema.fields_.push_back(field);
+  }
+
+  if (parsedBody.HasMember("autoEmbedding")) {
+    size_t embeddings_size = parsedBody.GetArraySize("autoEmbedding");
+    for (size_t i = 0; i < embeddings_size; i++) {
+      auto body_embedding = parsedBody.GetArrayElement("autoEmbedding", i);
+      vectordb::engine::meta::AutoEmbedding embedding;
+      embedding.src_field_id_ = body_embedding.GetInt("source");
+      embedding.tgt_field_id_ = body_embedding.GetInt("target");
+      embedding.model_name_ = body_embedding.GetString("modelName");
+      table_schema.auto_embeddings_.push_back(embedding);
+    }
+  }
+
+  return CreateTable(db_name, table_schema, table_id);
+}
+
 Status DBServer::DropTable(const std::string& db_name,
                            const std::string& table_name) {
   // Drop table from meta.

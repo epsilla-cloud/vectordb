@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <set>
@@ -38,7 +39,12 @@ class Meta {
   virtual Status DropTable(const std::string& db_name, const std::string& table_name) = 0;
 
   virtual void SetLeader(bool is_leader) = 0;
+
 };  // MetaData
+
+FieldType GetFieldType(std::string& type);
+
+MetricType GetMetricType(std::string& type);
 
 using MetaPtr = std::shared_ptr<Meta>;
 
