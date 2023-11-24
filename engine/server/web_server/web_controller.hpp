@@ -569,7 +569,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     size_t vector_size = parsedBody.GetArraySize("queryVector");
-    float query_vector[vector_size];
+    auto query_vector = std::unique_ptr<engine::DenseVectorElement[]>(new engine::DenseVectorElement[vector_size]);
     for (size_t i = 0; i < vector_size; i++) {
       auto vector = parsedBody.GetArrayElement("queryVector", i);
       query_vector[i] = (float)vector.GetDouble();
