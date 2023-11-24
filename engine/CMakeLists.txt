@@ -129,4 +129,3 @@ target_link_libraries(
 )
 
 gtest_discover_tests(db_test)
-
