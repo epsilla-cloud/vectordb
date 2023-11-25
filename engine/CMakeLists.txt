@@ -118,14 +118,21 @@ FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
 enable_testing()
+
+set(DB_TEST_FILES)
+
+# Add source files in the utils directory
+file(GLOB ENGINE_DB_TEST_FILES "test/engine/db/*.cpp")
+list(APPEND DB_TEST_FILES ${ENGINE_DB_TEST_FILES})
+
 add_executable(
-  db_test
-  test/engine/db/sparse_vector.cpp
+  vector_db_test
+  ${DB_TEST_FILES}
 )
 target_link_libraries(
-  db_test
+  vector_db_test
   GTest::gtest_main
   vectordb_lib
 )
 
-gtest_discover_tests(db_test)
+gtest_discover_tests(vector_db_test)

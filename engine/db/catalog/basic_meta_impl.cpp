@@ -178,7 +178,7 @@ BasicMetaImpl::BasicMetaImpl() {
 
 BasicMetaImpl::~BasicMetaImpl() {}
 
-Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::string& db_name) {
+Status BasicMetaImpl::LoadDatabase(const std::string& db_catalog_path, const std::string& db_name) {
   if (loaded_databases_paths_.find(db_catalog_path) != loaded_databases_paths_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Database catalog file is already loaded: " + db_catalog_path);
   }
