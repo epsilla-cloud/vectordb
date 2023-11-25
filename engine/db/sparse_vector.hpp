@@ -7,6 +7,8 @@
 #include <variant>
 #include <vector>
 
+#include "utils/json.hpp"
+
 namespace vectordb {
 namespace engine {
 
@@ -37,6 +39,7 @@ float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
 
 float GetL2Dist(const SparseVector &v1, const SparseVector &v2);
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2);
+Json ToJson(const SparseVector &v1);
 
 }  // namespace engine
 }  // namespace vectordb
