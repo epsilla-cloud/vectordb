@@ -3,13 +3,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace vectordb {
 namespace engine {
 namespace meta {
 
-constexpr int32_t DEFAULT_VECTOR_DIMENSION = 0;
+constexpr size_t DEFAULT_VECTOR_DIMENSION = 0;
 constexpr const char* DEFAULT_MODEL_NAME = "sentence-transformers/paraphrase-albert-small-v2";
 
 using DateT = int;
@@ -51,7 +52,7 @@ struct FieldSchema {
   std::string name_;
   bool is_primary_key_ = false;
   FieldType field_type_ = FieldType::INT4;
-  int32_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
+  size_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
   MetricType metric_type_ = MetricType::EUCLIDEAN;
 };
 

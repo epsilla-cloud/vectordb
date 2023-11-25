@@ -1,5 +1,6 @@
 #pragma once
 
+#include "db/catalog/meta_types.hpp"
 #include "db/index/distances.hpp"
 #include "db/sparse_vector.hpp"
 namespace vectordb {
@@ -8,6 +9,8 @@ template <typename MTYPE>
 using DenseVecDistFunc = MTYPE (*)(const void*, const void*, const void*);
 
 using DistFunc = std::variant<DenseVecDistFunc<float>, engine::SparseVecDistFunc>;
+
+DistFunc GetDistFunc(engine::meta::FieldType fType, engine::meta::MetricType mType);
 
 template <typename MTYPE>
 class SpaceInterface {

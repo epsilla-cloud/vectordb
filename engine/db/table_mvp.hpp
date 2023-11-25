@@ -95,8 +95,7 @@ class TableMVP {
 
   ThreadSafeVector<std::shared_ptr<execution::ExecutorPool>> executor_pool_;  // The executor for vector search.
   std::mutex executor_pool_mutex_;
-  std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;      // The ann graph segment for each vector field.
-  std::vector<std::shared_ptr<vectordb::SpaceInterface<float>>> space_;  // The space for each vector field.
+  std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;  // The ann graph segment for each vector field.
 
   // One write ahead log per table.
   std::shared_ptr<WriteAheadLog> wal_;

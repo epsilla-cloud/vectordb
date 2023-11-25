@@ -48,5 +48,18 @@ float GetL2Dist(const SparseVector &v1, const SparseVector &v2) {
   return std::sqrt(GetL2DistSqr(v1, v2));
 }
 
+Json ToJson(const SparseVector &v1) {
+  Json result, indices, values;
+  indices.LoadFromString("[]");
+  values.LoadFromString("[]");
+  for (const auto &elem : v1) {
+    indices.AddIntToArray(elem.index);
+    values.AddDoubleToArray(elem.value);
+  }
+  result.SetObject(SparseVecObjIndicesKey, indices);
+  result.SetObject(SparseVecObjValuesKey, values);
+  return result;
+}
+
 }  // namespace engine
 }  // namespace vectordb

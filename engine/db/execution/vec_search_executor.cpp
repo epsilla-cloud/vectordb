@@ -464,10 +464,6 @@ void VecSearchExecutor::InitializeSetLPara(
     ++tmp_count_computation;
 
     float dist;
-    dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-        std::get<DenseVector>(vector_column_) + dimension_ * v_id,
-        std::get<DenseVector>(query_data),
-        dist_func_param_);
     if (std::holds_alternative<DenseVector>(vector_column_)) {
       dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
           std::get<DenseVector>(vector_column_) + dimension_ * v_id,
