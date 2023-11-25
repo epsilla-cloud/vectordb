@@ -60,6 +60,7 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
         field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
       field_id_mem_offset_map_[field_schema.id_] = var_len_attr_num_;
       field_name_mem_offset_map_[field_schema.name_] = var_len_attr_num_;
+      vec_field_name_executor_pool_idx_map_[field_schema.name_] = vector_num_;
       if (field_schema.is_primary_key_) {
         string_pk_offset_ = std::make_unique<int64_t>(var_len_attr_num_);
       }
@@ -70,6 +71,7 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       vector_dims_.push_back(field_schema.vector_dimension_);
       field_id_mem_offset_map_[field_schema.id_] = vector_num_;
       field_name_mem_offset_map_[field_schema.name_] = vector_num_;
+      vec_field_name_executor_pool_idx_map_[field_schema.name_] = vector_num_;
       ++vector_num_;
     } else {
       field_id_mem_offset_map_[field_schema.id_] = primitive_offset_;
@@ -456,11 +458,16 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       if (!record.HasMember(field.name_)) {
         return Status(INVALID_RECORD, "Record " + std::to_string(i) + " missing field: " + field.name_);
       }
-      if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-          field.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
-          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
-          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
-        if (record.GetArraySize(field.name_) != field.vector_dimension_) {
+      if ((field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
+           field.field_type_ == meta::FieldType::VECTOR_DOUBLE) &&
+          record.GetArraySize(field.name_) != field.vector_dimension_) {
+        return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension.");
+      }
+      if ((field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+           field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE)) {
+        auto indices = record.GetObject(field.name_).GetArray(SparseVecObjIndicesKey);
+        auto size = indices.GetSize();
+        if (indices.GetArrayElement(size - 1).GetInt() >= field.vector_dimension_) {
           return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension.");
         }
       }
@@ -522,8 +529,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         // Insert vector attribute.
         auto sparseVecObject = record.GetObject(field.name_);
 
-        auto indices = record.GetArray(SparseVecObjIndicesKey);
-        auto values = record.GetArray(SparseVecObjValuesKey);
+        auto indices = record.Get(field.name_).GetArray(SparseVecObjIndicesKey);
+        auto values = record.Get(field.name_).GetArray(SparseVecObjValuesKey);
         auto nonZeroValueSize = indices.GetSize();
         if (indices.GetSize() != values.GetSize()) {
           std::cerr << "mismatched indices array length (" << indices.GetSize() << ") and value array length (" << values.GetSize() << "), skipping." << std::endl;
@@ -535,8 +542,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
         float sum = 0;
         for (auto j = 0; j < indices.GetSize(); ++j) {
-          size_t index = static_cast<size_t>(values.GetArrayElement(j).GetInt());
-          float value = static_cast<float>((float)(values.GetArrayElement(j).GetDouble()));
+          size_t index = static_cast<size_t>(indices.GetArrayElement(j).GetInt());
+          float value = static_cast<float>(values.GetArrayElement(j).GetDouble());
           sum += value * value;
           vec.emplace_back(SparseVectorElement{index, value});
         }

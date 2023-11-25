@@ -31,29 +31,31 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
   wal_->Replay(table_schema, field_name_type_map_, table_segment_);
 
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
-    if (table_schema_.fields_[i].field_type_ == meta::FieldType::VECTOR_FLOAT ||
-        table_schema_.fields_[i].field_type_ ==
-            meta::FieldType::VECTOR_DOUBLE) {
+    auto fType = table_schema_.fields_[i].field_type_;
+    auto mType = table_schema_.fields_[i].metric_type_;
+    if (fType == meta::FieldType::VECTOR_FLOAT ||
+        fType == meta::FieldType::VECTOR_DOUBLE ||
+        fType == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+        fType == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+      VectorColumnData columnData;
+      if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
+        columnData = table_segment_
+                         ->vector_tables_[table_segment_->field_name_mem_offset_map_
+                                              [table_schema_.fields_[i].name_]];
+      } else {
+        // sparse vector
+        columnData = &table_segment_
+                          ->var_len_attr_table_[table_segment_->field_name_mem_offset_map_
+                                                    [table_schema_.fields_[i].name_]];
+      }
       // Load the ann graph from disk.
       ann_graph_segment_.push_back(
           std::make_shared<vectordb::engine::ANNGraphSegment>(
               db_catalog_path, table_schema_.id_,
               table_schema_.fields_[i].id_));
+
       // Construct the executor.
-      if (table_schema.fields_[i].metric_type_ == vectordb::engine::meta::MetricType::EUCLIDEAN) {
-        space_.push_back(std::make_shared<vectordb::L2Space>(
-            table_schema_.fields_[i].vector_dimension_));
-      } else if (table_schema.fields_[i].metric_type_ == vectordb::engine::meta::MetricType::COSINE) {
-        space_.push_back(std::make_shared<vectordb::CosineSpace>(
-            table_schema_.fields_[i].vector_dimension_));
-      } else if (table_schema.fields_[i].metric_type_ == vectordb::engine::meta::MetricType::DOT_PRODUCT) {
-        space_.push_back(std::make_shared<vectordb::InnerProductSpace>(
-            table_schema_.fields_[i].vector_dimension_));
-      } else {
-        // by default use L2
-        space_.push_back(std::make_shared<vectordb::L2Space>(
-            table_schema_.fields_[i].vector_dimension_));
-      }
+      auto distFunc = GetDistFunc(fType, mType);
 
       auto pool = std::make_shared<execution::ExecutorPool>();
       for (int executorIdx = 0; executorIdx < NumExecutorPerField;
@@ -64,11 +66,9 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
             ann_graph_segment_.back()->navigation_point_,
             ann_graph_segment_.back(), ann_graph_segment_.back()->offset_table_,
             ann_graph_segment_.back()->neighbor_list_,
-            table_segment_
-                ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                     [table_schema_.fields_[i].name_]],
-            space_.back()->get_dist_func(),
-            space_.back()->get_dist_func_param(),
+            columnData,
+            distFunc,
+            &table_schema_.fields_[i].vector_dimension_,
             IntraQueryThreads,
             MasterQueueSize,
             LocalQueueSize,
@@ -98,9 +98,13 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
 
   int64_t index = 0;
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
-    if (table_schema_.fields_[i].field_type_ == meta::FieldType::VECTOR_FLOAT ||
-        table_schema_.fields_[i].field_type_ ==
-            meta::FieldType::VECTOR_DOUBLE) {
+    auto fType = table_schema_.fields_[i].field_type_;
+    auto mType = table_schema_.fields_[i].metric_type_;
+
+    if (fType == meta::FieldType::VECTOR_FLOAT ||
+        fType == meta::FieldType::VECTOR_DOUBLE ||
+        fType == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+        fType == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
       if (ann_graph_segment_[index]->record_number_ == record_number ||
           record_number < MinimalGraphSize) {
         // No need to rebuild the ann graph.
@@ -109,6 +113,19 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
         ++index;
         continue;
       }
+
+      VectorColumnData columnData;
+      if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
+        columnData = table_segment_
+                         ->vector_tables_[table_segment_->field_name_mem_offset_map_
+                                              [table_schema_.fields_[i].name_]];
+      } else {
+        // sparse vector
+        columnData = &table_segment_
+                          ->var_len_attr_table_[table_segment_->field_name_mem_offset_map_
+                                                    [table_schema_.fields_[i].name_]];
+      }
+
       // Rebuild the ann graph.
       std::cout << "Rebuild ANN graph for attribute: "
                 << table_schema_.fields_[i].name_ << std::endl;
@@ -117,11 +134,9 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
         // For leader, rebuild the ann graph.
         auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(false);
         new_ann->BuildFromVectorTable(
-            table_segment_
-                ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                     [table_schema_.fields_[i].name_]],
+            columnData,
             record_number, table_schema_.fields_[i].vector_dimension_,
-            table_schema_.fields_[i].metric_type_);
+            mType);
         std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr =
             ann_graph_segment_[index];
         ann_graph_segment_[index] = new_ann;
@@ -148,7 +163,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
 
       // Replace the executors.
       auto pool = std::make_shared<execution::ExecutorPool>();
-
+      auto distFunc = GetDistFunc(fType, mType);
       for (int executorIdx = 0; executorIdx < NumExecutorPerField;
            executorIdx++) {
         pool->release(std::make_shared<execution::VecSearchExecutor>(
@@ -158,11 +173,9 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             ann_graph_segment_[index],
             ann_graph_segment_[index]->offset_table_,
             ann_graph_segment_[index]->neighbor_list_,
-            table_segment_
-                ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                     [table_schema_.fields_[i].name_]],
-            space_[index]->get_dist_func(),
-            space_[index]->get_dist_func_param(),
+            columnData,
+            distFunc,
+            &table_schema_.fields_[i].vector_dimension_,
             IntraQueryThreads,
             MasterQueueSize,
             LocalQueueSize,
@@ -221,12 +234,14 @@ Status TableMVP::Search(const std::string &field_name,
   // Get the field data type. If the type is not VECTOR, return error.
   meta::FieldType field_type = field_name_type_map_[field_name];
   if (field_type != meta::FieldType::VECTOR_FLOAT &&
-      field_type != meta::FieldType::VECTOR_DOUBLE) {
+      field_type != meta::FieldType::VECTOR_DOUBLE &&
+      field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+      field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     return Status(DB_UNEXPECTED_ERROR, "Field type is not vector.");
   }
 
   // Get the field offset in the vector table.
-  int64_t field_offset = table_segment_->field_name_mem_offset_map_[field_name];
+  int64_t field_offset = table_segment_->vec_field_name_executor_pool_idx_map_[field_name];
 
   // [Note] the following invocation is wrong
   //   execution::RAIIVecSearchExecutor(executor_pool_[field_offset],
@@ -334,6 +349,14 @@ Status TableMVP::Project(
               table_segment_->vector_tables_[offset][id * dim + k]);
         }
         record.SetObject(field, vector);
+      } else if (field_name_type_map_[field] == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+                 field_name_type_map_[field] == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        // Vector field.
+        vectordb::Json vector;
+        vector.LoadFromString("{}");
+        int64_t offset = table_segment_->field_name_mem_offset_map_[field];
+        auto vec = std::get<SparseVector>(table_segment_->var_len_attr_table_[offset][id]);
+        record.SetObject(field, ToJson(vec));
       } else {
         // Primitive field.
         auto offset = table_segment_->field_name_mem_offset_map_[field] +
