@@ -24,7 +24,7 @@ DBServer::~DBServer() {
 }
 
 Status DBServer::LoadDB(const std::string& db_name,
-                        std::string& db_catalog_path, int64_t init_table_scale,
+                        const std::string& db_catalog_path, int64_t init_table_scale,
                         bool wal_enabled) {
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
@@ -87,7 +87,7 @@ Status DBServer::CreateTable(const std::string& db_name,
 }
 
 Status DBServer::CreateTable(const std::string& db_name,
-                             std::string& table_schema_json, size_t& table_id) {
+                             const std::string& table_schema_json, size_t& table_id) {
   vectordb::Json parsedBody;
   auto valid = parsedBody.LoadFromString(table_schema_json);
   if (!valid) {

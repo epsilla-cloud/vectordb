@@ -20,7 +20,7 @@ class Meta {
  public:
   virtual ~Meta() = default;
 
-  virtual Status LoadDatabase(std::string& db_catalog_path, const std::string& db_name) = 0;
+  virtual Status LoadDatabase(const std::string& db_catalog_path, const std::string& db_name) = 0;
 
   virtual Status HasDatabase(const std::string& db_name, bool& response) = 0;
 
