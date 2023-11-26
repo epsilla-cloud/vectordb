@@ -383,7 +383,7 @@ void VecSearchExecutor::PickTopMUnchecked(
 int64_t VecSearchExecutor::ExpandOneCandidate(
     const int worker_id,
     const int64_t cand_id,
-    const Vector query_data,
+    const VectorPtr query_data,
     const float &dist_bound,
     // float &dist_thresh,
     std::vector<Candidate> &set_L,
@@ -407,18 +407,17 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 
     ++tmp_count_computation;
     float dist;
-    if (std::holds_alternative<DenseVector>(vector_column_)) {
+    if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
       dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-          std::get<DenseVector>(vector_column_) + dimension_ * nb_id,
-          std::get<DenseVector>(query_data),
+          std::get<DenseVectorPtr>(vector_column_) + dimension_ * nb_id,
+          std::get<DenseVectorPtr>(query_data),
           dist_func_param_);
     } else {
       // it holds sparse vector
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(nb_id);
-      auto &qVec = std::get<SparseVector>(query_data);
       dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
-          std::get<SparseVector>(vecData),
-          std::get<SparseVector>(query_data));
+          *std::get<SparseVectorPtr>(vecData),
+          *std::get<SparseVectorPtr>(query_data));
     }
 
     if (dist > dist_bound) {
@@ -444,7 +443,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 }
 
 void VecSearchExecutor::InitializeSetLPara(
-    const Vector query_data,
+    const VectorPtr query_data,
     const int64_t L,
     std::vector<Candidate> &set_L,
     const int64_t set_L_start,
@@ -464,16 +463,15 @@ void VecSearchExecutor::InitializeSetLPara(
     ++tmp_count_computation;
 
     float dist;
-    if (std::holds_alternative<DenseVector>(vector_column_)) {
+    if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
       dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-          std::get<DenseVector>(vector_column_) + dimension_ * v_id,
-          std::get<DenseVector>(query_data),
+          std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+          std::get<DenseVectorPtr>(query_data),
           dist_func_param_);
     } else {
       // it holds sparse vector
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
-      auto &qVec = std::get<SparseVector>(query_data);
-      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(std::get<SparseVector>(vecData), std::get<SparseVector>(query_data));
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(*std::get<SparseVectorPtr>(vecData), *std::get<SparseVectorPtr>(query_data));
     }
     set_L[set_L_start + i] = Candidate(v_id, dist, false);  // False means not checked.
   }
@@ -517,7 +515,7 @@ void VecSearchExecutor::PrepareInitIds(
 }
 
 void VecSearchExecutor::SearchImpl(
-    const Vector query_data,
+    const VectorPtr query_data,
     const int64_t K,
     const int64_t L,
     std::vector<Candidate> &set_L,
@@ -715,7 +713,7 @@ void VecSearchExecutor::SearchImpl(
 }
 
 bool VecSearchExecutor::BruteForceSearch(
-    const Vector query_data,
+    const VectorPtr query_data,
     const int64_t start,
     const int64_t end,
     const ConcurrentBitset &deleted,
@@ -726,12 +724,12 @@ bool VecSearchExecutor::BruteForceSearch(
     brute_force_queue_.resize(end - start);
   }
   float dist;
-  if (std::holds_alternative<DenseVector>(vector_column_)) {
+  if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
 #pragma omp parallel for
     for (int64_t v_id = start; v_id < end; ++v_id) {
       float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-          std::get<DenseVector>(vector_column_) + dimension_ * v_id,
-          std::get<DenseVector>(query_data),
+          std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+          std::get<DenseVectorPtr>(query_data),
           dist_func_param_);
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
@@ -740,8 +738,8 @@ bool VecSearchExecutor::BruteForceSearch(
     for (int64_t v_id = start; v_id < end; ++v_id) {
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
-          std::get<SparseVector>(vecData),
-          std::get<SparseVector>(query_data));
+          *std::get<SparseVectorPtr>(vecData),
+          *std::get<SparseVectorPtr>(query_data));
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   }
@@ -768,7 +766,7 @@ bool VecSearchExecutor::BruteForceSearch(
 }
 
 Status VecSearchExecutor::Search(
-    const Vector query_data,
+    const VectorPtr query_data,
     vectordb::engine::TableSegmentMVP *table_segment,
     const size_t limit,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,

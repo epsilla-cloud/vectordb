@@ -221,7 +221,7 @@ Status TableMVP::Delete(
 
 Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
-                        int64_t query_dimension, const Vector query_data,
+                        int64_t query_dimension, const VectorPtr query_data,
                         const int64_t limit, vectordb::Json &result,
                         std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
                         bool with_distance) {
@@ -245,20 +245,20 @@ Status TableMVP::Search(const std::string &field_name,
   auto metric_type = field_name_metric_type_map_[field_name];
 
   // normalize the query data
-  Vector updatedQueryData = query_data;
+  VectorPtr updatedQueryData = query_data;
   std::vector<DenseVectorElement> denseVec;
-  SparseVector sparseVec;
+  auto sparseVecPtr = std::make_shared<SparseVector>();
   if (metric_type == meta::MetricType::COSINE) {
-    if (std::holds_alternative<DenseVector>(query_data)) {
-      auto q = std::get<DenseVector>(query_data);
+    if (std::holds_alternative<DenseVectorPtr>(query_data)) {
+      auto q = std::get<DenseVectorPtr>(query_data);
       denseVec.resize(query_dimension);
       denseVec.insert(denseVec.begin(), q, q + query_dimension);
-      Normalize((DenseVector)(denseVec.data()), query_dimension);
+      Normalize((DenseVectorPtr)(denseVec.data()), query_dimension);
       updatedQueryData = denseVec.data();
-    } else if (std::holds_alternative<SparseVector>(query_data)) {
-      sparseVec = std::get<SparseVector>(query_data);
-      Normalize(sparseVec);
-      updatedQueryData = sparseVec;
+    } else if (std::holds_alternative<SparseVectorPtr>(query_data)) {
+      *sparseVecPtr = *std::get<SparseVectorPtr>(query_data);
+      Normalize(*sparseVecPtr);
+      updatedQueryData = sparseVecPtr;
     }
   }
 
@@ -377,8 +377,8 @@ Status TableMVP::Project(
         vectordb::Json vector;
         vector.LoadFromString("{}");
         int64_t offset = table_segment_->field_name_mem_offset_map_[field];
-        auto vec = std::get<SparseVector>(table_segment_->var_len_attr_table_[offset][id]);
-        record.SetObject(field, ToJson(vec));
+        auto vec = std::get<SparseVectorPtr>(table_segment_->var_len_attr_table_[offset][id]);
+        record.SetObject(field, ToJson(*vec));
       } else {
         // Primitive field.
         auto offset = table_segment_->field_name_mem_offset_map_[field] +

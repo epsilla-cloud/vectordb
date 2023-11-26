@@ -35,7 +35,7 @@ class OracleL2 {
   OracleL2(size_t dim_, VectorColumnData m_, meta::MetricType metricType) : dim(dim_) {
     m = m_;
 
-    if (std::holds_alternative<DenseVector>(m_)) {
+    if (std::holds_alternative<DenseVectorPtr>(m_)) {
       switch (metricType) {
         case meta::MetricType::EUCLIDEAN:
           space = std::make_unique<L2Space>(dim_);
@@ -73,12 +73,12 @@ class OracleL2 {
 
 float OracleL2::operator()(int p, int q) const {
   // std::cout << fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_) << " ";
-  if (std::holds_alternative<DenseVector>(m)) {
-    return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVector>(m) + p * dim, std::get<DenseVector>(m) + q * dim, dist_func_param_);
+  if (std::holds_alternative<DenseVectorPtr>(m)) {
+    return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVectorPtr>(m) + p * dim, std::get<DenseVectorPtr>(m) + q * dim, dist_func_param_);
   } else {
     auto &v1 = std::get<VariableLenAttrColumnContainer *>(m)->at(p);
     auto &v2 = std::get<VariableLenAttrColumnContainer *>(m)->at(q);
-    return std::get<SparseVecDistFunc>(fstdistfunc_)(std::get<SparseVector>(v1), std::get<SparseVector>(v2));
+    return std::get<SparseVecDistFunc>(fstdistfunc_)(*std::get<SparseVectorPtr>(v1), *std::get<SparseVectorPtr>(v2));
   }
 }
 }  // namespace

@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ref: https://stackoverflow.com/questions/55275743/cmake-build-types-release-debug-etc-compiler-flags
 set(CMAKE_CXX_FLAGS_INIT "-g")
 
+SET(CMAKE_COLOR_MAKEFILE ON)
+SET(CMAKE_VERBOSE_MAKEFILE ON)
 
 # get build time
 MACRO(GET_CURRENT_TIME CURRENT_TIME)

@@ -442,7 +442,8 @@ TEST(DbServer, SparseVector) {
   EXPECT_TRUE(recordsJson.LoadFromString(records));
   auto insertStatus = database.Insert(dbName, tableName, recordsJson);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
-  vectordb::engine::SparseVector queryData = {{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}};
+  auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
+      vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
 
   struct TestCase {
     std::string searchFieldName;
@@ -457,7 +458,7 @@ TEST(DbServer, SparseVector) {
     vectordb::Json result;
     const auto limit = 6;
     auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true);
+    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "", true);
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
     EXPECT_EQ(result.GetSize(), 5) << "duplicate insert should've been ignored";
     for (int i = 0; i < result.GetSize(); i++) {

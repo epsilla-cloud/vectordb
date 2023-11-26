@@ -77,7 +77,7 @@ class NsgIndex {
 
   size_t Build(size_t nb, VectorColumnData data, const int64_t* ids, const BuildParams& parameters);
 
-  void Search(const DenseVector query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist, int64_t* ids,
+  void Search(const DenseVectorPtr query, const unsigned& nq, const unsigned& dim, const unsigned& k, float* dist, int64_t* ids,
               SearchParams& params, ConcurrentBitsetPtr bitset = nullptr);
 
   int64_t GetSize();
@@ -99,14 +99,14 @@ class NsgIndex {
   virtual void InitNavigationPoint();
 
   // link specify
-  void GetNeighbors(const Vector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
+  void GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset,
                     boost::dynamic_bitset<>& has_calculated_dist);
 
   // FindUnconnectedNode
-  void GetNeighbors(const Vector query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset);
+  void GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset, std::vector<Neighbor>& fullset);
 
   // navigation-point
-  void GetNeighbors(const Vector query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* param = nullptr);
+  void GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset, Graph& graph, SearchParams* param = nullptr);
 
   // only for search
   // void
