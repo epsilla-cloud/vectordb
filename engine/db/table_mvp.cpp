@@ -18,8 +18,10 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
   db_catalog_path_ = db_catalog_path;
   // Construct field name to field type map.
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
-    field_name_type_map_[table_schema_.fields_[i].name_] =
+    field_name_field_type_map_[table_schema_.fields_[i].name_] =
         table_schema_.fields_[i].field_type_;
+    field_name_metric_type_map_[table_schema_.fields_[i].name_] =
+        table_schema_.fields_[i].metric_type_;
   }
 
   // Load the table data from disk.
@@ -28,7 +30,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
 
   // Replay operations in write ahead log.
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_, is_leader_);
-  wal_->Replay(table_schema, field_name_type_map_, table_segment_);
+  wal_->Replay(table_schema, field_name_field_type_map_, table_segment_);
 
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     auto fType = table_schema_.fields_[i].field_type_;
@@ -164,6 +166,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       // Replace the executors.
       auto pool = std::make_shared<execution::ExecutorPool>();
       auto distFunc = GetDistFunc(fType, mType);
+
       for (int executorIdx = 0; executorIdx < NumExecutorPerField;
            executorIdx++) {
         pool->release(std::make_shared<execution::VecSearchExecutor>(
@@ -223,21 +226,40 @@ Status TableMVP::Search(const std::string &field_name,
                         std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
                         bool with_distance) {
   // Check if field_name exists.
-  if (field_name_type_map_.find(field_name) == field_name_type_map_.end()) {
+  if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
   }
   for (auto field : query_fields) {
-    if (field_name_type_map_.find(field) == field_name_type_map_.end()) {
+    if (field_name_field_type_map_.find(field) == field_name_field_type_map_.end()) {
       return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field);
     }
   }
   // Get the field data type. If the type is not VECTOR, return error.
-  meta::FieldType field_type = field_name_type_map_[field_name];
+  auto field_type = field_name_field_type_map_[field_name];
   if (field_type != meta::FieldType::VECTOR_FLOAT &&
       field_type != meta::FieldType::VECTOR_DOUBLE &&
       field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
       field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     return Status(DB_UNEXPECTED_ERROR, "Field type is not vector.");
+  }
+  auto metric_type = field_name_metric_type_map_[field_name];
+
+  // normalize the query data
+  Vector updatedQueryData = query_data;
+  std::vector<DenseVectorElement> denseVec;
+  SparseVector sparseVec;
+  if (metric_type == meta::MetricType::COSINE) {
+    if (std::holds_alternative<DenseVector>(query_data)) {
+      auto q = std::get<DenseVector>(query_data);
+      denseVec.resize(query_dimension);
+      denseVec.insert(denseVec.begin(), q, q + query_dimension);
+      Normalize((DenseVector)(denseVec.data()), query_dimension);
+      updatedQueryData = denseVec.data();
+    } else if (std::holds_alternative<SparseVector>(query_data)) {
+      sparseVec = std::get<SparseVector>(query_data);
+      Normalize(sparseVec);
+      updatedQueryData = sparseVec;
+    }
   }
 
   // Get the field offset in the vector table.
@@ -261,7 +283,7 @@ Status TableMVP::Search(const std::string &field_name,
 
   // Search.
   int64_t result_num = 0;
-  executor.exec_->Search(query_data, table_segment_.get(), limit,
+  executor.exec_->Search(updatedQueryData, table_segment_.get(), limit,
                          filter_nodes, result_num);
   result_num = result_num > limit ? limit : result_num;
   auto status =
@@ -337,8 +359,8 @@ Status TableMVP::Project(
     vectordb::Json record;
     record.LoadFromString("{}");
     for (auto field : query_fields) {
-      if (field_name_type_map_[field] == meta::FieldType::VECTOR_FLOAT ||
-          field_name_type_map_[field] == meta::FieldType::VECTOR_DOUBLE) {
+      if (field_name_field_type_map_[field] == meta::FieldType::VECTOR_FLOAT ||
+          field_name_field_type_map_[field] == meta::FieldType::VECTOR_DOUBLE) {
         // Vector field.
         vectordb::Json vector;
         vector.LoadFromString("[]");
@@ -349,8 +371,8 @@ Status TableMVP::Project(
               table_segment_->vector_tables_[offset][id * dim + k]);
         }
         record.SetObject(field, vector);
-      } else if (field_name_type_map_[field] == meta::FieldType::SPARSE_VECTOR_FLOAT ||
-                 field_name_type_map_[field] == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+      } else if (field_name_field_type_map_[field] == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+                 field_name_field_type_map_[field] == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
         // Vector field.
         vectordb::Json vector;
         vector.LoadFromString("{}");
@@ -361,7 +383,7 @@ Status TableMVP::Project(
         // Primitive field.
         auto offset = table_segment_->field_name_mem_offset_map_[field] +
                       id * table_segment_->primitive_offset_;
-        switch (field_name_type_map_[field]) {
+        switch (field_name_field_type_map_[field]) {
           case meta::FieldType::INT1: {
             int8_t *ptr = reinterpret_cast<int8_t *>(
                 &table_segment_->attribute_table_[offset]);

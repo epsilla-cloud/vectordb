@@ -39,7 +39,11 @@ float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
 
 float GetL2Dist(const SparseVector &v1, const SparseVector &v2);
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2);
+float GetInnerProductDist(const SparseVector &v1, const SparseVector &v2);
+float GetInnerProduct(const SparseVector &v1, const SparseVector &v2);
 Json ToJson(const SparseVector &v1);
+void Normalize(DenseVector v, size_t dimension);
+void Normalize(SparseVector &v);
 
 }  // namespace engine
 }  // namespace vectordb

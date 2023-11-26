@@ -71,7 +71,8 @@ class TableSegmentMVP {
   int64_t primitive_offset_;
   int64_t var_len_attr_num_;
   std::vector<meta::FieldType> var_len_attr_field_type_;
-  int64_t vector_num_;
+  int64_t sparse_vector_num_;
+  int64_t dense_vector_num_;
   char* attribute_table_;                                           // The attribute table in memory (exclude vector attributes and string attributes).
   std::vector<VariableLenAttrColumnContainer> var_len_attr_table_;  // The variable length attribute table in memory.
   // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
