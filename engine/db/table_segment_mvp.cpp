@@ -238,8 +238,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
           }
           case meta::FieldType::SPARSE_VECTOR_DOUBLE:
           case meta::FieldType::SPARSE_VECTOR_FLOAT:
-            SparseVector v(dataLen);
-            file.read(reinterpret_cast<char*>(&v[0]), dataLen);
+            auto v = std::make_shared<SparseVector>(dataLen);
+            file.read(reinterpret_cast<char*>(v->data()), dataLen);
             var_len_attr_table_[attrIdx][recordIdx] = std::move(v);
             break;
         }
@@ -545,20 +545,20 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           goto LOOP_END;
         }
 
-        SparseVector vec;
+        auto vec = std::make_shared<SparseVector>();
 
         float sum = 0;
         for (auto j = 0; j < indices.GetSize(); ++j) {
           size_t index = static_cast<size_t>(indices.GetArrayElement(j).GetInt());
           float value = static_cast<float>(values.GetArrayElement(j).GetDouble());
           sum += value * value;
-          vec.emplace_back(SparseVectorElement{index, value});
+          vec->emplace_back(SparseVectorElement{index, value});
         }
         // covert to length
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           sum = std::sqrt(sum);
           // normalize value
-          for (auto& elem : vec) {
+          for (auto& elem : *vec) {
             elem.value /= sum;
           }
         }
@@ -852,10 +852,10 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
         fwrite(&str[0], attr_len, 1, file);
       } else {
         // sparse vector
-        auto& vec = std::get<SparseVector>(entry);
-        int64_t attr_len = vec.size() * sizeof(SparseVectorElement);
+        auto& vec = std::get<SparseVectorPtr>(entry);
+        int64_t attr_len = vec->size() * sizeof(SparseVectorElement);
         fwrite(&attr_len, sizeof(attr_len), 1, file);
-        fwrite(&vec[0], attr_len, 1, file);
+        fwrite(vec->data(), attr_len, 1, file);
       }
     }
   }
@@ -988,9 +988,9 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             break;
           case meta::FieldType::SPARSE_VECTOR_FLOAT:
           case meta::FieldType::SPARSE_VECTOR_DOUBLE: {
-            auto& vec = std::get<SparseVector>(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx]);
-            for (int i = 0; i < vec.size(); i++) {
-              std::cout << (vec[i].index) << ":" << vec[i].value << ",";
+            auto& vec = std::get<SparseVectorPtr>(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx]);
+            for (int i = 0; i < vec->size(); i++) {
+              std::cout << ((*vec)[i].index) << ":" << (*vec)[i].value << ",";
             }
             std::cout << std::endl;
             break;

@@ -7,27 +7,27 @@ namespace engine {
 namespace index {
 
 struct Distance {
-  virtual float Compare(const DenseVector a, const DenseVector b, unsigned size) const = 0;
+  virtual float Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const = 0;
   virtual float Compare(const SparseVector a, const SparseVector b) const = 0;
-  virtual float Compare(const Vector a, const Vector b) const = 0;
+  virtual float Compare(const VectorPtr a, const VectorPtr b) const = 0;
 };
 
 struct DistanceL2 : public Distance {
-  float Compare(const DenseVector a, const DenseVector b, unsigned size) const override;
+  float Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const override;
   float Compare(const SparseVector a, const SparseVector b) const override;
-  float Compare(const Vector a, const Vector b) const override;
+  float Compare(const VectorPtr a, const VectorPtr b) const override;
 };
 
 struct DistanceIP : public Distance {
-  float Compare(const DenseVector a, const DenseVector b, unsigned size) const override;
+  float Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const override;
   float Compare(const SparseVector a, const SparseVector b) const override;
-  float Compare(const Vector a, const Vector b) const override;
+  float Compare(const VectorPtr a, const VectorPtr b) const override;
 };
 
 struct DistanceCosine : public Distance {
-  float Compare(const DenseVector a, const DenseVector b, unsigned size) const override;
+  float Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const override;
   float Compare(const SparseVector a, const SparseVector b) const override;
-  float Compare(const Vector a, const Vector b) const override;
+  float Compare(const VectorPtr a, const VectorPtr b) const override;
 };
 
 }  // namespace index

@@ -56,7 +56,7 @@ void Normalize(SparseVector &v) {
   }
 }
 
-void Normalize(DenseVector v, size_t dimension) {
+void Normalize(DenseVectorPtr v, size_t dimension) {
   float sum = 0;
   for (int i = 0; i < dimension; i++) {
     sum += v[i] * v[i];

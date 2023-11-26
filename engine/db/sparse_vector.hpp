@@ -19,20 +19,20 @@ struct SparseVectorElement {
 
 // SparseVector assumes that the stored SparseVectorElement.index is increasing in the std::vector
 using SparseVector = std::vector<SparseVectorElement>;
-
+using SparseVectorPtr = std::shared_ptr<SparseVector>;
 constexpr const char SparseVecObjIndicesKey[] = "indices",
                      SparseVecObjValuesKey[] = "values";
 
-using DenseVector = float *;
+using DenseVectorPtr = float *;
 using DenseVectorElement = float;
 
-// TODO: Use a different type other than float* (e.g.: std::vector<DenseVector> or std::vector<DenseVectorElement>),
+// TODO: Use a different type other than float* (e.g.: std::vector<DenseVectorPtr> or std::vector<DenseVectorElement>),
 // otherwise the type is confusing
 using DenseVectorColumnDataContainer = float *;
-using VariableLenAttr = std::variant<std::string, SparseVector>;
+using VariableLenAttr = std::variant<std::string, SparseVectorPtr>;
 using VariableLenAttrColumnContainer = std::vector<VariableLenAttr>;
 
-using Vector = std::variant<DenseVector, SparseVector>;
+using VectorPtr = std::variant<DenseVectorPtr, SparseVectorPtr>;
 using SparseVecDistFunc = std::function<float(const SparseVector &, const SparseVector &)>;
 
 float GetCosineDist(const SparseVector &v1, const SparseVector &v2);
@@ -42,7 +42,7 @@ float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2);
 float GetInnerProductDist(const SparseVector &v1, const SparseVector &v2);
 float GetInnerProduct(const SparseVector &v1, const SparseVector &v2);
 Json ToJson(const SparseVector &v1);
-void Normalize(DenseVector v, size_t dimension);
+void Normalize(DenseVectorPtr v, size_t dimension);
 void Normalize(SparseVector &v);
 
 }  // namespace engine

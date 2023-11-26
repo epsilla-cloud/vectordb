@@ -594,7 +594,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         field_name,
         query_fields,
         vector_size,
-        vectordb::engine::Vector(&query_vector[0]),
+        vectordb::engine::VectorPtr(&query_vector[0]),
         limit,
         result,
         filter,

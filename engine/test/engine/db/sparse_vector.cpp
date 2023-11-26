@@ -10,7 +10,6 @@ using vectordb::engine::GetInnerProductDist;
 using vectordb::engine::GetL2Dist;
 using vectordb::engine::GetL2DistSqr;
 using vectordb::engine::SparseVector;
-using vectordb::engine::Vector;
 
 TEST(SparseVector, GetCosineDist) {
   SparseVector v1 = {{0, 1}, {1, 0}};

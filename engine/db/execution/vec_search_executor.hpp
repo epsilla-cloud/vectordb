@@ -121,7 +121,7 @@ class VecSearchExecutor {
   int64_t ExpandOneCandidate(
       const int worker_id,
       const int64_t cand_id,
-      const Vector query_data,
+      const VectorPtr query_data,
       const float& dist_bound,
       // float& dist_thresh,
       std::vector<Candidate>& set_L,
@@ -149,7 +149,7 @@ class VecSearchExecutor {
       int64_t& last_k) const;
 
   void InitializeSetLPara(
-      const Vector query_data,
+      const VectorPtr query_data,
       const int64_t L,
       std::vector<Candidate>& set_L,
       const int64_t set_L_start,
@@ -167,7 +167,7 @@ class VecSearchExecutor {
       const int64_t L) const;
 
   void SearchImpl(
-      const Vector query_data,
+      const VectorPtr query_data,
       const int64_t K,
       const int64_t L,
       std::vector<Candidate>& set_L,
@@ -180,7 +180,7 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(
-      const Vector query_data,
+      const VectorPtr query_data,
       const int64_t start,
       const int64_t end,
       const ConcurrentBitset& deleted,
@@ -188,7 +188,7 @@ class VecSearchExecutor {
       vectordb::engine::TableSegmentMVP* table_segment,
       const int root_node_index);
   Status Search(
-      const Vector query_data,
+      const VectorPtr query_data,
       vectordb::engine::TableSegmentMVP* table_segment,
       const size_t limit,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
