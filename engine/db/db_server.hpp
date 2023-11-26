@@ -44,7 +44,7 @@ class DBServer {
       std::string& field_name,
       std::vector<std::string>& query_fields,
       int64_t query_dimension,
-      const Vector query_data,
+      const VectorPtr query_data,
       const int64_t limit,
       vectordb::Json& result,
       const std::string& filter,
