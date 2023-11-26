@@ -54,13 +54,18 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
 
   // Get how many primitive, vectors, and variable-length attributes (string, sparse vectors).
   for (auto& field_schema : table_schema.fields_) {
+    auto current_total_vec_num = dense_vector_num_ + sparse_vector_num_;
     if (field_schema.field_type_ == meta::FieldType::STRING ||
         field_schema.field_type_ == meta::FieldType::JSON ||
         field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
         field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
       field_id_mem_offset_map_[field_schema.id_] = var_len_attr_num_;
       field_name_mem_offset_map_[field_schema.name_] = var_len_attr_num_;
-      vec_field_name_executor_pool_idx_map_[field_schema.name_] = vector_num_;
+      if (field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
+          field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
+        vec_field_name_executor_pool_idx_map_[field_schema.name_] = current_total_vec_num;
+        sparse_vector_num_++;
+      }
       if (field_schema.is_primary_key_) {
         string_pk_offset_ = std::make_unique<int64_t>(var_len_attr_num_);
       }
@@ -69,10 +74,10 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
     } else if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
       vector_dims_.push_back(field_schema.vector_dimension_);
-      field_id_mem_offset_map_[field_schema.id_] = vector_num_;
-      field_name_mem_offset_map_[field_schema.name_] = vector_num_;
-      vec_field_name_executor_pool_idx_map_[field_schema.name_] = vector_num_;
-      ++vector_num_;
+      field_id_mem_offset_map_[field_schema.id_] = current_total_vec_num;
+      field_name_mem_offset_map_[field_schema.name_] = current_total_vec_num;
+      vec_field_name_executor_pool_idx_map_[field_schema.name_] = current_total_vec_num;
+      dense_vector_num_++;
     } else {
       field_id_mem_offset_map_[field_schema.id_] = primitive_offset_;
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
@@ -90,8 +95,8 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
 
   // attribute_table_ = std::shared_ptr<char[]>(new char[size_limit * primitive_offset], std::default_delete<char[]>());
   // attribute_table_ = std::shared_ptr<char*>(new char[size_limit * primitive_offset]);
-  vector_tables_ = new float*[vector_num_];
-  for (auto i = 0; i < vector_num_; ++i) {
+  vector_tables_ = new float*[dense_vector_num_];
+  for (auto i = 0; i < dense_vector_num_; ++i) {
     // vector_tables_.emplace_back(std::make_shared<float[]>(size_limit * vector_dims_[i]);
     // vector_tables_.emplace_back(std::shared_ptr<float[]>(new float[size_limit * vector_dims_[i]], std::default_delete<float[]>()));
     vector_tables_[i] = new float[size_limit * vector_dims_[i]];
@@ -110,7 +115,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_t
       field_id_mem_offset_map_(0),
       primitive_num_(0),
       var_len_attr_num_(0),
-      vector_num_(0),
+      dense_vector_num_(0),
+      sparse_vector_num_(0),
       vector_dims_(0) {
   Init(table_schema, init_table_scale);
 }
@@ -124,7 +130,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       field_id_mem_offset_map_(0),
       primitive_num_(0),
       var_len_attr_num_(0),
-      vector_num_(0),
+      dense_vector_num_(0),
+      sparse_vector_num_(0),
       vector_dims_(0),
       wal_global_id_(-1) {
   // Init the containers.
@@ -240,7 +247,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     }
 
     // Read the vector table
-    for (auto i = 0; i < vector_num_; ++i) {
+    for (auto i = 0; i < dense_vector_num_; ++i) {
       file.read(reinterpret_cast<char*>(vector_tables_[i]), sizeof(float) * record_number_ * vector_dims_[i]);
     }
 
@@ -854,7 +861,7 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   }
 
   // Write the vector table.
-  for (auto i = 0; i < vector_num_; ++i) {
+  for (auto i = 0; i < dense_vector_num_; ++i) {
     fwrite(vector_tables_[i], sizeof(float) * record_number_ * vector_dims_[i], 1, file);
   }
 
@@ -893,7 +900,7 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
 
   std::cout << "primitive_num_: " << primitive_num_ << "\n";
   std::cout << "var_len_attr_num_: " << var_len_attr_num_ << "\n";
-  std::cout << "vector_num_: " << vector_num_ << "\n";
+  std::cout << "vector_num_: " << dense_vector_num_ << "\n";
 
   // Print out attribute_table_
   std::cout << "attribute_table_: \n";
@@ -1004,7 +1011,7 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
 
   // Print out vector_tables_
   std::cout << "vector_tables_:  \n";
-  for (size_t i = 0; i < vector_num_; ++i) {
+  for (size_t i = 0; i < dense_vector_num_; ++i) {
     for (size_t j = 0; j < record_number_; ++j) {
       for (size_t k = 0; k < vector_dims_[i]; ++k) {
         size_t offset = j * vector_dims_[i] + k;
@@ -1028,7 +1035,7 @@ TableSegmentMVP::~TableSegmentMVP() {
     delete[] attribute_table_;
   }
   if (vector_tables_ != nullptr) {
-    for (auto i = 0; i < vector_num_; ++i) {
+    for (auto i = 0; i < dense_vector_num_; ++i) {
       delete[] vector_tables_[i];
     }
     delete[] vector_tables_;

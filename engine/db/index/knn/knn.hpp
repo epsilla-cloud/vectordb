@@ -48,7 +48,6 @@ class OracleL2 {
           break;
         default:
           space = std::make_unique<L2Space>(dim_);
-          break;
       }
       fstdistfunc_ = space->get_dist_func();
       dist_func_param_ = space->get_dist_func_param();
@@ -59,12 +58,13 @@ class OracleL2 {
           fstdistfunc_ = GetL2Dist;
           break;
         case meta::MetricType::COSINE:
-        case meta::MetricType::DOT_PRODUCT:  // after standarization, it's equivalent as cosine
           fstdistfunc_ = GetCosineDist;
+          break;
+        case meta::MetricType::DOT_PRODUCT:
+          fstdistfunc_ = GetInnerProductDist;
           break;
         default:
           fstdistfunc_ = GetL2Dist;
-          break;
       }
     }
   }

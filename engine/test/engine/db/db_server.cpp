@@ -453,6 +453,7 @@ TEST(DbServer, SparseVector) {
       {"EmbeddingDotProduct", {"Moscow", "Berlin", "San Francisco", "London", "Shanghai"}},
       {"EmbeddingCosine", {"Moscow", "Shanghai", "Berlin", "San Francisco", "London"}}};
   for (auto &testcase : testcases) {
+    std::cerr << "testcase: " << testcase.searchFieldName << std::endl;
     vectordb::Json result;
     const auto limit = 6;
     auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};

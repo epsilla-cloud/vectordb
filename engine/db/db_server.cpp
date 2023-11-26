@@ -283,7 +283,7 @@ Status DBServer::Delete(
 
   // Filter validation
   std::vector<query::expr::ExprNodePtr> expr_nodes;
-  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
   if (!expr_parse_status.ok()) {
     return expr_parse_status;
   }
@@ -292,11 +292,13 @@ Status DBServer::Delete(
 }
 
 Status DBServer::Search(const std::string& db_name,
-                        const std::string& table_name, std::string& field_name,
+                        const std::string& table_name,
+                        std::string& field_name,
                         std::vector<std::string>& query_fields,
                         int64_t query_dimension,
                         const Vector query_data,
-                        const int64_t limit, vectordb::Json& result,
+                        const int64_t limit,
+                        vectordb::Json& result,
                         const std::string& filter,
                         bool with_distance) {
   auto db = GetDB(db_name);
@@ -310,7 +312,7 @@ Status DBServer::Search(const std::string& db_name,
 
   // Filter validation
   std::vector<query::expr::ExprNodePtr> expr_nodes;
-  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
   if (!expr_parse_status.ok()) {
     return expr_parse_status;
   }
@@ -338,7 +340,7 @@ Status DBServer::Project(const std::string& db_name,
 
   // Filter validation
   std::vector<query::expr::ExprNodePtr> expr_nodes;
-  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_type_map_);
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
   if (!expr_parse_status.ok()) {
     return expr_parse_status;
   }

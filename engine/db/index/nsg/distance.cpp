@@ -248,7 +248,7 @@ float DistanceL2::Compare(const Vector a, const Vector b) const {
 }
 
 float DistanceIP::Compare(const SparseVector a, const SparseVector b) const {
-  return GetL2DistSqr(a, b);
+  return -GetInnerProduct(a, b);
 }
 
 float DistanceIP::Compare(const Vector a, const Vector b) const {
@@ -260,7 +260,7 @@ float DistanceIP::Compare(const Vector a, const Vector b) const {
 }
 
 float DistanceCosine::Compare(const SparseVector a, const SparseVector b) const {
-  return GetL2DistSqr(a, b);
+  return -GetInnerProduct(a, b);
 }
 
 float DistanceCosine::Compare(const Vector a, const Vector b) const {
