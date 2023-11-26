@@ -24,13 +24,10 @@ DistFunc GetDistFunc(engine::meta::FieldType fType, engine::meta::MetricType mTy
     switch (mType) {
       case engine::meta::MetricType::EUCLIDEAN:
         return engine::GetL2DistSqr;
-        break;
       case engine::meta::MetricType::COSINE:
         return engine::GetCosineDist;
-        break;
       case engine::meta::MetricType::DOT_PRODUCT:
-        return engine::GetCosineDist;
-        break;
+        return engine::GetInnerProductDist;
       default:
         return engine::GetL2DistSqr;
     }

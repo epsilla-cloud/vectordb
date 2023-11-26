@@ -88,7 +88,10 @@ class TableMVP {
   // The table schema.
   meta::TableSchema table_schema_;
   // Map from field name to field type.
-  std::unordered_map<std::string, meta::FieldType> field_name_type_map_;
+  std::unordered_map<std::string, meta::FieldType> field_name_field_type_map_;
+  // Map from field name to field type.
+  std::unordered_map<std::string, meta::MetricType> field_name_metric_type_map_;
+
   // int64_t executors_num_;
   std::shared_ptr<TableSegmentMVP> table_segment_;  // The table segment loaded/synced from disk.
   // TODO: make this multi threading for higher throughput.

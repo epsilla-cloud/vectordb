@@ -1,7 +1,28 @@
 #include "db/sparse_vector.hpp"
 
+#include <iostream>
 namespace vectordb {
 namespace engine {
+
+float GetInnerProductDist(const SparseVector &v1, const SparseVector &v2) {
+  return 1.0f - GetInnerProduct(v1, v2);
+}
+
+float GetInnerProduct(const SparseVector &v1, const SparseVector &v2) {
+  float dot_prod = 0;
+  for (int i1 = 0, i2 = 0; i1 < v1.size() && i2 < v2.size();) {
+    if (v1[i1].index == v2[i2].index) {
+      dot_prod += v1[i1].value * v2[i2].value;
+      i1++;
+      i2++;
+    } else if (v1[i1].index > v2[i2].index) {
+      i2++;
+    } else {
+      i1++;
+    }
+  }
+  return dot_prod;
+}
 
 float GetCosineDist(const SparseVector &v1, const SparseVector &v2) {
   float dot_prod = 0, v1_prod = 0, v2_prod = 0;
@@ -22,7 +43,28 @@ float GetCosineDist(const SparseVector &v1, const SparseVector &v2) {
       i1++;
     }
   }
-  return dot_prod / std::sqrt(v1_prod * v2_prod);
+  return -dot_prod / std::sqrt(v1_prod * v2_prod);
+}
+void Normalize(SparseVector &v) {
+  float sum = 0;
+  for (auto &elem : v) {
+    sum += elem.value * elem.value;
+  }
+  sum = std::sqrt(sum);
+  for (auto &elem : v) {
+    elem.value /= sum;
+  }
+}
+
+void Normalize(DenseVector v, size_t dimension) {
+  float sum = 0;
+  for (int i = 0; i < dimension; i++) {
+    sum += v[i] * v[i];
+  }
+  sum = std::sqrt(sum);
+  for (int i = 0; i < dimension; i++) {
+    v[i] /= sum;
+  }
 }
 
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2) {
