@@ -9,7 +9,7 @@
 #include "db/ann_graph_segment.hpp"
 #include "db/index/nsg/distance.hpp"
 #include "db/index/nsg/neighbor.hpp"
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 #include "utils/concurrent_bitset.hpp"
 
 namespace vectordb {

@@ -7,8 +7,8 @@
 #include <unordered_map>
 
 #include "db/catalog/meta.hpp"
-#include "db/sparse_vector.hpp"
 #include "db/unique_key.hpp"
+#include "db/vector.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
 #include "utils/concurrent_bitset.hpp"

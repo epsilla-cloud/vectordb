@@ -3,7 +3,7 @@
 #include "db/index/space_cosine.hpp"
 #include "db/index/space_ip.hpp"
 #include "db/index/space_l2.hpp"
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 
 namespace vectordb {
 

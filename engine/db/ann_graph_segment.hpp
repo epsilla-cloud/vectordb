@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 #include "db/catalog/meta.hpp"
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/status.hpp"
