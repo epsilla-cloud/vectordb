@@ -1,7 +1,7 @@
 #ifndef DB_SPARSE_VECTOR_HPP
 #define DB_SPARSE_VECTOR_HPP
 #pragma once
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 namespace vectordb {
 namespace engine {
 namespace index {

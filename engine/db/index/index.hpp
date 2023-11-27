@@ -2,7 +2,7 @@
 
 #include "db/catalog/meta_types.hpp"
 #include "db/index/distances.hpp"
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 namespace vectordb {
 
 template <typename MTYPE>

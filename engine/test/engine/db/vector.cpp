@@ -1,4 +1,4 @@
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 
 #include <gtest/gtest.h>
 

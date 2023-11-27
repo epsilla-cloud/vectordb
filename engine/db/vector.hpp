@@ -1,6 +1,4 @@
-#ifndef SPARSE_VECTOR_HPP
-#define SPARSE_VECTOR_HPP
-
+#pragma once
 #include <cmath>
 #include <functional>
 #include <string>
@@ -47,5 +45,3 @@ void Normalize(SparseVector &v);
 
 }  // namespace engine
 }  // namespace vectordb
-
-#endif

@@ -8,8 +8,8 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
-#include "db/sparse_vector.hpp"
 #include "db/table_mvp.hpp"
+#include "db/vector.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
 

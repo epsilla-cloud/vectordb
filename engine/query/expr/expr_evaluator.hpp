@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "db/sparse_vector.hpp"
+#include "db/vector.hpp"
 #include "expr_types.hpp"
 
 namespace vectordb {
