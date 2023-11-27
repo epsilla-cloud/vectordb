@@ -3,7 +3,7 @@ name: Build Vectordb in dev
 on:
   push:
     branches: [ "dev", "distritubed-*" ]
-    paths: ['engine/Dockerfile', 'engine/VERSION']
+    paths: ['engine/Dockerfile', 'VERSION']
 
 jobs:
   build:
@@ -41,10 +41,10 @@ jobs:
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
         docker buildx create --use
 
-        
-        cd ./engine
         export RELEASE_TAG=`cat VERSION`;
         echo "RELEASE_TAG: ${RELEASE_TAG}";
+        
+        cd ./engine
 
 
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
