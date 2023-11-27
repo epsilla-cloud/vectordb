@@ -39,6 +39,10 @@ jobs:
         echo "RELEASE_TAG: ${RELEASE_TAG}";
 
         cd engine;
+        export RELEASE_TAG=`cat VERSION`;
+        echo "RELEASE_TAG: ${RELEASE_TAG}";
+
+        
         
         # echo "========Build docker image for amd64 firstly========";
         # docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
