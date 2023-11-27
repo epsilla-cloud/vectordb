@@ -130,7 +130,9 @@ Status DBServer::CreateTable(const std::string& db_name,
     }
     if (
         field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
-        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT) {
+        field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_FLOAT ||
+        field.field_type_ == vectordb::engine::meta::FieldType::SPARSE_VECTOR_FLOAT ||
+        field.field_type_ == vectordb::engine::meta::FieldType::SPARSE_VECTOR_DOUBLE) {
       if (!body_field.HasMember("dimensions")) {
         return Status{USER_ERROR, "Vector field must have dimensions."};
       }
