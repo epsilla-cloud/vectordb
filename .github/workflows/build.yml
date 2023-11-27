@@ -3,7 +3,7 @@ name: Build Vectordb Docker Image for linux/amd64 and linux/arm64
 on:
   push:
     branches: [ "main" ]
-    paths: ['engine/VERSION']
+    paths: ['VERSION']
 
 jobs:
   build:
@@ -35,11 +35,10 @@ jobs:
         echo "IMAGE_TAG: ${IMAGE_TAG}";
         echo "SHA: ${SHA_TAG}";
 
-        cd engine;
         export RELEASE_TAG=`cat VERSION`;
         echo "RELEASE_TAG: ${RELEASE_TAG}";
 
-        
+        cd engine;
         
         # echo "========Build docker image for amd64 firstly========";
         # docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
