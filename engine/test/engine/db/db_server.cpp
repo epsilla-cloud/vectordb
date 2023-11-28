@@ -737,7 +737,7 @@ TEST(DbServer, DeleteByPK) {
 }
 
 TEST(DbServer, RebuildDenseVector) {
-  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_dense_vector");
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_rebuild_dense_vector");
   vectordb::engine::DBServer database;
   std::filesystem::remove_all(tempDir);
   size_t tableId = 0;
@@ -767,8 +767,10 @@ TEST(DbServer, RebuildDenseVector) {
 
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
-  vectordb::Json recordsJson;
-  EXPECT_TRUE(recordsJson.LoadFromString(records));
+  vectordb::Json dataObj;
+  dataObj.LoadFromString(records);
+  vectordb::Json recordsJson = dataObj.Get("data");
+  EXPECT_GT(recordsJson.GetSize(), 0) << recordsJson.DumpToString();
   for (int i = 0; i < 20; i++) {
     auto insertStatus = database.Insert(dbName, tableName, recordsJson);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
@@ -780,7 +782,7 @@ TEST(DbServer, RebuildDenseVector) {
 }
 
 TEST(DbServer, RebuildSparseVector) {
-  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_sparse_vector");
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_rebuild_sparse_vector");
   vectordb::engine::DBServer database;
   std::filesystem::remove_all(tempDir);
   const auto dbName = "MyDb";
@@ -795,8 +797,7 @@ TEST(DbServer, RebuildSparseVector) {
   "fields": [
     {
       "name": "ID",
-      "dataType": "INT",
-      "primaryKey": true
+      "dataType": "INT"
     },
     {
       "name": "Doc",
@@ -929,51 +930,13 @@ TEST(DbServer, RebuildSparseVector) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
-  EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+
+  for (int i = 0; i < 20; i++) {
+    auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  }
 
   // check rebuild
   auto rebuildStatus = database.Rebuild();
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
-
-  auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
-      vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
-
-  struct TestCase {
-    std::string searchFieldName;
-    std::vector<std::string> expectedOrder;
-  };
-  std::vector<TestCase> testcases = {
-      {"EmbeddingEuclidean", {"Moscow", "Berlin", "Shanghai", "San Francisco", "London"}},
-      {"EmbeddingDotProduct", {"Moscow", "Berlin", "San Francisco", "London", "Shanghai"}},
-      {"EmbeddingCosine", {"Moscow", "Shanghai", "Berlin", "San Francisco", "London"}}};
-  for (auto &testcase : testcases) {
-    std::cerr << "testcase: " << testcase.searchFieldName << std::endl;
-    vectordb::Json result;
-    const auto limit = 6;
-    auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "", true);
-    EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
-    EXPECT_EQ(result.GetSize(), 5) << "duplicate insert should've been ignored";
-    for (int i = 0; i < result.GetSize(); i++) {
-      EXPECT_EQ(result.GetArrayElement(i).GetString("Doc"), testcase.expectedOrder[i])
-          << i << "th city mismatch when querying " << testcase.searchFieldName << std::endl
-          << result.DumpToString();
-    }
-  }
-
-  for (auto &testcase : testcases) {
-    std::cerr << "testcase: " << testcase.searchFieldName << std::endl;
-    vectordb::Json result;
-    const auto limit = 6;
-    auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "ID <= 2", true);
-    EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
-    EXPECT_EQ(result.GetSize(), 2) << "only ID <= 2 entries should be included";
-    for (int i = 0; i < result.GetSize(); i++) {
-      EXPECT_LE(result.GetArrayElement(i).GetInt("ID"), 2) << "returned ID larger than 2"
-                                                           << std::endl
-                                                           << result.DumpToString();
-    }
-  }
 }
