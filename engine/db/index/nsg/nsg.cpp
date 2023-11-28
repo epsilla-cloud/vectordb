@@ -207,7 +207,12 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
         continue;
       }
 
-      float dist = distance_->Compare(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, std::get<DenseVectorPtr>(query), dimension);
+      float dist;
+      if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+        dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+      } else {
+        dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), *std::get<SparseVectorPtr>(query));
+      }
       resset[i] = Neighbor(id, dist, false);
 
       //// difference from other GetNeighbors
@@ -232,7 +237,12 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
             continue;
           has_calculated_dist[id] = true;
 
-          float dist = distance_->Compare(std::get<DenseVectorPtr>(query), std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, dimension);
+          float dist;
+          if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+            dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+          } else {
+            dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), *std::get<SparseVectorPtr>(query));
+          }
           Neighbor nn(id, dist, false);
           fullset.push_back(nn);
 
@@ -310,7 +320,12 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
         continue;
       }
 
-      float dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+      float dist;
+      if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+        dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+      } else {
+        dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), *std::get<SparseVectorPtr>(query));
+      }
       resset[i] = Neighbor(id, dist, false);
     }
     std::sort(resset.begin(), resset.end());  // sort by distance
@@ -331,7 +346,12 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
             continue;
           has_calculated_dist[id] = true;
 
-          float dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + dimension * id, std::get<DenseVectorPtr>(query), dimension);
+          float dist;
+          if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+            dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+          } else {
+            dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), *std::get<SparseVectorPtr>(query));
+          }
           Neighbor nn(id, dist, false);
           fullset.push_back(nn);
 
@@ -402,7 +422,12 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
         // THROW_MSG("Build Index Error, id > ntotal");
       }
 
-      float dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+      float dist;
+      if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+        dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+      } else {
+        dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), *std::get<SparseVectorPtr>(query));
+      }
       resset[i] = Neighbor(id, dist, false);
     }
     std::sort(resset.begin(), resset.end());  // sort by distance
@@ -423,7 +448,12 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
             continue;
           has_calculated_dist[id] = true;
 
-          float dist = distance_->Compare(std::get<DenseVectorPtr>(query), std::get<DenseVectorPtr>(ori_data_) + dimension * id, dimension);
+          float dist;
+          if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+            dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + id * dimension, std::get<DenseVectorPtr>(query), dimension);
+          } else {
+            dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), *std::get<SparseVectorPtr>(query));
+          }
 
           if (dist >= resset[buffer_size - 1].distance)
             continue;
@@ -470,7 +500,12 @@ void NsgIndex::Link() {
       fullset.clear();
       temp.clear();
       flags.reset();
-      GetNeighbors(std::get<DenseVectorPtr>(ori_data_) + dimension * n, temp, fullset, flags);
+      if (std::holds_alternative<DenseVectorPtr>(ori_data_)) {
+        GetNeighbors(std::get<DenseVectorPtr>(ori_data_) + dimension * n, temp, fullset, flags);
+      } else {
+        GetNeighbors(std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(n)), temp, fullset, flags);
+      }
+
       SyncPrune(n, fullset, flags, cut_graph_dist);
     }
 
@@ -509,7 +544,14 @@ void NsgIndex::SyncPrune(size_t n, std::vector<Neighbor>& pool, boost::dynamic_b
     auto id = knng[n][i];
     if (has_calculated[id])
       continue;
-    float dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + dimension * n, std::get<DenseVectorPtr>(ori_data_) + dimension * id, dimension);
+    float dist;
+    if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+      dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + n * dimension, std::get<DenseVectorPtr>(ori_data_) + id * dimension, dimension);
+    } else {
+      dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(n)),
+                                *std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)));
+    }
+
     pool.emplace_back(Neighbor(id, dist, true));
   }
 
@@ -624,8 +666,13 @@ void NsgIndex::SelectEdge(unsigned& cursor, std::vector<Neighbor>& sort_pool, st
     auto& p = pool[cursor];
     bool should_link = true;
     for (size_t t = 0; t < result.size(); ++t) {
-      float dist =
-          distance_->Compare(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * result[t].id, std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * p.id, dimension);
+      float dist;
+      if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+        dist = distance_->Compare(std::get<DenseVectorPtr>(ori_data_) + result[t].id * dimension, std::get<DenseVectorPtr>(ori_data_) + p.id * dimension, dimension);
+      } else {
+        dist = distance_->Compare(*std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(result[t].id)),
+                                  *std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(p.id)));
+      }
 
       if (dist < p.distance) {
         should_link = false;
@@ -699,7 +746,12 @@ void NsgIndex::FindUnconnectedNode(boost::dynamic_bitset<>& has_linked, int64_t&
 
   // search unlinked-node's neighbor
   std::vector<Neighbor> tmp, pool;
-  GetNeighbors(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, tmp, pool);
+  if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
+    GetNeighbors(std::get<DenseVectorColumnDataContainer>(ori_data_) + dimension * id, tmp, pool);
+  } else {
+    GetNeighbors(std::get<SparseVectorPtr>(std::get<VariableLenAttrColumnContainer*>(ori_data_)->at(id)), tmp, pool);
+  }
+
   std::sort(pool.begin(), pool.end());
 
   size_t found = 0;
