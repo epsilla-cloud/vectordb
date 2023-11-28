@@ -131,6 +131,8 @@ add_executable(
   vector_db_test
   ${DB_TEST_FILES}
 )
+file(COPY test/engine/db/testdata DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/engine/db)
+
 target_link_libraries(
   vector_db_test
   GTest::gtest_main
