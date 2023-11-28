@@ -87,6 +87,8 @@ class DBServer {
     }
   }
 
+  Status Rebuild();
+
  private:
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
@@ -107,8 +109,6 @@ class DBServer {
       std::this_thread::sleep_for(rebuild_interval);
     }
   };
-
-  Status Rebuild();
 
   std::atomic<bool> is_leader_;
 };
