@@ -769,8 +769,10 @@ TEST(DbServer, RebuildDenseVector) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
-  EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  for (int i = 0; i < 20; i++) {
+    auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  }
 
   // check rebuild
   auto rebuildStatus = database.Rebuild();

@@ -101,21 +101,21 @@ size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, con
 void NsgIndex::InitNavigationPoint() {
   // calculate the center of vectors
   VectorPtr center;
-  std::unique_ptr<DenseVectorPtr> denseVectorPtr;
+  std::vector<DenseVectorElement> denseVector(dimension);
   auto sparseVec = std::make_shared<SparseVector>();
   if (std::holds_alternative<DenseVectorColumnDataContainer>(ori_data_)) {
-    denseVectorPtr = std::make_unique<DenseVectorPtr>(new DenseVectorElement[dimension]);
-    memset(denseVectorPtr.get(), 0, sizeof(DenseVectorElement) * dimension);
+    auto denseVectorPtr = denseVector.data();
+    memset(denseVectorPtr, 0, sizeof(DenseVectorElement) * dimension);
 
     for (size_t i = 0; i < ntotal; i++) {
       for (size_t j = 0; j < dimension; j++) {
-        (*denseVectorPtr.get())[j] += std::get<DenseVectorColumnDataContainer>(ori_data_)[i * dimension + j];
+        denseVectorPtr[j] += std::get<DenseVectorColumnDataContainer>(ori_data_)[i * dimension + j];
       }
     }
     for (size_t j = 0; j < dimension; j++) {
-      (*denseVectorPtr.get())[j] /= ntotal;
+      denseVectorPtr[j] /= ntotal;
     }
-    center = *denseVectorPtr.get();
+    center = denseVectorPtr;
   } else {
     // sparse vector
     auto tempCenterVec = std::map<size_t, DenseVectorElement>();
