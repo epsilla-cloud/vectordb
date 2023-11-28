@@ -1,0 +1,181 @@
+{
+    "table": "MyTable12",
+    "data": [
+        {
+            "ID1": 41,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.085,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 42,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.085,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 43,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.085,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 44,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.085,
+                0.61,
+                0.76,
+                0.76
+            ]
+        },
+        {
+            "ID1": 45,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.05,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 46,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.5,
+                0.1,
+                0.6,
+                0.4
+            ]
+        },
+        {
+            "ID1": 47,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.05,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 48,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.5,
+                0.1,
+                0.6,
+                0.4
+            ]
+        },
+        {
+            "ID1": 49,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.05,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 50,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.5,
+                0.1,
+                0.6,
+                0.4
+            ]
+        },
+        {
+            "ID1": 51,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.05,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 52,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.5,
+                0.1,
+                0.6,
+                0.4
+            ]
+        },
+        {
+            "ID1": 53,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.05,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 54,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.5,
+                0.1,
+                0.6,
+                0.4
+            ]
+        },
+        {
+            "ID1": 55,
+            "ID2": 2,
+            "Document": "Mosco",
+            "Embedding": [
+                0.05,
+                0.61,
+                0.76,
+                0.74
+            ]
+        },
+        {
+            "ID1": 56,
+            "ID2": 3,
+            "Document": "San Jose",
+            "Embedding": [
+                0.5,
+                0.1,
+                0.6,
+                0.4
+            ]
+        }
+    ]
+}
