@@ -3,12 +3,15 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>  // std::chrono::seconds
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <future>
+#include <iterator>
 #include <memory>
+#include <random>
 #include <string>
 #include <thread>  // std::this_thread::sleep_for
 #include <vector>
@@ -766,6 +769,15 @@ TEST(DbServer, RebuildDenseVector) {
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
 }
 
+vectordb::Json objectArrayToJson(std::vector<vectordb::Json> c) {
+  vectordb::Json result;
+  result.LoadFromString("[]");
+  for (const auto &item : c) {
+    result.AddObjectToArray(item);
+  }
+  return result;
+}
+
 TEST(DbServer, QueryDenseVectorDuringRebuild) {
   std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_query_dense_vector_during_rebuild");
   vectordb::engine::DBServer database;
@@ -813,59 +825,58 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
-  {
-    vectordb::Json data;
-    data.LoadFromString("[]");
-    // add in the reverse order
-    for (int i = initialRecords - 1; i >= 0; i--) {
-      vectordb::Json item, vec;
-      vec.LoadFromString("[]");
-      auto x = std::cos(M_PI / numRecords * i);
-      auto y = std::sin(M_PI / numRecords * i);
-      vec.AddDoubleToArray(x);
-      vec.AddDoubleToArray(y);
-      item.LoadFromString("{}");
-      item.SetInt("ID", i);
-      item.SetObject("Vec", vec);
-      item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + "* PI");
-      data.AddObjectToArray(item);
-    }
+  auto records = std::vector<vectordb::Json>();
+  for (int i = 0; i < numRecords; i++) {
+    vectordb::Json item, vec;
+    vec.LoadFromString("[]");
+    auto x = std::cos(M_PI / numRecords * i);
+    auto y = std::sin(M_PI / numRecords * i);
+    vec.AddDoubleToArray(x);
+    vec.AddDoubleToArray(y);
+    item.LoadFromString("{}");
+    item.SetInt("ID", i);
+    item.SetObject("Vec", vec);
+    item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + " * PI");
+    records.push_back(item);
+  }
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(records.begin(), records.end(), g);
+  auto itemsFirstHalf = std::vector<vectordb::Json>(records.begin(), records.begin() + records.size() / 2);
+  auto itemsSecondHalf = std::vector<vectordb::Json>(records.begin() + records.size() / 2, records.end());
+  auto itemFirstHalfJson = objectArrayToJson(itemsFirstHalf);
+  auto itemSecondHalfJson = objectArrayToJson(itemsSecondHalf);
+  std::sort(itemsFirstHalf.begin(), itemsFirstHalf.end(), [](vectordb::Json a, vectordb::Json b) {
+    return a.GetInt("ID") < b.GetInt("ID");
+  });
+  std::sort(itemsSecondHalf.begin(), itemsSecondHalf.end(), [](vectordb::Json a, vectordb::Json b) {
+    return a.GetInt("ID") < b.GetInt("ID");
+  });
 
-    auto insertStatus = database.Insert(dbName, tableName, data);
+  // insert first half of records and query top 500 in fully rebuilt 5000 records
+  {
+    auto insertStatus = database.Insert(dbName, tableName, itemFirstHalfJson);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
     auto rebuildStatus = database.Rebuild();
     EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
     auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
-    EXPECT_EQ(queryResult.GetSize(), initialRecords) << "more than expected entries loaded";
+    EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
     for (int i = 0; i < queryResult.GetSize(); i++) {
-      EXPECT_EQ(queryResult.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
-                                                                << std::endl
-                                                                << queryResult.DumpToString();
+      EXPECT_EQ(queryResult.GetArrayElement(i).GetInt("ID"), itemsFirstHalf[i].GetInt("ID"))
+          << "incorrect return order"
+          << std::endl
+          << queryResult.DumpToString()
+          << std::endl
+          << "expecting"
+          << objectArrayToJson(itemsFirstHalf).DumpToString();
     }
   }
 
-  // hybrid - 300 prebuilt records + 9700 non-rebuilt records
+  // insert the remaining half of records and query top 500 in 5000 prebuilt records + 5000 non-rebuilt records
   {
-    vectordb::Json data;
-    data.LoadFromString("[]");
-    // add in the reverse order
-    for (int i = numRecords - 1; i >= 0; i--) {
-      vectordb::Json item, vec;
-      vec.LoadFromString("[]");
-      auto x = std::cos(M_PI / numRecords * i);
-      auto y = std::sin(M_PI / numRecords * i);
-      vec.AddDoubleToArray(x);
-      vec.AddDoubleToArray(y);
-      item.LoadFromString("{}");
-      item.SetInt("ID", i);
-      item.SetObject("Vec", vec);
-      item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + "* PI");
-      data.AddObjectToArray(item);
-    }
-
-    auto insertStatus = database.Insert(dbName, tableName, data);
+    auto insertStatus = database.Insert(dbName, tableName, itemSecondHalfJson);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
     // verify query result before rebuild
