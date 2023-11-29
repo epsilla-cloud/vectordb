@@ -777,7 +777,6 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   const auto dimension = 2;
   const auto numRecords = 10000;
 
-  // read schema
   std::string schema = R"_(
 {
     "name": "PartialRebuild",
@@ -807,6 +806,7 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
 
   vectordb::Json data;
   data.LoadFromString("[]");
+  // add in the reverse order
   for (int i = numRecords - 1; i >= 0; i--) {
     vectordb::Json item, vec;
     vec.LoadFromString("[]");
@@ -827,7 +827,7 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   auto insertStatus = database.Insert(dbName, tableName, data);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
-  // test filter
+  // verify query result before rebuild
   vectordb::Json result;
   vectordb::engine::DenseVectorElement queryData[] = {1.0, 0.0};
   auto queryFields = std::vector<std::string>{"ID", "Vec"};
@@ -853,6 +853,8 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
     if (status == std::future_status::ready) {
       break;
     }
+
+    // verify query result during rebuild
     auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, result, "", true);
     queryCountDuringRebuild++;
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
@@ -865,7 +867,7 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   }
   EXPECT_GT(queryCountDuringRebuild, 1) << "at least one query is expected during rebuild";
 
-  // query after rebuild is done
+  // verify query result after rebuild
   auto rebuildStatus = rebuildStatusFuture.get();
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
   auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, result, "", true);
