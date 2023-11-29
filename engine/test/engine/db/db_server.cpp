@@ -769,6 +769,7 @@ TEST(DbServer, RebuildDenseVector) {
 TEST(DbServer, QueryDenseVectorDuringRebuild) {
   std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_query_dense_vector_during_rebuild");
   vectordb::engine::DBServer database;
+  database.SetLeader(true);
   std::filesystem::remove_all(tempDir);
   size_t tableId = 0;
   auto dbName = "MyDB";
@@ -776,6 +777,11 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   const auto limit = 500;
   const auto dimension = 2;
   const auto numRecords = 10000;
+  const auto initialRecords = 300;
+  vectordb::engine::DenseVectorElement queryData[] = {1.0, 0.0};
+  auto queryFields = std::vector<std::string>{"ID", "Vec"};
+  std::string fieldName = "Vec";
+  vectordb::Json queryResult;
 
   std::string schema = R"_(
 {
@@ -784,7 +790,8 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
     "fields": [
         {
             "name": "ID",
-            "dataType": "Int"
+            "dataType": "Int",
+            "primaryKey": true
         },
         {
             "name": "Theta",
@@ -803,42 +810,73 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   auto tableName = schemaObj.GetString("name");
 
   database.LoadDB(dbName, tempDir, 150000, true);
-
-  vectordb::Json data;
-  data.LoadFromString("[]");
-  // add in the reverse order
-  for (int i = numRecords - 1; i >= 0; i--) {
-    vectordb::Json item, vec;
-    vec.LoadFromString("[]");
-    auto x = std::cos(M_PI / numRecords * i);
-    auto y = std::sin(M_PI / numRecords * i);
-    vec.AddDoubleToArray(x);
-    vec.AddDoubleToArray(y);
-    item.LoadFromString("{}");
-    item.SetInt("ID", i);
-    item.SetObject("Vec", vec);
-    item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + "* PI");
-    data.AddObjectToArray(item);
-  }
-
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
-  vectordb::Json dataObj;
-  auto insertStatus = database.Insert(dbName, tableName, data);
-  EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
-  // verify query result before rebuild
-  vectordb::Json result;
-  vectordb::engine::DenseVectorElement queryData[] = {1.0, 0.0};
-  auto queryFields = std::vector<std::string>{"ID", "Vec"};
-  std::string fieldName = "Vec";
-  auto preRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, result, "", true);
-  EXPECT_TRUE(preRebuildQueryStatus.ok()) << preRebuildQueryStatus.message();
-  EXPECT_EQ(result.GetSize(), limit) << "more than expected entries loaded";
-  for (int i = 0; i < result.GetSize(); i++) {
-    EXPECT_EQ(result.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
-                                                         << std::endl
-                                                         << result.DumpToString();
+  {
+    vectordb::Json data;
+    data.LoadFromString("[]");
+    // add in the reverse order
+    for (int i = initialRecords - 1; i >= 0; i--) {
+      vectordb::Json item, vec;
+      vec.LoadFromString("[]");
+      auto x = std::cos(M_PI / numRecords * i);
+      auto y = std::sin(M_PI / numRecords * i);
+      vec.AddDoubleToArray(x);
+      vec.AddDoubleToArray(y);
+      item.LoadFromString("{}");
+      item.SetInt("ID", i);
+      item.SetObject("Vec", vec);
+      item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + "* PI");
+      data.AddObjectToArray(item);
+    }
+
+    auto insertStatus = database.Insert(dbName, tableName, data);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+
+    auto rebuildStatus = database.Rebuild();
+    EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
+    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+    EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
+    EXPECT_EQ(queryResult.GetSize(), initialRecords) << "more than expected entries loaded";
+    for (int i = 0; i < queryResult.GetSize(); i++) {
+      EXPECT_EQ(queryResult.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
+                                                                << std::endl
+                                                                << queryResult.DumpToString();
+    }
+  }
+
+  // hybrid - 300 prebuilt records + 9700 non-rebuilt records
+  {
+    vectordb::Json data;
+    data.LoadFromString("[]");
+    // add in the reverse order
+    for (int i = numRecords - 1; i >= 0; i--) {
+      vectordb::Json item, vec;
+      vec.LoadFromString("[]");
+      auto x = std::cos(M_PI / numRecords * i);
+      auto y = std::sin(M_PI / numRecords * i);
+      vec.AddDoubleToArray(x);
+      vec.AddDoubleToArray(y);
+      item.LoadFromString("{}");
+      item.SetInt("ID", i);
+      item.SetObject("Vec", vec);
+      item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + "* PI");
+      data.AddObjectToArray(item);
+    }
+
+    auto insertStatus = database.Insert(dbName, tableName, data);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+
+    // verify query result before rebuild
+    auto preRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+    EXPECT_TRUE(preRebuildQueryStatus.ok()) << preRebuildQueryStatus.message();
+    EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
+    for (int i = 0; i < queryResult.GetSize(); i++) {
+      EXPECT_EQ(queryResult.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
+                                                                << std::endl
+                                                                << queryResult.DumpToString();
+    }
   }
 
   // start rebuild asynchronously
@@ -855,28 +893,28 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
     }
 
     // verify query result during rebuild
-    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, result, "", true);
+    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
     queryCountDuringRebuild++;
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
-    EXPECT_EQ(result.GetSize(), limit) << "more than expected entries loaded";
-    for (int i = 0; i < result.GetSize(); i++) {
-      EXPECT_EQ(result.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
-                                                           << std::endl
-                                                           << result.DumpToString();
+    EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
+    for (int i = 0; i < queryResult.GetSize(); i++) {
+      EXPECT_EQ(queryResult.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
+                                                                << std::endl
+                                                                << queryResult.DumpToString();
     }
   }
-  EXPECT_GT(queryCountDuringRebuild, 1) << "at least one query is expected during rebuild";
+  EXPECT_GE(queryCountDuringRebuild, 1) << "at least one query is expected during rebuild";
 
   // verify query result after rebuild
   auto rebuildStatus = rebuildStatusFuture.get();
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
-  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, result, "", true);
+  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
   EXPECT_TRUE(postRebuildQueryStatus.ok()) << postRebuildQueryStatus.message();
-  EXPECT_EQ(result.GetSize(), limit) << "more than expected entries loaded";
-  for (int i = 0; i < result.GetSize(); i++) {
-    EXPECT_EQ(result.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
-                                                         << std::endl
-                                                         << result.DumpToString();
+  EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
+  for (int i = 0; i < queryResult.GetSize(); i++) {
+    EXPECT_EQ(queryResult.GetArrayElement(i).GetInt("ID"), i) << "incorrect return order"
+                                                              << std::endl
+                                                              << queryResult.DumpToString();
   }
 }
 
