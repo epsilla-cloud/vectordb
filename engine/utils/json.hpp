@@ -11,6 +11,7 @@ namespace vectordb {
 class Json {
  public:
   Json();
+  Json(const Json& a) : doc_(a.doc_) {}
 
   bool LoadFromString(const std::string& json_string);
   std::string DumpToString();
