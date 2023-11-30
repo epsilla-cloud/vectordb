@@ -734,7 +734,7 @@ bool VecSearchExecutor::BruteForceSearch(
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   } else {
-    // it holds sparse vector
+#pragma omp parallel for
     for (int64_t v_id = start; v_id < end; ++v_id) {
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
