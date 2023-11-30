@@ -8,6 +8,7 @@
 #include <iostream>
 #include <variant>
 
+#include "db/ann_graph_segment.hpp"
 #include "db/index/index.hpp"
 #include "db/index/knn/nndescent.hpp"
 #include "db/index/space_cosine.hpp"
@@ -35,7 +36,7 @@ class OracleL2 {
   OracleL2(size_t dim_, VectorColumnData m_, meta::MetricType metricType) : dim(dim_) {
     m = m_;
 
-    if (std::holds_alternative<DenseVectorPtr>(m_)) {
+    if (std::holds_alternative<DenseVectorColumnDataContainer>(m_)) {
       switch (metricType) {
         case meta::MetricType::EUCLIDEAN:
           space = std::make_unique<L2Space>(dim_);

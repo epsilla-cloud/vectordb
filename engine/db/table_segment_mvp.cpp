@@ -554,7 +554,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           sum += value * value;
           vec->emplace_back(SparseVectorElement{index, value});
         }
-        // covert to length
+        // convert to length
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           sum = std::sqrt(sum);
           // normalize value
@@ -573,7 +573,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           sum += value * value;
           std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
         }
-        // covert to length
+        // convert to length
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           sum = std::sqrt(sum);
           // normalize value
