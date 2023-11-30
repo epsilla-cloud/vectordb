@@ -65,6 +65,12 @@ TEST(SparseVector, GetL2DistSqr) {
     auto dist = (x - 1) * (x - 1) + y * y;
     EXPECT_FLOAT_EQ(GetL2DistSqr(v1, v2), dist);
   }
+
+  {
+    SparseVector v2 = {{0, 1}},
+                 v3 = {{1, 1}, {2, 1}, {3, 1}};
+    EXPECT_FLOAT_EQ(GetL2DistSqr(v2, v3), 4.0f);
+  }
 }
 
 TEST(SparseVector, Normalize) {
