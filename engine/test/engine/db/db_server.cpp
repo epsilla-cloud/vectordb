@@ -821,7 +821,7 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
 
-  database.LoadDB(dbName, tempDir, 150000, true);
+  database.LoadDB(dbName, tempDir, numRecords, true);
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
@@ -1494,5 +1494,116 @@ TEST(DbServer, SparseVectorFilter) {
                                                              << result.DumpToString();
       }
     }
+  }
+}
+
+TEST(DbServer, InsertSparseVectorLargeBatch) {
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_insert_sparse_vector_large_batch");
+  vectordb::engine::DBServer database;
+  database.SetLeader(true);
+  std::filesystem::remove_all(tempDir);
+  size_t tableId = 0;
+  auto dbName = "MyDB";
+  vectordb::Json schemaObj;
+  const auto dimension = 2;
+  const auto batchSize = 20000;
+  const auto numBatches = 4;
+  const auto numRecords = batchSize * numBatches;
+  vectordb::engine::SparseVectorPtr queryData = std::make_shared<vectordb::engine::SparseVector>(vectordb::engine::SparseVector({{0, 1}, {1, 0}}));
+  auto queryFields = std::vector<std::string>{"ID", "Vec"};
+  std::string fieldName = "Vec";
+  vectordb::Json queryResult;
+
+  std::string schema = R"_(
+{
+    "name": "InsertSparseVectorLargeBatch",
+    "returnTableId": true,
+    "fields": [
+        {
+            "name": "ID",
+            "dataType": "Int",
+            "primaryKey": true
+        },
+        {
+            "name": "Theta",
+            "dataType": "String"
+        },
+        {
+            "name": "Vec",
+            "dataType": "SPARSE_VECTOR_FLOAT",
+            "metricType": "COSINE",
+            "dimensions": 2
+        }
+    ]
+}
+  )_";
+  schemaObj.LoadFromString(schema);
+  auto tableName = schemaObj.GetString("name");
+
+  database.LoadDB(dbName, tempDir, numRecords, true);
+  auto createTableStatus = database.CreateTable(dbName, schema, tableId);
+  EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
+
+  auto records = std::vector<vectordb::Json>();
+  for (int i = 0; i < numRecords; i++) {
+    vectordb::Json item, vec, indices, values;
+    vec.LoadFromString("{}");
+    indices.LoadFromString("[0, 1]");
+    values.LoadFromString("[]");
+    auto x = std::cos(M_PI / 180 * i);
+    auto y = std::sin(M_PI / 180 * i);
+    values.AddDoubleToArray(x);
+    values.AddDoubleToArray(y);
+    vec.SetObject("indices", indices);
+    vec.SetObject("values", values);
+    item.LoadFromString("{}");
+    item.SetInt("ID", i);
+    item.SetObject("Vec", vec);
+    item.SetString("Theta", std::to_string(i) + "/ 180 * PI");
+    records.push_back(item);
+  }
+
+  std::vector<vectordb::Json> recordBatchJson;
+  for (int i = 0; i < numBatches; i++) {
+    recordBatchJson.push_back(objectArrayToJson(std::vector<vectordb::Json>(records.begin() + i * batchSize, records.begin() + (i + 1) * batchSize)));
+  }
+
+  // continuously insert 2 rebuild results
+  {
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[0]);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  }
+  {
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[1]);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  }
+
+  // start rebuild asynchronously
+  auto rebuildStatusFuture = std::async([&database]() {
+    return database.Rebuild();
+  });
+
+  // insert during rebuild
+  {
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[2]);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  }
+
+  // insert after rebuild is done
+  {
+    rebuildStatusFuture.wait();
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[3]);
+    EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  }
+
+  // verify query result after rebuild
+  auto rebuildStatus = rebuildStatusFuture.get();
+  EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
+  const auto limit = 100;
+  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "ID < 10", true);
+  EXPECT_TRUE(postRebuildQueryStatus.ok()) << postRebuildQueryStatus.message();
+  EXPECT_LE(queryResult.GetSize(), 10) << "more than expected entries loaded";
+  for (int i = 0; i < queryResult.GetSize(); i++) {
+    EXPECT_LE(queryResult.GetArrayElement(i).GetInt("ID"), 10) << "invalid entry returned";
   }
 }

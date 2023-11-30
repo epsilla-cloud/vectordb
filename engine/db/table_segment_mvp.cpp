@@ -482,7 +482,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   }
 
   // Resize if needed.
-  if (record_number_ + new_record_size >= size_limit_) {
+  if (record_number_ + new_record_size > size_limit_) {
     return Status(
         DB_UNEXPECTED_ERROR,
         "Currently, each table in this database can hold up to " + std::to_string(size_limit_) + " records. " +
