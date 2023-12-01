@@ -70,15 +70,23 @@ void Normalize(DenseVectorPtr v, size_t dimension) {
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2) {
   float sum = 0;
   for (int i1 = 0, i2 = 0; i1 < v1.size() || i2 < v2.size();) {
-    if (v1[i1].index == v2[i2].index) {
-      auto diff = v1[i1].value - v2[i2].value;
-      sum += diff * diff;
-      i1++;
-      i2++;
-    } else if (i1 == v1.size() || v1[i1].index > v2[i2].index) {
+    if (i1 < v1.size() && i2 < v2.size()) {
+      if (v1[i1].index == v2[i2].index) {
+        auto diff = v1[i1].value - v2[i2].value;
+        sum += diff * diff;
+        i1++;
+        i2++;
+      } else if (v1[i1].index > v2[i2].index) {
+        sum += v2[i2].value * v2[i2].value;
+        i2++;
+      } else {  // v1[i1].index < v2[i2].index
+        sum += v1[i1].value * v1[i1].value;
+        i1++;
+      }
+    } else if (i1 == v1.size()) {
       sum += v2[i2].value * v2[i2].value;
       i2++;
-    } else {
+    } else if (i2 == v2.size()) {
       sum += v1[i1].value * v1[i1].value;
       i1++;
     }
