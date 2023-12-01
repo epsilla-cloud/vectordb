@@ -454,7 +454,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         if (field.is_primary_key_) {
           auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
           if (exist) {
-            std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+            // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
             skipped_entry++;
             goto LOOP_END;
           }
@@ -549,7 +549,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -562,7 +562,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -575,7 +575,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -588,7 +588,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
