@@ -414,41 +414,6 @@ Status TableSegmentMVP::DeleteByID(
   return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + id);
 }
 
-// Status TableSegmentMVP::DoubleSize() {
-//   std::cout << "DoubleSizing ..." << std::endl;
-//   int64_t new_size = size_limit_ * 2;
-
-//   // Resize the attribute table
-//   std::shared_ptr<AttributeTable> new_attribute_table = std::make_shared<AttributeTable>(AttributeTable(new_size * primitive_offset_));
-//   memcpy(new_attribute_table->data, attribute_table_->data, record_number_ * primitive_offset_);
-//   attribute_table_ = new_attribute_table;
-
-//   // Resize the string table
-//   std::string* new_string_table = new std::string[new_size * var_len_attr_num_];
-//   memcpy(new_string_table, var_len_attr_table_.get(), size_limit_ * var_len_attr_num_);
-//   var_len_attr_table_ = std::make_shared<std::string*>(new_string_table);
-
-//   // Resize the vector tables
-//   for (auto i = 0; i < vector_num_; ++i) {
-//     float* new_vector_table = new float[new_size * vector_dims_[i]];
-//     memcpy(new_vector_table, vector_tables_[i].get(), size_limit_ * vector_dims_[i]);
-//     vector_tables_[i] = std::make_shared<float*>(new_vector_table);
-//   }
-
-//   // Resize the deleted bitset
-//   auto new_bitset = std::make_shared<ConcurrentBitset>(new_size);
-//   for (int i = 0; i < deleted_->size(); ++i) {
-//     if (deleted_->test(i)) {
-//       new_bitset->set(i);
-//     }
-//   }
-//   deleted_ = new_bitset;
-
-//   // Update the size limit
-//   size_limit_ = new_size;
-
-//   return Status::OK();
-// }
 Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id) {
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
@@ -462,23 +427,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     for (auto& field : table_schema.fields_) {
       if (!record.HasMember(field.name_)) {
         return Status(INVALID_RECORD, "Record " + std::to_string(i) + " missing field: " + field.name_);
-      }
-      if ((field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-           field.field_type_ == meta::FieldType::VECTOR_DOUBLE) &&
-          record.GetArraySize(field.name_) != field.vector_dimension_) {
-        return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension, expecting: " +
-                                          std::to_string(field.vector_dimension_) + " actual: " + std::to_string(record.GetArraySize(field.name_)));
-      }
-      if ((field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
-           field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE)) {
-        auto indices = record.GetObject(field.name_).GetArray(SparseVecObjIndicesKey);
-        auto size = indices.GetSize();
-        auto vecDim = size > 0 ? indices.GetArrayElement(size - 1).GetInt() : field.vector_dimension_;  // if size is 0, the vector is zero
-        if (vecDim >= field.vector_dimension_) {
-          return Status(INVALID_RECORD,
-                        "Record " + std::to_string(i) + " field " + field.name_ +
-                            " has wrong dimension, expecting: " + std::to_string(field.vector_dimension_) + " actual: " + std::to_string(vecDim));
-        }
       }
     }
   }
@@ -547,6 +495,16 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           goto LOOP_END;
         }
 
+        auto size = indices.GetSize();
+        auto vecDim = size > 0 ? indices.GetArrayElement(size - 1).GetInt() : field.vector_dimension_;  // if size is 0, the vector is zero
+        if (vecDim >= field.vector_dimension_) {
+          std::cerr << "Record " + std::to_string(i) + " field " + field.name_ +
+                           " has wrong dimension, expecting: " + std::to_string(field.vector_dimension_) + " actual: " + std::to_string(vecDim)
+                    << std::endl;
+          skipped_entry++;
+          goto LOOP_END;
+        }
+
         auto vec = std::make_shared<SparseVector>();
 
         float sum = 0;
@@ -580,6 +538,12 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.
         auto vector = record.GetArray(field.name_);
+        if (vector.GetSize() != field.vector_dimension_) {
+          std::cerr << "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension, expecting: " +
+                           std::to_string(field.vector_dimension_) + " actual: " + std::to_string(record.GetArraySize(field.name_));
+          skipped_entry++;
+          goto LOOP_END;
+        }
         float sum = 0;
         for (auto j = 0; j < field.vector_dimension_; ++j) {
           float value = static_cast<float>((float)(vector.GetArrayElement(j).GetDouble()));
@@ -696,12 +660,16 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   auto msg = std::string("successfully inserted " +
                          std::to_string(new_record_size - skipped_entry) +
                          " records. ");
+  auto statusCode = DB_SUCCESS;
   if (skipped_entry > 0) {
     msg += "skipped " +
            std::to_string(skipped_entry) + " records with primary key values that already exist.";
   }
+  if (skipped_entry == new_record_size) {
+    statusCode = INVALID_RECORD;
+  }
   std::cerr << msg << std::endl;
-  return Status(DB_SUCCESS, msg);
+  return Status(statusCode, msg);
 }
 
 Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result) {
