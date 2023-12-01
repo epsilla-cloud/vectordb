@@ -69,6 +69,14 @@ void Normalize(DenseVectorPtr v, size_t dimension) {
 
 float GetL2DistSqr(const SparseVector &v1, const SparseVector &v2) {
   float sum = 0;
+  std::cout << "v1" << std::endl;
+  for (int i1 = 0; i1 < v1.size(); ++i1) {
+    std::cout << v1[i1].index << " " << v1[i1].value << std::endl;
+  }
+  std::cout << "v2" << std::endl;
+  for (int i1 = 0; i1 < v2.size(); ++i1) {
+    std::cout << v2[i1].index << " " << v2[i1].value << std::endl;
+  }
   for (int i1 = 0, i2 = 0; i1 < v1.size() || i2 < v2.size();) {
     if (i1 < v1.size() && i2 < v2.size()) {
       if (v1[i1].index == v2[i2].index) {

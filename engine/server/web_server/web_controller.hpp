@@ -583,7 +583,7 @@ class WebController : public oatpp::web::server::api::ApiController {
         auto idx = queryVecJson.GetArrayElement("indices", i);
         querySparseVecPtr->at(i).index = idx.GetInt();
         auto val = queryVecJson.GetArrayElement("values", i);
-        querySparseVecPtr->at(i).value = static_cast<float>(idx.GetDouble());
+        querySparseVecPtr->at(i).value = static_cast<float>(val.GetDouble());
       }
       query = querySparseVecPtr;
     }
