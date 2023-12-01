@@ -92,6 +92,9 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
 
   attribute_table_ = new char[size_limit * primitive_offset_];
   var_len_attr_table_.resize(var_len_attr_num_);
+  for (auto& elem : var_len_attr_table_) {
+    elem.resize(size_limit_);
+  }
 
   // attribute_table_ = std::shared_ptr<char[]>(new char[size_limit * primitive_offset], std::default_delete<char[]>());
   // attribute_table_ = std::shared_ptr<char*>(new char[size_limit * primitive_offset]);
@@ -208,8 +211,8 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     }
 
     var_len_attr_table_.resize(var_len_attr_num_);
-    for (auto attrIdx = 0; attrIdx < var_len_attr_num_; ++attrIdx) {
-      var_len_attr_table_[attrIdx].resize(record_number_);
+    for (auto& elem : var_len_attr_table_) {
+      elem.resize(size_limit_);
     }
 
     // Read the string table
@@ -447,21 +450,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   // Process the insert.
   size_t cursor = record_number_;
 
-  // reserve vector memory size
-  for (auto& field : table_schema.fields_) {
-    switch (field.field_type_) {
-      case meta::FieldType::STRING:
-      case meta::FieldType::JSON:
-      case meta::FieldType::SPARSE_VECTOR_FLOAT:
-      case meta::FieldType::SPARSE_VECTOR_DOUBLE:
-        var_len_attr_table_[field_id_mem_offset_map_[field.id_]].resize(new_record_size + record_number_);
-        break;
-      default:
-          // do nothing
-          ;
-    }
-  }
-
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
     for (auto& field : table_schema.fields_) {
@@ -638,22 +626,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     // nothing should be done at the end of block
   }
 
-  // shrink the size if necessary
-  if (cursor != new_record_size + record_number_) {
-    for (auto& field : table_schema.fields_) {
-      switch (field.field_type_) {
-        case meta::FieldType::STRING:
-        case meta::FieldType::JSON:
-        case meta::FieldType::SPARSE_VECTOR_FLOAT:
-        case meta::FieldType::SPARSE_VECTOR_DOUBLE:
-          var_len_attr_table_[field_id_mem_offset_map_[field.id_]].resize(cursor);
-          break;
-        default:
-            // do nothing
-            ;
-      }
-    }
-  }
   // update the vector size
   record_number_.store(cursor);
 
