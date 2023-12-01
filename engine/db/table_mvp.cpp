@@ -234,14 +234,23 @@ Status TableMVP::Search(const std::string &field_name,
       return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field);
     }
   }
+
   // Get the field data type. If the type is not VECTOR, return error.
   auto field_type = field_name_field_type_map_[field_name];
   if (field_type != meta::FieldType::VECTOR_FLOAT &&
       field_type != meta::FieldType::VECTOR_DOUBLE &&
       field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
       field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
-    return Status(DB_UNEXPECTED_ERROR, "Field type is not vector.");
+    return Status(USER_ERROR, "Field type is not vector.");
   }
+
+  if (std::holds_alternative<DenseVectorPtr>(query_data) && field_type != meta::FieldType::VECTOR_FLOAT &&
+          field_type != meta::FieldType::VECTOR_DOUBLE ||
+      std::holds_alternative<SparseVectorPtr>(query_data) && field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+          field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+    return Status(USER_ERROR, "Query vector and field vector type must be both dense or sparse");
+  }
+
   auto metric_type = field_name_metric_type_map_[field_name];
 
   // normalize the query data
