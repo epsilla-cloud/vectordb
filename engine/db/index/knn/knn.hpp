@@ -79,6 +79,14 @@ float OracleL2::operator()(int p, int q) const {
   } else {
     auto &v1 = std::get<VariableLenAttrColumnContainer *>(m)->at(p);
     auto &v2 = std::get<VariableLenAttrColumnContainer *>(m)->at(q);
+    if (v1.index() != 1) {
+      std::cout << "unexpected v1 index for element p: "
+                << " index=" << p << " variant_index=" << v1.index() << " valueless=" << v1.valueless_by_exception() << std::endl;
+    }
+    if (v2.index() != 1) {
+      std::cout << "unexpected v1 index for element q: "
+                << " index=" << q << " variant_index=" << v2.index() << " valueless=" << v2.valueless_by_exception() << std::endl;
+    }
     return std::get<SparseVecDistFunc>(fstdistfunc_)(*std::get<SparseVectorPtr>(v1), *std::get<SparseVectorPtr>(v2));
   }
 }

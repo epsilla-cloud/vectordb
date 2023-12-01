@@ -534,6 +534,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           }
         }
         var_len_attr_table_[field_id_mem_offset_map_[field.id_]][cursor] = std::move(vec);
+        std::cout << "inserted entry " << i << " cursor=" << cursor << " id=" << record.GetInt("id")
+                  << "addr: " << &var_len_attr_table_[field_id_mem_offset_map_[field.id_]][cursor] << std::endl;
       } else if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.
