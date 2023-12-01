@@ -479,12 +479,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
                         "Record " + std::to_string(i) + " field " + field.name_ +
                             " has wrong dimension, expecting: " + std::to_string(field.vector_dimension_) + " actual: " + std::to_string(vecDim));
         }
-        for (int i = 0; i + 1 < indices.GetSize(); i++) {
-          if (indices.GetArrayElement(i).GetInt() >= indices.GetArrayElement(i + 1).GetInt()) {
-            return Status(INVALID_RECORD,
-                          "Record " + std::to_string(i) + " indices are not increasing");
-          }
-        }
       }
     }
   }
@@ -557,7 +551,18 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
         float sum = 0;
         for (auto j = 0; j < indices.GetSize(); ++j) {
-          size_t index = static_cast<size_t>(indices.GetArrayElement(j).GetInt());
+          auto index_signed = indices.GetArrayElement(j).GetInt();
+          if (index_signed < 0) {
+            std::cerr << "entry has negative index value" << index_signed << ", skipping." << std::endl;
+            skipped_entry++;
+            goto LOOP_END;
+          }
+          size_t index = static_cast<size_t>(index_signed);
+          if (j > 0 && index <= vec->back().index) {
+            std::cerr << "the index is not increasing: [...," << vec->back().index << " , " << index << ",...], skipping." << std::endl;
+            skipped_entry++;
+            goto LOOP_END;
+          }
           float value = static_cast<float>(values.GetArrayElement(j).GetDouble());
           sum += value * value;
           vec->emplace_back(SparseVectorElement{index, value});
