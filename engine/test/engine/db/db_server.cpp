@@ -276,6 +276,9 @@ TEST(DbServer, DenseVector) {
   auto insertStatus = database.Insert(dbName, tableName, recordsJson);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   vectordb::engine::DenseVectorElement queryData[] = {0.35, 0.55, 0.47, 0.94};
+  auto badQueryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
+      vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
+
   struct TestCase {
     std::string searchFieldName;
     std::vector<std::string> expectedOrder;
@@ -302,6 +305,9 @@ TEST(DbServer, DenseVector) {
             << i << "th city mismatch when querying " << testcase.searchFieldName << std::endl
             << result.DumpToString();
       }
+
+      auto badQueryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, badQueryDataPtr, limit, result, "", true);
+      EXPECT_FALSE(badQueryStatus.ok()) << "query dense vector with sparse vector should fail";
     }
   }
 }
@@ -460,7 +466,7 @@ TEST(DbServer, SparseVector) {
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
       vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
-
+  vectordb::engine::DenseVectorElement badQueryDataPtr[] = {0.35, 0.55, 0.47, 0.94};
   struct TestCase {
     std::string searchFieldName;
     std::vector<std::string> expectedOrder;
@@ -488,6 +494,9 @@ TEST(DbServer, SparseVector) {
             << i << "th city mismatch when querying " << testcase.searchFieldName << std::endl
             << result.DumpToString();
       }
+
+      auto badQueryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, badQueryDataPtr, limit, result, "", true);
+      EXPECT_FALSE(badQueryStatus.ok()) << "query sparse vector column with dense vector should fail";
     }
   }
 }
