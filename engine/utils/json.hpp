@@ -50,6 +50,8 @@ class Json {
   void AddObjectToArray(const Json& object);
   bool IsNumber() const;
   bool IsString() const;
+  bool IsObject() const;
+  bool IsArray() const;
 
  private:
   nlohmann::json doc_;

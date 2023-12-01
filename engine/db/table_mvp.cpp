@@ -285,7 +285,7 @@ Status TableMVP::Search(const std::string &field_name,
   lock.unlock();
 
   // The query dimension needs to match the vector dimension.
-  if (query_dimension != executor.exec_->dimension_) {
+  if (std::holds_alternative<DenseVectorPtr>(query_data) && query_dimension != executor.exec_->dimension_) {
     return Status(DB_UNEXPECTED_ERROR,
                   "Query dimension doesn't match the vector field dimension.");
   }

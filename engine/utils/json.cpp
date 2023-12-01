@@ -67,6 +67,14 @@ bool Json::IsString() const {
   return doc_.is_string();
 }
 
+bool Json::IsObject() const {
+  return doc_.is_object();
+}
+
+bool Json::IsArray() const {
+  return doc_.is_array();
+}
+
 double Json::GetDouble() const {
   return doc_.get<double>();
 }
