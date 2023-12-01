@@ -69,11 +69,11 @@ epsilla.insert(
 for field in ["EmbeddingEuclidean", "EmbeddingDotProduct", "EmbeddingCosine"]:
     (code, response) = epsilla.query(
         table_name="MyTable",
-        query_field="EmbeddingEuclidean",
+        query_field=field,
         response_fields=["ID", "Doc", field],
         query_vector=[0.35, 0.55, 0.47, 0.94],
         filter="ID < 6",
-        limit=2,
+        limit=6,
         with_distance=True
     )
 

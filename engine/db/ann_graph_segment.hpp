@@ -5,12 +5,18 @@
 #include <unordered_map>
 
 #include "db/catalog/meta.hpp"
+#include "db/vector.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/status.hpp"
 
 namespace vectordb {
 namespace engine {
+
+using VectorColumnData = std::variant<
+    DenseVectorColumnDataContainer,
+    // pass pointer here to avoid unnecessary deep copy
+    VariableLenAttrColumnContainer*>;
 
 class ANNGraphSegment {
  public:
@@ -22,7 +28,7 @@ class ANNGraphSegment {
   explicit ANNGraphSegment(int64_t size_limit);
 
   // Build the ANN graph from vector table.
-  void BuildFromVectorTable(float* vector_table, int64_t n, int64_t dim, meta::MetricType metricType);
+  void BuildFromVectorTable(VectorColumnData vector_column, int64_t n, int64_t dim, meta::MetricType metricType);
 
   void Debug();
 

@@ -12,6 +12,7 @@ constexpr ErrorCode INFRA_SUCCESS = 0;
 constexpr ErrorCode INFRA_ERROR_CODE_BASE = 40000;
 constexpr ErrorCode DB_SUCCESS = 0;
 constexpr ErrorCode DB_ERROR_CODE_BASE = 50000;
+constexpr ErrorCode USER_ERROR = 30000;
 
 constexpr ErrorCode ToInfraErrorCode(const int32_t error_code) {
   return INFRA_ERROR_CODE_BASE + error_code;

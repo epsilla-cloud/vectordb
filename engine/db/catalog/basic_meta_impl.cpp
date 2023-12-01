@@ -38,7 +38,9 @@ Status LoadFieldSchemaFromJson(const vectordb::Json& json, meta::FieldSchema& fi
   field_schema.field_type_ = static_cast<meta::FieldType>(json.GetInt(FIELD_TYPE));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
+      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+      field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+      field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     field_schema.vector_dimension_ = json.GetInt(VECTOR_DIMENSION);
     field_schema.metric_type_ = static_cast<meta::MetricType>(json.GetInt(METRIC_TYPE));
   }
@@ -84,7 +86,9 @@ void DumpFieldSchemaToJson(const meta::FieldSchema& field_schema, vectordb::Json
   json.SetInt(FIELD_TYPE, static_cast<int>(field_schema.field_type_));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
+      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+      field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+      field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     json.SetInt(VECTOR_DIMENSION, field_schema.vector_dimension_);
     json.SetInt(METRIC_TYPE, static_cast<int>(field_schema.metric_type_));
   }
@@ -178,7 +182,7 @@ BasicMetaImpl::BasicMetaImpl() {
 
 BasicMetaImpl::~BasicMetaImpl() {}
 
-Status BasicMetaImpl::LoadDatabase(std::string& db_catalog_path, const std::string& db_name) {
+Status BasicMetaImpl::LoadDatabase(const std::string& db_catalog_path, const std::string& db_name) {
   if (loaded_databases_paths_.find(db_catalog_path) != loaded_databases_paths_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Database catalog file is already loaded: " + db_catalog_path);
   }
@@ -306,7 +310,10 @@ Status ValidateSchema(TableSchema& table_schema) {
       return Status(DB_UNEXPECTED_ERROR, "Type of " + field.name_ + " is not valid.");
     }
 
-    if (field.field_type_ == FieldType::VECTOR_DOUBLE || field.field_type_ == FieldType::VECTOR_FLOAT) {
+    if (field.field_type_ == FieldType::VECTOR_DOUBLE ||
+        field.field_type_ == FieldType::VECTOR_FLOAT ||
+        field.field_type_ == FieldType::SPARSE_VECTOR_DOUBLE ||
+        field.field_type_ == FieldType::SPARSE_VECTOR_FLOAT) {
       has_vector_field = true;
       // 6. Vector fields must have dimension and metric
       // 7. Dimension must be positive
@@ -323,12 +330,11 @@ Status ValidateSchema(TableSchema& table_schema) {
     }
     if (!has_primary_key && field.is_primary_key_) {
       if (
-        field.field_type_ != FieldType::INT1 &&
-        field.field_type_ != FieldType::INT2 &&
-        field.field_type_ != FieldType::INT4 &&
-        field.field_type_ != FieldType::INT8 &&
-        field.field_type_ != FieldType::STRING
-      ) {
+          field.field_type_ != FieldType::INT1 &&
+          field.field_type_ != FieldType::INT2 &&
+          field.field_type_ != FieldType::INT4 &&
+          field.field_type_ != FieldType::INT8 &&
+          field.field_type_ != FieldType::STRING) {
         return Status(DB_UNEXPECTED_ERROR, "Primary key can only be set to a field with type TINYINT, SMALLINT, INT, BIGINT, or STRING.");
       }
       has_primary_key = true;
@@ -436,7 +442,6 @@ Status BasicMetaImpl::DropTable(const std::string& db_name, const std::string& t
 void BasicMetaImpl::SetLeader(bool is_leader) {
   is_leader_ = is_leader;
 }
-
 
 }  // namespace meta
 }  // namespace engine

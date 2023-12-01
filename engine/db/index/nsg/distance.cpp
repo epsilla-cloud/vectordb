@@ -223,16 +223,52 @@ DistanceIP::Compare(const float* a, const float* b, unsigned size) const {
 
 #else
 
-float DistanceL2::Compare(const float* a, const float* b, unsigned size) const {
+float DistanceL2::Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const {
   return fvec_L2sqr(a, b, (size_t)size);
 }
 
-float DistanceIP::Compare(const float* a, const float* b, unsigned size) const {
+float DistanceIP::Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const {
   return -(fvec_inner_product(a, b, (size_t)size));
 }
 
-float DistanceCosine::Compare(const float* a, const float* b, unsigned size) const {
+float DistanceCosine::Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const {
   return -(fvec_inner_product(a, b, (size_t)size));
+}
+
+float DistanceL2::Compare(const SparseVector a, const SparseVector b) const {
+  return GetL2DistSqr(a, b);
+}
+
+float DistanceL2::Compare(const VectorPtr a, const VectorPtr b) const {
+  if (std::holds_alternative<DenseVectorPtr>(a)) {
+    return DistanceL2::Compare(std::get<DenseVectorPtr>(a), std::get<DenseVectorPtr>(b));
+  } else {
+    return DistanceL2::Compare(std::get<SparseVectorPtr>(a), std::get<SparseVectorPtr>(b));
+  }
+}
+
+float DistanceIP::Compare(const SparseVector a, const SparseVector b) const {
+  return -GetInnerProduct(a, b);
+}
+
+float DistanceIP::Compare(const VectorPtr a, const VectorPtr b) const {
+  if (std::holds_alternative<DenseVectorPtr>(a)) {
+    return DistanceIP::Compare(std::get<DenseVectorPtr>(a), std::get<DenseVectorPtr>(b));
+  } else {
+    return DistanceIP::Compare(std::get<SparseVectorPtr>(a), std::get<SparseVectorPtr>(b));
+  }
+}
+
+float DistanceCosine::Compare(const SparseVector a, const SparseVector b) const {
+  return -GetInnerProduct(a, b);
+}
+
+float DistanceCosine::Compare(const VectorPtr a, const VectorPtr b) const {
+  if (std::holds_alternative<DenseVectorPtr>(a)) {
+    return DistanceCosine::Compare(std::get<DenseVectorPtr>(a), std::get<DenseVectorPtr>(b));
+  } else {
+    return DistanceCosine::Compare(std::get<SparseVectorPtr>(a), std::get<SparseVectorPtr>(b));
+  }
 }
 
 #endif

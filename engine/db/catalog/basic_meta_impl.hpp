@@ -16,7 +16,7 @@ class BasicMetaImpl : public Meta {
   explicit BasicMetaImpl();
   ~BasicMetaImpl();
 
-  Status LoadDatabase(std::string& db_catalog_path, const std::string& db_name) override;
+  Status LoadDatabase(const std::string& db_catalog_path, const std::string& db_name) override;
 
   Status HasDatabase(const std::string& db_name, bool& response) override;
 
@@ -37,6 +37,7 @@ class BasicMetaImpl : public Meta {
   Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path);
 
   void SetLeader(bool is_leader) override;
+
  private:
   std::unordered_map<std::string, DatabaseSchema> databases_;
   std::unordered_set<std::string> loaded_databases_paths_;  // We cannot allow loading the same database twice
@@ -84,10 +85,10 @@ class BasicMetaImpl : public Meta {
   auto_embed.model_name_ = "sentence-transformers/paraphrase-albert-small-v2";
   table_schema.auto_embeddings_.push_back(auto_embed);
   table_schema.auto_embeddings_.push_back({2, 4, "sentence-transformers/paraphrase-albert-small-v1"});
-  
+
   auto status2 = meta->CreateTable(db_name, table_schema);
   if (!status2.ok()) {
     std::cout << status2.message() << std::endl;
   }
- 
+
 */

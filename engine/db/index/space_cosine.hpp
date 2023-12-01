@@ -16,7 +16,7 @@ CosineDistance(const void* pVect1, const void* pVect2, const void* qty_ptr) {
 }
 
 class CosineSpace : public SpaceInterface<float> {
-  DISTFUNC<float> fstdistfunc_;
+  DenseVecDistFunc<float> fstdistfunc_;
   size_t data_size_;
   size_t dim_;
 
@@ -32,7 +32,7 @@ class CosineSpace : public SpaceInterface<float> {
     return data_size_;
   }
 
-  DISTFUNC<float>
+  DenseVecDistFunc<float>
   get_dist_func() {
     return fstdistfunc_;
   }

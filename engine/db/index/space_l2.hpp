@@ -149,7 +149,7 @@ L2SqrSIMD16ExtSSE(const void* pVect1v, const void* pVect2v, const void* qty_ptr)
 #endif
 
 #if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
-DISTFUNC<float> L2SqrSIMD16Ext = L2SqrSIMD16ExtSSE;
+DENSE_DISTFUNC<float> L2SqrSIMD16Ext = L2SqrSIMD16ExtSSE;
 
 static float
 L2SqrSIMD16ExtResiduals(const void* pVect1v, const void* pVect2v, const void* qty_ptr) {
@@ -209,7 +209,7 @@ L2SqrSIMD4ExtResiduals(const void* pVect1v, const void* pVect2v, const void* qty
 #endif
 
 class L2Space : public SpaceInterface<float> {
-  DISTFUNC<float> fstdistfunc_;
+  DenseVecDistFunc<float> fstdistfunc_;
   size_t data_size_;
   size_t dim_;
 
@@ -247,7 +247,7 @@ class L2Space : public SpaceInterface<float> {
     return data_size_;
   }
 
-  DISTFUNC<float>
+  DenseVecDistFunc<float>
   get_dist_func() {
     return fstdistfunc_;
   }
@@ -302,7 +302,7 @@ L2SqrI(const void* __restrict pVect1, const void* __restrict pVect2, const void*
 }
 
 class L2SpaceI : public SpaceInterface<int> {
-  DISTFUNC<int> fstdistfunc_;
+  DenseVecDistFunc<int> fstdistfunc_;
   size_t data_size_;
   size_t dim_;
 
@@ -322,7 +322,7 @@ class L2SpaceI : public SpaceInterface<int> {
     return data_size_;
   }
 
-  DISTFUNC<int>
+  DenseVecDistFunc<int>
   get_dist_func() {
     return fstdistfunc_;
   }

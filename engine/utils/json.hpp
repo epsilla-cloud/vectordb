@@ -11,6 +11,7 @@ namespace vectordb {
 class Json {
  public:
   Json();
+  Json(const Json& a) : doc_(a.doc_) {}
 
   bool LoadFromString(const std::string& json_string);
   std::string DumpToString();
@@ -49,6 +50,8 @@ class Json {
   void AddObjectToArray(const Json& object);
   bool IsNumber() const;
   bool IsString() const;
+  bool IsObject() const;
+  bool IsArray() const;
 
  private:
   nlohmann::json doc_;

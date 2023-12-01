@@ -219,7 +219,7 @@ InnerProductSIMD16Ext(const void *pVect1v, const void *pVect2v, const void *qty_
 #endif
 
 class InnerProductSpace : public SpaceInterface<float> {
-  DISTFUNC<float> fstdistfunc_;
+  DenseVecDistFunc<float> fstdistfunc_;
   size_t data_size_;
   size_t dim_;
 
@@ -242,7 +242,7 @@ class InnerProductSpace : public SpaceInterface<float> {
     return data_size_;
   }
 
-  DISTFUNC<float> get_dist_func() {
+  DenseVecDistFunc<float> get_dist_func() {
     return fstdistfunc_;
   }
 

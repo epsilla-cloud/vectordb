@@ -3,13 +3,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace vectordb {
 namespace engine {
 namespace meta {
 
-constexpr int32_t DEFAULT_VECTOR_DIMENSION = 0;
+constexpr size_t DEFAULT_VECTOR_DIMENSION = 0;
 constexpr const char* DEFAULT_MODEL_NAME = "sentence-transformers/paraphrase-albert-small-v2";
 
 using DateT = int;
@@ -33,6 +34,9 @@ enum class FieldType {
   VECTOR_FLOAT = 40,
   VECTOR_DOUBLE = 41,
 
+  SPARSE_VECTOR_FLOAT = 50,
+  SPARSE_VECTOR_DOUBLE = 51,
+
   UNKNOWN = 999,
 };
 
@@ -48,7 +52,7 @@ struct FieldSchema {
   std::string name_;
   bool is_primary_key_ = false;
   FieldType field_type_ = FieldType::INT4;
-  int32_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
+  size_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
   MetricType metric_type_ = MetricType::EUCLIDEAN;
 };
 
@@ -71,6 +75,27 @@ struct DatabaseSchema {
   std::string path_;  // path to the database catalog file
   std::vector<TableSchema> tables_;
 };
+
+static const std::unordered_map<std::string, FieldType> fieldTypeMap = {
+    {"TINYINT", FieldType::INT1},
+    {"SMALLINT", FieldType::INT2},
+    {"INT", FieldType::INT4},
+    {"BIGINT", FieldType::INT8},
+    {"FLOAT", FieldType::FLOAT},
+    {"DOUBLE", FieldType::DOUBLE},
+    {"STRING", FieldType::STRING},
+    {"BOOL", FieldType::BOOL},
+    {"JSON", FieldType::JSON},
+    {"VECTOR_FLOAT", FieldType::VECTOR_FLOAT},
+    {"VECTOR_DOUBLE", FieldType::VECTOR_DOUBLE},
+    {"SPARSE_VECTOR_FLOAT", FieldType::SPARSE_VECTOR_FLOAT},
+    {"SPARSE_VECTOR_DOUBLE", FieldType::SPARSE_VECTOR_DOUBLE},
+    {"UNKNOWN", FieldType::UNKNOWN}};
+
+static const std::unordered_map<std::string, MetricType> metricTypeMap = {
+    {"EUCLIDEAN", MetricType::EUCLIDEAN},
+    {"COSINE", MetricType::COSINE},
+    {"DOT_PRODUCT", MetricType::DOT_PRODUCT}};
 
 }  // namespace meta
 }  // namespace engine
