@@ -1706,3 +1706,107 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
     EXPECT_LE(queryResult.GetArrayElement(i).GetInt("ID"), 10) << "invalid entry returned";
   }
 }
+
+TEST(DbServer, InvalidSparseVector) {
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_invalid_sparse_vector");
+  vectordb::engine::DBServer database;
+  std::filesystem::remove_all(tempDir);
+  const auto dbName = "MyDb";
+  const auto tableName = "MyTable";
+  size_t queryDimension = 4;
+  database.LoadDB(dbName, tempDir, 150000, true);
+  size_t tableId = 0;
+
+  const std::string schema = R"_(
+{
+  "name": "MyTable",
+  "fields": [
+    {
+      "name": "ID",
+      "dataType": "INT",
+      "primaryKey": true
+    },
+    {
+      "name": "Doc",
+      "dataType": "STRING"
+    },
+    {
+      "name": "EmbeddingEuclidean",
+      "dataType": "SPARSE_VECTOR_FLOAT",
+      "dimensions": 4,
+      "metricType": "EUCLIDEAN"
+    }
+  ]
+}
+    )_";
+
+  const std::string records = R"_(
+[
+  {
+    "ID": 1,
+    "Doc": "len(indices) != len(values)",
+    "EmbeddingEuclidean": {
+        "indices": [0, 1, 2, 3],
+        "values": [0.05, 0.61, 0.76]
+    }
+  },
+  {
+    "ID": 2,
+    "Doc": "indices not increasing",
+    "EmbeddingEuclidean": {
+        "indices": [0, 1, 3, 3],
+        "values": [0.19, 0.81, 0.75, 0.11]
+    }
+  },
+  {
+    "ID": 3,
+    "Doc": "index value exceeds dimension",
+    "EmbeddingEuclidean": {
+        "indices": [0, 1, 2, 4],
+        "values": [0.36, 0.55, 0.47, 0.94]
+    }
+  },
+  {
+    "ID": 4,
+    "Doc": "negative index",
+    "EmbeddingEuclidean": {
+        "indices": [-1, 2, 3],
+        "values": [0.01, 0.85, 0.8]
+    }
+  },
+  {
+    "ID": 5,
+    "Doc": "ok",
+    "EmbeddingEuclidean": {
+        "indices": [0, 1, 2, 3],
+        "values": [0.24, 0.18, 0.22, 0.44]
+    }
+  }
+]
+    )_";
+
+  auto createTableStatus = database.CreateTable(dbName, schema, tableId);
+  EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
+  vectordb::Json recordsJson;
+  EXPECT_TRUE(recordsJson.LoadFromString(records));
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+  auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
+      vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
+
+  auto rebuildOptions = {false, true};
+  for (auto rebuild : rebuildOptions) {
+    if (rebuild) {
+      auto rebuildStatus = database.Rebuild();
+      EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
+    }
+    vectordb::Json result;
+    const auto limit = 6;
+    std::string expectedField = "EmbeddingEuclidean";
+    auto queryFields = std::vector<std::string>{"ID", "Doc", expectedField};
+    auto queryStatus = database.Search(dbName, tableName, expectedField, queryFields, queryDimension, queryDataPtr, limit, result, "", true);
+    EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
+    EXPECT_EQ(result.GetSize(), 1) << "invalid records should've been ignored";
+    EXPECT_EQ(result.GetArrayElement(0).GetInt("ID"), 5);
+  }
+}
