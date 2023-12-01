@@ -9,6 +9,7 @@
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
 #include "db/table_mvp.hpp"
+#include "db/vector.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
 
@@ -23,38 +24,37 @@ class DBServer {
 
   ~DBServer();
 
-  Status LoadDB(const std::string& db_name, std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled);
+  Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled);
   Status UnloadDB(const std::string& db_name);
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema, size_t& table_id);
+  Status CreateTable(const std::string& db_name, const std::string& table_schema_json, size_t& table_id);
   Status DropTable(const std::string& db_name, const std::string& table_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
   Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
   Status InsertPrepare(const std::string& db_name, const std::string& table_name, vectordb::Json& pks, vectordb::Json& result);
   Status Delete(
-    const std::string& db_name,
-    const std::string& table_name,
-    vectordb::Json& pkList,
-    const std::string& filter
-  );
+      const std::string& db_name,
+      const std::string& table_name,
+      vectordb::Json& pkList,
+      const std::string& filter);
   Status Search(
-    const std::string& db_name,
-    const std::string& table_name,
-    std::string& field_name,
-    std::vector<std::string>& query_fields,
-    int64_t query_dimension,
-    const float* query_data,
-    const int64_t limit,
-    vectordb::Json& result,
-    const std::string& filter,
-    bool with_distance
-  );
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& field_name,
+      std::vector<std::string>& query_fields,
+      int64_t query_dimension,
+      const VectorPtr query_data,
+      const int64_t limit,
+      vectordb::Json& result,
+      const std::string& filter,
+      bool with_distance);
 
   Status Project(
       const std::string& db_name,
       const std::string& table_name,
       std::vector<std::string>& query_fields,
-      vectordb::Json &primary_keys,
+      vectordb::Json& primary_keys,
       const std::string& filter,
       const int64_t skip,
       const int64_t limit,
@@ -87,6 +87,8 @@ class DBServer {
     }
   }
 
+  Status Rebuild();
+
  private:
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
@@ -107,8 +109,6 @@ class DBServer {
       std::this_thread::sleep_for(rebuild_interval);
     }
   };
-
-  Status Rebuild();
 
   std::atomic<bool> is_leader_;
 };

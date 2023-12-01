@@ -2,8 +2,13 @@ cmake_minimum_required(VERSION 3.10)
 project(vectordb)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# enable symbol flag for every build type
+# ref: https://stackoverflow.com/questions/55275743/cmake-build-types-release-debug-etc-compiler-flags
+set(CMAKE_CXX_FLAGS_INIT "-g")
 
+SET(CMAKE_COLOR_MAKEFILE ON)
+SET(CMAKE_VERBOSE_MAKEFILE ON)
 
 # get build time
 MACRO(GET_CURRENT_TIME CURRENT_TIME)
@@ -103,3 +108,35 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(vectordb_lib PUBLIC OpenMP::OpenMP_CXX)
     target_link_libraries(vectordb_dylib PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+FetchContent_MakeAvailable(googletest)
+include(GoogleTest)
+
+enable_testing()
+
+set(DB_TEST_FILES)
+
+# Add source files in the utils directory
+file(GLOB ENGINE_DB_TEST_FILES "test/engine/db/*.cpp")
+list(APPEND DB_TEST_FILES ${ENGINE_DB_TEST_FILES})
+
+add_executable(
+  vector_db_test
+  ${DB_TEST_FILES}
+)
+file(COPY test/engine/db/testdata DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/engine/db)
+
+target_link_libraries(
+  vector_db_test
+  GTest::gtest_main
+  vectordb_lib
+)
+
+gtest_discover_tests(vector_db_test)

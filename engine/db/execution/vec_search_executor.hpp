@@ -9,12 +9,14 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 #include "db/ann_graph_segment.hpp"
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
+#include "db/vector.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
 #include "utils/status.hpp"
@@ -32,12 +34,12 @@ class VecSearchExecutor {
   int64_t dimension_ = 0;
   int64_t start_search_point_ = 0;
 
-  int64_t* offset_table_;   // The offset table for neighbor list for each node.
-  int64_t* neighbor_list_;  // The neighbor list for each node consecutively stored.
-  float* vector_table_;     // The vector table for each node consecutively stored.
+  int64_t* offset_table_;           // The offset table for neighbor list for each node.
+  int64_t* neighbor_list_;          // The neighbor list for each node consecutively stored.
+  VectorColumnData vector_column_;  // The vector column for each node consecutively stored.
 
   // Distance calculation function
-  DISTFUNC<float> fstdistfunc_;
+  DistFunc fstdistfunc_;
   void* dist_func_param_;
 
   // Query parameters
@@ -62,8 +64,8 @@ class VecSearchExecutor {
       std::shared_ptr<ANNGraphSegment> ann_index,
       int64_t* offset_table,
       int64_t* neighbor_list,
-      float* vector_table,
-      DISTFUNC<float> fstdistfunc,
+      std::variant<DenseVectorColumnDataContainer, VariableLenAttrColumnContainer*> vector_column,
+      DistFunc fstdistfunc,
       void* dist_func_param,
       int num_threads,
       int64_t L_master,
@@ -119,7 +121,7 @@ class VecSearchExecutor {
   int64_t ExpandOneCandidate(
       const int worker_id,
       const int64_t cand_id,
-      const float* query_data,
+      const VectorPtr query_data,
       const float& dist_bound,
       // float& dist_thresh,
       std::vector<Candidate>& set_L,
@@ -147,7 +149,7 @@ class VecSearchExecutor {
       int64_t& last_k) const;
 
   void InitializeSetLPara(
-      const float* query_data,
+      const VectorPtr query_data,
       const int64_t L,
       std::vector<Candidate>& set_L,
       const int64_t set_L_start,
@@ -165,7 +167,7 @@ class VecSearchExecutor {
       const int64_t L) const;
 
   void SearchImpl(
-      const float* query_data,
+      const VectorPtr query_data,
       const int64_t K,
       const int64_t L,
       std::vector<Candidate>& set_L,
@@ -178,7 +180,7 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(
-      const float* query_data,
+      const VectorPtr query_data,
       const int64_t start,
       const int64_t end,
       const ConcurrentBitset& deleted,
@@ -186,7 +188,7 @@ class VecSearchExecutor {
       vectordb::engine::TableSegmentMVP* table_segment,
       const int root_node_index);
   Status Search(
-      const float* query_data,
+      const VectorPtr query_data,
       vectordb::engine::TableSegmentMVP* table_segment,
       const size_t limit,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
@@ -196,7 +198,7 @@ class VecSearchExecutor {
       vectordb::engine::TableSegmentMVP* table_segment,
       const size_t skip,
       const size_t limit,
-      vectordb::Json &primary_keys,
+      vectordb::Json& primary_keys,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
       int64_t& result_size);
 };  // Class VecSearchExecutor

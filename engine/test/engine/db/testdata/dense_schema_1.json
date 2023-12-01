@@ -1,0 +1,23 @@
+{
+    "name": "MyTable12",
+    "returnTableId": true,
+    "fields": [
+        {
+            "name": "ID2",
+            "dataType": "FLOAT"
+        },
+        {
+            "name": "Document",
+            "dataType": "STRING"
+        },
+        {
+            "name": "Embedding",
+            "dataType": "VECTOR_FLOAT",
+            "dimensions": 4
+        },
+        {
+            "name": "ID1",
+            "dataType": "BIGINT"
+        }
+    ]
+}

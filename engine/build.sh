@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Create build directory
 mkdir -p build
@@ -14,6 +15,17 @@ elif [[ "$(uname -s)" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"
 fi
 
-# Run cmake and make
-cmake ..
-make -j "${N_PROCESSOR}"
+# Build
+if [[ "$1" == "-d" ]]; then
+    echo "building in debug mode"
+    cmake -DCMAKE_BUILD_TYPE=Debug ..
+else
+    echo "building in release mode"
+    cmake -DCMAKE_BUILD_TYPE=Release ..
+fi
+
+cmake --build . --parallel "${N_PROCESSOR}"
+
+if [[ "$TEST" != "" ]]; then
+    ctest
+fi

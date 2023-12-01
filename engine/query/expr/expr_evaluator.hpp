@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "db/vector.hpp"
 #include "expr_types.hpp"
 
 namespace vectordb {
@@ -16,9 +17,9 @@ class ExprEvaluator {
       std::vector<ExprNodePtr>& nodes,
       std::unordered_map<std::string, size_t>& field_name_mem_offset_map,
       int64_t& primitive_offset_,
-      int64_t& string_num_,
+      int64_t& var_len_attr_num_,
       char* attribute_table_,
-      std::string* string_table_);
+      std::vector<engine::VariableLenAttrColumnContainer>& var_len_attr_table_);
 
   ~ExprEvaluator();
 
@@ -36,9 +37,9 @@ class ExprEvaluator {
   std::vector<ExprNodePtr>& nodes_;
   std::unordered_map<std::string, size_t>& field_name_mem_offset_map_;
   int64_t primitive_offset_;
-  int64_t string_num_;
+  int64_t var_len_attr_num_;
   char* attribute_table_;
-  std::string* string_table_;
+  std::vector<engine::VariableLenAttrColumnContainer>& var_len_attr_table_;
 };
 
 }  // namespace expr
