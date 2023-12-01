@@ -38,7 +38,9 @@ Status LoadFieldSchemaFromJson(const vectordb::Json& json, meta::FieldSchema& fi
   field_schema.field_type_ = static_cast<meta::FieldType>(json.GetInt(FIELD_TYPE));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
+      field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+      field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+      field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     field_schema.vector_dimension_ = json.GetInt(VECTOR_DIMENSION);
     field_schema.metric_type_ = static_cast<meta::MetricType>(json.GetInt(METRIC_TYPE));
   }
