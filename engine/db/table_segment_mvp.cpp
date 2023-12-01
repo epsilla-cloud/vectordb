@@ -210,11 +210,6 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       }
     }
 
-    var_len_attr_table_.resize(var_len_attr_num_);
-    for (auto& elem : var_len_attr_table_) {
-      elem.resize(size_limit_);
-    }
-
     // Read the string table
     // Loop order matters: on disk, the var-len attributes of whole entry is stored together
     for (auto recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
