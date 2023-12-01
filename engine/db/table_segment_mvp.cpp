@@ -236,7 +236,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
           }
           case meta::FieldType::SPARSE_VECTOR_DOUBLE:
           case meta::FieldType::SPARSE_VECTOR_FLOAT:
-            auto v = std::make_shared<SparseVector>(dataLen);
+            auto v = std::make_shared<SparseVector>(dataLen / sizeof(SparseVectorElement));
             file.read(reinterpret_cast<char*>(v->data()), dataLen);
             var_len_attr_table_[attrIdx][recordIdx] = std::move(v);
             break;
