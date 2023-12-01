@@ -74,16 +74,22 @@ class OracleL2 {
 
 float OracleL2::operator()(int p, int q) const {
   // std::cout << fstdistfunc_(m + p * dim, m + q * dim, dist_func_param_) << " ";
-  if (std::holds_alternative<DenseVectorPtr>(m)) {
-    return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(std::get<DenseVectorPtr>(m) + p * dim, std::get<DenseVectorPtr>(m) + q * dim, dist_func_param_);
+  if (std::holds_alternative<DenseVectorColumnDataContainer>(m)) {
+    return std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+        std::get<DenseVectorColumnDataContainer>(m) + p * dim,
+        std::get<DenseVectorColumnDataContainer>(m) + q * dim,
+        dist_func_param_);
   } else {
+    if (!std::holds_alternative<VariableLenAttrColumnContainer *>(m)) {
+      std::cout << "OMG, m doesn't hold VariableLenAttrColumnContainer" << std::endl;
+    }
     auto &v1 = std::get<VariableLenAttrColumnContainer *>(m)->at(p);
     auto &v2 = std::get<VariableLenAttrColumnContainer *>(m)->at(q);
-    if (v1.index() != 1) {
+    if (!std::holds_alternative<SparseVectorPtr>(v1)) {
       std::cout << "unexpected v1 index for element p: "
                 << " index=" << p << " variant_index=" << v1.index() << " valueless=" << v1.valueless_by_exception() << std::endl;
     }
-    if (v2.index() != 1) {
+    if (!std::holds_alternative<SparseVectorPtr>(v2)) {
       std::cout << "unexpected v1 index for element q: "
                 << " index=" << q << " variant_index=" << v2.index() << " valueless=" << v2.valueless_by_exception() << std::endl;
     }
