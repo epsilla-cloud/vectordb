@@ -459,8 +459,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   // Check if the records are valid.
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
-    // std::cout << "records: " << records.DumpToString() << std::endl;
-    // std::cout << "record: " << record.DumpToString() << std::endl;
     for (auto& field : table_schema.fields_) {
       if (!record.HasMember(field.name_)) {
         return Status(INVALID_RECORD, "Record " + std::to_string(i) + " missing field: " + field.name_);
@@ -468,14 +466,24 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       if ((field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
            field.field_type_ == meta::FieldType::VECTOR_DOUBLE) &&
           record.GetArraySize(field.name_) != field.vector_dimension_) {
-        return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension.");
+        return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension, expecting: " +
+                                          std::to_string(field.vector_dimension_) + " actual: " + std::to_string(record.GetArraySize(field.name_)));
       }
       if ((field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
            field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE)) {
         auto indices = record.GetObject(field.name_).GetArray(SparseVecObjIndicesKey);
         auto size = indices.GetSize();
-        if (indices.GetArrayElement(size - 1).GetInt() >= field.vector_dimension_) {
-          return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension.");
+        auto vecDim = size > 0 ? indices.GetArrayElement(size - 1).GetInt() : field.vector_dimension_;  // if size is 0, the vector is zero
+        if (vecDim >= field.vector_dimension_) {
+          return Status(INVALID_RECORD,
+                        "Record " + std::to_string(i) + " field " + field.name_ +
+                            " has wrong dimension, expecting: " + std::to_string(field.vector_dimension_) + " actual: " + std::to_string(vecDim));
+        }
+        for (int i = 0; i + 1 < indices.GetSize(); i++) {
+          if (indices.GetArrayElement(i).GetInt() >= indices.GetArrayElement(i + 1).GetInt()) {
+            return Status(INVALID_RECORD,
+                          "Record " + std::to_string(i) + " indices are not increasing");
+          }
         }
       }
     }

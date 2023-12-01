@@ -1683,7 +1683,7 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
   });
 
   // insert during rebuild
-  for (int i = numBatches / 2; i < numBatches; i++) {
+  for (int i = numBatches / 2; i < numBatches - 1; i++) {
     auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i]);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
@@ -1691,7 +1691,7 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
   // insert after rebuild is done
   {
     rebuildStatusFuture.wait();
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[3]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[numBatches - 1]);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
