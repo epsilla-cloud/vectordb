@@ -29,6 +29,7 @@ constexpr const int BruteforceThreshold = 512;
 
 class VecSearchExecutor {
  public:
+  size_t num_vectors_ = 0;                      // total number of indexed and non-indexed vectors
   std::shared_ptr<ANNGraphSegment> ann_index_;  // Holding a pointer to make sure it doesn't get released prematurely during rebuild.
   int64_t total_indexed_vector_ = 0;            // The total number of nodes in the graph. Vector table could have more nodes (passed in at search time).
   int64_t dimension_ = 0;

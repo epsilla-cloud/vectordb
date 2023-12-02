@@ -40,7 +40,8 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations)
-    : total_indexed_vector_(ntotal),
+    : num_vectors_(ntotal),
+      total_indexed_vector_(ann_index->record_number_),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
@@ -797,7 +798,7 @@ Status VecSearchExecutor::Search(
   } else {
     // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
     // create circular dependency)
-    auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
+    auto searchLimit = std::min({size_t(num_vectors_), limit, size_t(L_local_)});
     SearchImpl(
         query_data,
         searchLimit,
@@ -818,6 +819,7 @@ Status VecSearchExecutor::Search(
       auto bruteForceQueueSize = std::min({brute_force_queue_.size(), limit});
       size_t candidateNum;
       if (bruteForceQueueSize > 0) {
+        // brute force happened with non-empty result
         MergeTwoQueuesInto1stQueueSeqFixed(
             set_L_,
             master_queue_start,
