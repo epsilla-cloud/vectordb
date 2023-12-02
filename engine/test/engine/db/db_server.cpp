@@ -787,6 +787,276 @@ vectordb::Json objectArrayToJson(std::vector<vectordb::Json> c) {
   return result;
 }
 
+TEST(DbServer, InsertAndQueryDenseVectorDuringRebuild) {
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_query_dense_vector_during_rebuild");
+  vectordb::engine::DBServer database;
+  database.SetLeader(true);
+  std::filesystem::remove_all(tempDir);
+  size_t tableId = 0;
+  auto dbName = "MyDB";
+  vectordb::Json schemaObj;
+  const auto limit = 500;
+  const auto dimension = 2;
+  const auto numRecords = 10000;
+  vectordb::engine::DenseVectorElement queryData[] = {1.0, 0.0};
+  auto queryFields = std::vector<std::string>{"ID", "Vec"};
+  std::string fieldName = "Vec";
+  vectordb::Json queryResult;
+
+  std::string schema = R"_(
+{
+    "name": "InsertQueryDenseVectorDuringRebuild",
+    "returnTableId": true,
+    "fields": [
+        {
+            "name": "ID",
+            "dataType": "Int",
+            "primaryKey": true
+        },
+        {
+            "name": "Theta",
+            "dataType": "String"
+        },
+        {
+            "name": "Vec",
+            "dataType": "VECTOR_FLOAT",
+            "metricType": "COSINE",
+            "dimensions": 2
+        }
+    ]
+}
+  )_";
+  schemaObj.LoadFromString(schema);
+  auto tableName = schemaObj.GetString("name");
+
+  database.LoadDB(dbName, tempDir, numRecords, true);
+  auto createTableStatus = database.CreateTable(dbName, schema, tableId);
+  EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
+
+  auto records = std::vector<vectordb::Json>();
+  for (int i = 0; i < numRecords; i++) {
+    vectordb::Json item, vec;
+    vec.LoadFromString("[]");
+    auto x = std::cos(M_PI / numRecords * i);
+    auto y = std::sin(M_PI / numRecords * i);
+    vec.AddDoubleToArray(x);
+    vec.AddDoubleToArray(y);
+    item.LoadFromString("{}");
+    item.SetInt("ID", i);
+    item.SetObject("Vec", vec);
+    item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + " * PI");
+    records.push_back(item);
+  }
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(records.begin(), records.end(), g);
+  bool shouldStop = false;
+
+  // start consistent rebuild asynchronously, and return if rebuild fails
+  auto rebuildStatusFuture = std::async([&database, &shouldStop]() {
+    vectordb::Status status;
+    while (!shouldStop) {
+      status = database.Rebuild();
+      if (!status.ok()) {
+        return status;
+      }
+    }
+    std::cout << "rebuild stopped" << std::endl;
+    return status;
+  });
+
+  auto insertStatusFuture = std::async([&database, &records, &dbName, &tableName]() {
+    vectordb::Status status;
+    size_t inserted = 0;
+    for (const auto &r : records) {
+      vectordb::Json list;
+      list.LoadFromString("[]");
+      list.AddObjectToArray(r);
+      status = database.Insert(dbName, tableName, list);
+      if (!status.ok()) {
+        return status;
+      }
+      inserted += 1;
+      if (inserted % 100 == 0) {
+        std::cout << "inserted: " << inserted << " / " << records.size() << " records" << std::endl;
+      }
+      // add some latency between each insert so that it doesn't finish too soon
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::cout << "insert stopped" << std::endl;
+    return status;
+  });
+
+  auto queryStatusFuture = std::async([&database, &records, &dbName, &tableName, &fieldName, &queryFields, &queryData, &queryResult, &shouldStop]() {
+    vectordb::Status status;
+    while (!shouldStop) {
+      for (const auto &r : records) {
+        if (shouldStop) {
+          return status;
+        }
+        vectordb::Json list;
+        list.LoadFromString("[]");
+        list.AddObjectToArray(r);
+        status = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+        if (!status.ok()) {
+          return status;
+        }
+      }
+    }
+    std::cout << "query stopped" << std::endl;
+    return status;
+  });
+
+  insertStatusFuture.wait();
+  EXPECT_TRUE(insertStatusFuture.get().ok()) << "insert should succeed" << insertStatusFuture.get().message();
+  EXPECT_NE(queryStatusFuture.wait_for(std::chrono::seconds(0)), std::future_status::ready) << "rebuild should've been successful"
+                                                                                            << queryStatusFuture.get().message();
+  EXPECT_NE(rebuildStatusFuture.wait_for(std::chrono::seconds(0)), std::future_status::ready) << "queries should've been successful"
+                                                                                              << rebuildStatusFuture.get().message();
+  shouldStop = true;
+  // cleanup
+  queryStatusFuture.wait();
+  rebuildStatusFuture.wait();
+}
+
+TEST(DbServer, InsertAndQuerySparseVectorDuringRebuild) {
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("InsertAndQuerySparseVectorDuringRebuild");
+  vectordb::engine::DBServer database;
+  database.SetLeader(true);
+  std::filesystem::remove_all(tempDir);
+  size_t tableId = 0;
+  auto dbName = "MyDB";
+  vectordb::Json schemaObj;
+  const auto limit = 500;
+  const auto dimension = 2;
+  const auto numRecords = 10000;
+  vectordb::engine::SparseVectorPtr queryData = std::make_shared<vectordb::engine::SparseVector>(vectordb::engine::SparseVector{{0, 1}, {1, 0}});
+  auto queryFields = std::vector<std::string>{"ID", "Vec"};
+  std::string fieldName = "Vec";
+  vectordb::Json queryResult;
+
+  std::string schema = R"_(
+{
+    "name": "InsertAndQuerySparseVectorDuringRebuild",
+    "returnTableId": true,
+    "fields": [
+        {
+            "name": "ID",
+            "dataType": "Int",
+            "primaryKey": true
+        },
+        {
+            "name": "Theta",
+            "dataType": "String"
+        },
+        {
+            "name": "Vec",
+            "dataType": "SPARSE_VECTOR_FLOAT",
+            "metricType": "COSINE",
+            "dimensions": 2
+        }
+    ]
+}
+  )_";
+  schemaObj.LoadFromString(schema);
+  auto tableName = schemaObj.GetString("name");
+
+  database.LoadDB(dbName, tempDir, numRecords, true);
+  auto createTableStatus = database.CreateTable(dbName, schema, tableId);
+  EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
+
+  auto records = std::vector<vectordb::Json>();
+  for (int i = 0; i < numRecords; i++) {
+    vectordb::Json item, vec, indices, values;
+    indices.LoadFromString("[0, 1]");
+    values.LoadFromString("[]");
+    vec.LoadFromString("{}");
+    auto x = std::cos(M_PI / numRecords * i);
+    auto y = std::sin(M_PI / numRecords * i);
+    values.AddDoubleToArray(x);
+    values.AddDoubleToArray(y);
+    vec.SetObject("indices", indices);
+    vec.SetObject("values", values);
+    item.LoadFromString("{}");
+    item.SetInt("ID", i);
+    item.SetObject("Vec", vec);
+    item.SetString("Theta", std::to_string(i) + "/" + std::to_string(numRecords) + " * PI");
+    records.push_back(item);
+  }
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(records.begin(), records.end(), g);
+  bool shouldStop = false;
+
+  // start consistent rebuild asynchronously, and return if rebuild fails
+  auto rebuildStatusFuture = std::async([&database, &shouldStop]() {
+    vectordb::Status status;
+    while (!shouldStop) {
+      status = database.Rebuild();
+      if (!status.ok()) {
+        return status;
+      }
+    }
+    std::cout << "rebuild stopped" << std::endl;
+    return status;
+  });
+
+  auto insertStatusFuture = std::async([&database, &records, &dbName, &tableName]() {
+    vectordb::Status status;
+    size_t inserted = 0;
+    for (const auto &r : records) {
+      vectordb::Json list;
+      list.LoadFromString("[]");
+      list.AddObjectToArray(r);
+      status = database.Insert(dbName, tableName, list);
+      if (!status.ok()) {
+        return status;
+      }
+      inserted += 1;
+      if (inserted % 100 == 0) {
+        std::cout << "inserted: " << inserted << " / " << records.size() << " records" << std::endl;
+      }
+      // add some latency between each insert so that it doesn't finish too soon
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::cout << "insert stopped" << std::endl;
+    return status;
+  });
+
+  auto queryStatusFuture = std::async([&database, &records, &dbName, &tableName, &fieldName, &queryFields, &queryData, &queryResult, &shouldStop]() {
+    vectordb::Status status;
+    while (!shouldStop) {
+      for (const auto &r : records) {
+        if (shouldStop) {
+          break;
+        }
+        vectordb::Json list;
+        list.LoadFromString("[]");
+        list.AddObjectToArray(r);
+        status = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+        if (!status.ok()) {
+          return status;
+        }
+      }
+    }
+    std::cout << "query stopped" << std::endl;
+    return status;
+  });
+
+  insertStatusFuture.wait();
+  EXPECT_TRUE(insertStatusFuture.get().ok()) << "insert should succeed" << insertStatusFuture.get().message();
+  EXPECT_NE(queryStatusFuture.wait_for(std::chrono::seconds(0)), std::future_status::ready) << "rebuild should've been successful"
+                                                                                            << queryStatusFuture.get().message();
+  EXPECT_NE(rebuildStatusFuture.wait_for(std::chrono::seconds(0)), std::future_status::ready) << "queries should've been successful"
+                                                                                              << rebuildStatusFuture.get().message();
+  shouldStop = true;
+  // cleanup
+  queryStatusFuture.wait();
+  rebuildStatusFuture.wait();
+  EXPECT_TRUE(queryStatusFuture.get().ok()) << "query should succeed" << insertStatusFuture.get().message();
+  EXPECT_TRUE(rebuildStatusFuture.get().ok()) << "rebuild should succeed" << insertStatusFuture.get().message();
+}
+
 TEST(DbServer, QueryDenseVectorDuringRebuild) {
   std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_query_dense_vector_during_rebuild");
   vectordb::engine::DBServer database;

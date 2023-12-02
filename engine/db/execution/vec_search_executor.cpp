@@ -389,7 +389,7 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
     const int64_t local_queue_start,
     int64_t &local_queue_size,
     const int64_t &local_queue_capacity,
-    boost::dynamic_bitset<> &is_visited,
+    std::vector<bool> &is_visited,
     uint64_t &local_count_computation) {
   uint64_t tmp_count_computation = 0;
 
@@ -448,7 +448,7 @@ void VecSearchExecutor::InitializeSetLPara(
     const int64_t set_L_start,
     int64_t &set_L_size,
     const std::vector<int64_t> &init_ids,
-    boost::dynamic_bitset<> &is_visited) {
+    std::vector<bool> &is_visited) {
   // #pragma omp parallel for
   for (int64_t c_i = 0; c_i < L; ++c_i) {
     is_visited[init_ids[c_i]] = true;
@@ -485,7 +485,7 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
-  boost::dynamic_bitset<> is_selected(total_indexed_vector_);
+  std::vector<bool> is_selected(total_indexed_vector_);
   int64_t init_ids_end = 0;
   for (
       int64_t e_i = offset_table_[start_search_point_];
@@ -523,7 +523,7 @@ void VecSearchExecutor::SearchImpl(
     const int64_t local_queue_capacity,  // Maximum size of local queue
     const std::vector<int64_t> &local_queues_starts,
     std::vector<int64_t> &local_queues_sizes,  // Sizes of local queue
-    boost::dynamic_bitset<> &is_visited,
+    std::vector<bool> &is_visited,
     const int64_t subsearch_iterations) {
   // Set thread parallel.
   omp_set_num_threads(num_threads_);
@@ -707,7 +707,8 @@ void VecSearchExecutor::SearchImpl(
   // std::cout << std::endl;
 
   {  // Reset
-    is_visited.reset();
+    is_visited.clear();
+    is_visited.resize(total_indexed_vector_);
   }
 }
 
