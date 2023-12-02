@@ -20,7 +20,7 @@ TEST(SparseVector, GetCosineDist) {
     auto x = std::cos(theta) * (step + 1);
     auto y = std::sin(theta) * (step + 1);
     SparseVector v2 = {{0, x}, {1, y}};
-    EXPECT_FLOAT_EQ(GetCosineDist(v1, v2), -std::cos(theta));
+    EXPECT_FLOAT_EQ(GetCosineDist(v1, v2), 1 - std::cos(theta));
   }
 }
 

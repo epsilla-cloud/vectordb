@@ -43,7 +43,7 @@ float GetCosineDist(const SparseVector &v1, const SparseVector &v2) {
       i1++;
     }
   }
-  return -dot_prod / std::sqrt(v1_prod * v2_prod);
+  return 1 - dot_prod / std::sqrt(v1_prod * v2_prod);
 }
 void Normalize(SparseVector &v) {
   float sum = 0;
