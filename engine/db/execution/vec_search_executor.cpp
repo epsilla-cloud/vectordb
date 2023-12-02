@@ -27,7 +27,6 @@ int64_t GetIndexMean(const std::vector<int64_t> &ids) {
 }  // namespace
 
 VecSearchExecutor::VecSearchExecutor(
-    const int64_t ntotal,
     const int64_t dimension,
     const int64_t start_search_point,
     std::shared_ptr<ANNGraphSegment> ann_index,
@@ -40,8 +39,7 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations)
-    : num_vectors_(ntotal),
-      total_indexed_vector_(ann_index->record_number_),
+    : total_indexed_vector_(ann_index->record_number_),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
@@ -56,11 +54,11 @@ VecSearchExecutor::VecSearchExecutor(
       search_result_(L_master),
       distance_(L_master),
       init_ids_(L_master),
-      is_visited_(ntotal),
+      is_visited_(ann_index->record_number_),
       set_L_((num_threads - 1) * L_local + L_master),
       local_queues_sizes_(num_threads, 0),
       local_queues_starts_(num_threads),
-      brute_force_search_(ntotal < BruteforceThreshold),
+      brute_force_search_(ann_index->record_number_ < BruteforceThreshold),
       brute_force_queue_(BruteforceThreshold) {
   ann_index_ = ann_index;
   for (int q_i = 0; q_i < num_threads; ++q_i) {
@@ -798,7 +796,7 @@ Status VecSearchExecutor::Search(
   } else {
     // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
     // create circular dependency)
-    auto searchLimit = std::min({size_t(num_vectors_), limit, size_t(L_local_)});
+    auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
     SearchImpl(
         query_data,
         searchLimit,
