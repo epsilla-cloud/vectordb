@@ -13,9 +13,9 @@ InnerProduct(const void *pVect1, const void *pVect2, const void *qty_ptr) {
     for (unsigned i = 0; i < qty; i++) {
         res += ((float *) pVect1)[i] * ((float *) pVect2)[i];
     }
-    return (1.0f - res);
+    return -res;
 #else
-  return (1.0f - vectordb::fvec_inner_product((const float *)pVect1, (const float *)pVect2, *((size_t *)qty_ptr)));
+  return -vectordb::fvec_inner_product((const float *)pVect1, (const float *)pVect2, *((size_t *)qty_ptr));
 #endif
 }
 
@@ -67,7 +67,7 @@ InnerProductSIMD4Ext(const void *pVect1v, const void *pVect2v, const void *qty_p
 
     _mm_store_ps(TmpRes, sum_prod);
     float sum = TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];;
-    return 1.0f - sum;
+    return -sum;
 }
 
 #elif defined(USE_SSE)
@@ -125,7 +125,7 @@ InnerProductSIMD4Ext(const void *pVect1v, const void *pVect2v, const void *qty_p
     _mm_store_ps(TmpRes, sum_prod);
     float sum = TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];
 
-    return 1.0f - sum;
+    return -sum;
 }
 
 #endif
@@ -165,7 +165,7 @@ InnerProductSIMD16Ext(const void *pVect1v, const void *pVect2v, const void *qty_
     _mm256_store_ps(TmpRes, sum256);
     float sum = TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3] + TmpRes[4] + TmpRes[5] + TmpRes[6] + TmpRes[7];
 
-    return 1.0f - sum;
+    return -sum;
 }
 
 #elif defined(USE_SSE)
@@ -212,7 +212,7 @@ InnerProductSIMD16Ext(const void *pVect1v, const void *pVect2v, const void *qty_
     _mm_store_ps(TmpRes, sum_prod);
     float sum = TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];
 
-    return 1.0f - sum;
+    return -sum;
 }
 
 #endif
