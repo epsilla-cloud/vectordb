@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <boost/dynamic_bitset.hpp>
 #include <cfloat>
 #include <cstring>
 #include <fstream>
@@ -50,7 +49,7 @@ class VecSearchExecutor {
   std::vector<int64_t> search_result_;
   std::vector<double> distance_;
   std::vector<int64_t> init_ids_;
-  boost::dynamic_bitset<> is_visited_;
+  std::vector<bool> is_visited_;
   std::vector<Candidate> set_L_;
   std::vector<int64_t> local_queues_sizes_;
   std::vector<int64_t> local_queues_starts_;
@@ -58,7 +57,6 @@ class VecSearchExecutor {
   std::vector<Candidate> brute_force_queue_;
 
   VecSearchExecutor(
-      const int64_t ntotal,
       const int64_t dimension,
       const int64_t start_search_point,
       std::shared_ptr<ANNGraphSegment> ann_index,
@@ -128,7 +126,7 @@ class VecSearchExecutor {
       const int64_t local_queue_start,
       int64_t& local_queue_size,
       const int64_t& local_queue_capacity,
-      boost::dynamic_bitset<>& is_visited,
+      std::vector<bool>& is_visited,
       uint64_t& local_count_computation);
 
   int64_t PickTopMToWorkers(
@@ -155,7 +153,7 @@ class VecSearchExecutor {
       const int64_t set_L_start,
       int64_t& set_L_size,
       const std::vector<int64_t>& init_ids,
-      boost::dynamic_bitset<>& is_visited);
+      std::vector<bool>& is_visited);
 
  public:
   //   uint64_t count_distance_computation_ = 0;
@@ -176,7 +174,7 @@ class VecSearchExecutor {
       const int64_t local_queue_capacity,
       const std::vector<int64_t>& local_queues_starts,
       std::vector<int64_t>& local_queues_sizes,
-      boost::dynamic_bitset<>& is_visited,
+      std::vector<bool>& is_visited,
       const int64_t index_threshold);
 
   bool BruteForceSearch(

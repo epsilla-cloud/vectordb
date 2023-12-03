@@ -631,11 +631,11 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   if (skipped_entry > 0) {
     msg += "skipped " +
            std::to_string(skipped_entry) + " records with primary key values that already exist.";
+    std::cerr << msg << std::endl;
   }
   if (skipped_entry == new_record_size) {
     statusCode = INVALID_RECORD;
   }
-  std::cerr << msg << std::endl;
   return Status(statusCode, msg);
 }
 
