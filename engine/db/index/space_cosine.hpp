@@ -12,7 +12,7 @@ Cosine(const void* pVect1, const void* pVect2, const void* qty_ptr) {
 
 static float
 CosineDistance(const void* pVect1, const void* pVect2, const void* qty_ptr) {
-  return -1.0f * Cosine(pVect1, pVect2, qty_ptr);
+  return 1 - 1.0f * Cosine(pVect1, pVect2, qty_ptr);
 }
 
 class CosineSpace : public SpaceInterface<float> {

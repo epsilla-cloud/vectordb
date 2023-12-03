@@ -63,7 +63,6 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
       for (int executorIdx = 0; executorIdx < NumExecutorPerField;
            executorIdx++) {
         pool->release(std::make_shared<execution::VecSearchExecutor>(
-            ann_graph_segment_.back()->record_number_,
             table_schema_.fields_[i].vector_dimension_,
             ann_graph_segment_.back()->navigation_point_,
             ann_graph_segment_.back(), ann_graph_segment_.back()->offset_table_,
@@ -170,7 +169,6 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       for (int executorIdx = 0; executorIdx < NumExecutorPerField;
            executorIdx++) {
         pool->release(std::make_shared<execution::VecSearchExecutor>(
-            table_segment_->record_number_,
             table_schema_.fields_[i].vector_dimension_,
             ann_graph_segment_[index]->navigation_point_,
             ann_graph_segment_[index],
