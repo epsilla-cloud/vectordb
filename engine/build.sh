@@ -15,6 +15,7 @@ elif [[ "$(uname -s)" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"
 fi
 
+
 # Build
 if [[ "$1" == "-d" ]]; then
     echo "building in debug mode"
