@@ -5,7 +5,7 @@ namespace vectordb {
 namespace engine {
 
 float GetInnerProductDist(const SparseVector &v1, const SparseVector &v2) {
-  return 1.0f - GetInnerProduct(v1, v2);
+  return -GetInnerProduct(v1, v2);
 }
 
 float GetInnerProduct(const SparseVector &v1, const SparseVector &v2) {
