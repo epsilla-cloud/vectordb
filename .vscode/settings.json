@@ -96,7 +96,13 @@
     "any": "cpp",
     "ranges": "cpp",
     "forward_list": "cpp",
-    "valarray": "cpp"
+    "valarray": "cpp",
+    "strstream": "cpp",
+    "codecvt": "cpp",
+    "numbers": "cpp",
+    "semaphore": "cpp",
+    "cfenv": "cpp",
+    "typeindex": "cpp"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, IndentWidth: 2, ColumnLimit: 0}"

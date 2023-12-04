@@ -27,25 +27,24 @@ int64_t GetIndexMean(const std::vector<int64_t> &ids) {
 }  // namespace
 
 VecSearchExecutor::VecSearchExecutor(
-    const int64_t ntotal,
     const int64_t dimension,
     const int64_t start_search_point,
     std::shared_ptr<ANNGraphSegment> ann_index,
     int64_t *offset_table,
     int64_t *neighbor_list,
-    float *vector_table,
-    DISTFUNC<float> fstdistfunc,
+    std::variant<DenseVectorColumnDataContainer, VariableLenAttrColumnContainer *> vector_column,
+    DistFunc fstdistfunc,
     void *dist_func_param,
     int num_threads,
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations)
-    : total_indexed_vector_(ntotal),
+    : total_indexed_vector_(ann_index->record_number_),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
       neighbor_list_(neighbor_list),
-      vector_table_(vector_table),
+      vector_column_(vector_column),
       fstdistfunc_(fstdistfunc),
       dist_func_param_(dist_func_param),
       num_threads_(num_threads),
@@ -55,11 +54,11 @@ VecSearchExecutor::VecSearchExecutor(
       search_result_(L_master),
       distance_(L_master),
       init_ids_(L_master),
-      is_visited_(ntotal),
+      is_visited_(ann_index->record_number_),
       set_L_((num_threads - 1) * L_local + L_master),
       local_queues_sizes_(num_threads, 0),
       local_queues_starts_(num_threads),
-      brute_force_search_(ntotal < BruteforceThreshold),
+      brute_force_search_(ann_index->record_number_ < BruteforceThreshold),
       brute_force_queue_(BruteforceThreshold) {
   ann_index_ = ann_index;
   for (int q_i = 0; q_i < num_threads; ++q_i) {
@@ -383,14 +382,14 @@ void VecSearchExecutor::PickTopMUnchecked(
 int64_t VecSearchExecutor::ExpandOneCandidate(
     const int worker_id,
     const int64_t cand_id,
-    const float *query_data,
+    const VectorPtr query_data,
     const float &dist_bound,
     // float &dist_thresh,
     std::vector<Candidate> &set_L,
     const int64_t local_queue_start,
     int64_t &local_queue_size,
     const int64_t &local_queue_capacity,
-    boost::dynamic_bitset<> &is_visited,
+    std::vector<bool> &is_visited,
     uint64_t &local_count_computation) {
   uint64_t tmp_count_computation = 0;
 
@@ -406,7 +405,20 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
     }
 
     ++tmp_count_computation;
-    float dist = fstdistfunc_(vector_table_ + dimension_ * nb_id, query_data, dist_func_param_);
+    float dist;
+    if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
+      dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+          std::get<DenseVectorPtr>(vector_column_) + dimension_ * nb_id,
+          std::get<DenseVectorPtr>(query_data),
+          dist_func_param_);
+    } else {
+      // it holds sparse vector
+      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(nb_id);
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
+          *std::get<SparseVectorPtr>(vecData),
+          *std::get<SparseVectorPtr>(query_data));
+    }
+
     if (dist > dist_bound) {
       // if (dist > dist_bound || dist > dist_thresh) {
       continue;
@@ -430,13 +442,13 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 }
 
 void VecSearchExecutor::InitializeSetLPara(
-    const float *query_data,
+    const VectorPtr query_data,
     const int64_t L,
     std::vector<Candidate> &set_L,
     const int64_t set_L_start,
     int64_t &set_L_size,
     const std::vector<int64_t> &init_ids,
-    boost::dynamic_bitset<> &is_visited) {
+    std::vector<bool> &is_visited) {
   // #pragma omp parallel for
   for (int64_t c_i = 0; c_i < L; ++c_i) {
     is_visited[init_ids[c_i]] = true;
@@ -448,7 +460,18 @@ void VecSearchExecutor::InitializeSetLPara(
   for (int64_t i = 0; i < L; i++) {
     int64_t v_id = init_ids[i];
     ++tmp_count_computation;
-    float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
+
+    float dist;
+    if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
+      dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+          std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+          std::get<DenseVectorPtr>(query_data),
+          dist_func_param_);
+    } else {
+      // it holds sparse vector
+      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+      dist = std::get<SparseVecDistFunc>(fstdistfunc_)(*std::get<SparseVectorPtr>(vecData), *std::get<SparseVectorPtr>(query_data));
+    }
     set_L[set_L_start + i] = Candidate(v_id, dist, false);  // False means not checked.
   }
   // count_distance_computation_ += tmp_count_computation;
@@ -462,7 +485,7 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
-  boost::dynamic_bitset<> is_selected(total_indexed_vector_);
+  std::vector<bool> is_selected(total_indexed_vector_);
   int64_t init_ids_end = 0;
   for (
       int64_t e_i = offset_table_[start_search_point_];
@@ -491,7 +514,7 @@ void VecSearchExecutor::PrepareInitIds(
 }
 
 void VecSearchExecutor::SearchImpl(
-    const float *query_data,
+    const VectorPtr query_data,
     const int64_t K,
     const int64_t L,
     std::vector<Candidate> &set_L,
@@ -500,7 +523,7 @@ void VecSearchExecutor::SearchImpl(
     const int64_t local_queue_capacity,  // Maximum size of local queue
     const std::vector<int64_t> &local_queues_starts,
     std::vector<int64_t> &local_queues_sizes,  // Sizes of local queue
-    boost::dynamic_bitset<> &is_visited,
+    std::vector<bool> &is_visited,
     const int64_t subsearch_iterations) {
   // Set thread parallel.
   omp_set_num_threads(num_threads_);
@@ -684,12 +707,13 @@ void VecSearchExecutor::SearchImpl(
   // std::cout << std::endl;
 
   {  // Reset
-    is_visited.reset();
+    is_visited.clear();
+    is_visited.resize(total_indexed_vector_);
   }
 }
 
 bool VecSearchExecutor::BruteForceSearch(
-    const float *query_data,
+    const VectorPtr query_data,
     const int64_t start,
     const int64_t end,
     const ConcurrentBitset &deleted,
@@ -699,10 +723,25 @@ bool VecSearchExecutor::BruteForceSearch(
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
+  float dist;
+  if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
 #pragma omp parallel for
-  for (int64_t v_id = start; v_id < end; ++v_id) {
-    float dist = fstdistfunc_(vector_table_ + dimension_ * v_id, query_data, dist_func_param_);
-    brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+    for (int64_t v_id = start; v_id < end; ++v_id) {
+      float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+          std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+          std::get<DenseVectorPtr>(query_data),
+          dist_func_param_);
+      brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+    }
+  } else {
+#pragma omp parallel for
+    for (int64_t v_id = start; v_id < end; ++v_id) {
+      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+      float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
+          *std::get<SparseVectorPtr>(vecData),
+          *std::get<SparseVectorPtr>(query_data));
+      brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+    }
   }
 
   // compacting the result with 2 pointers by removing the deleted entries
@@ -727,7 +766,7 @@ bool VecSearchExecutor::BruteForceSearch(
 }
 
 Status VecSearchExecutor::Search(
-    const float *query_data,
+    const VectorPtr query_data,
     vectordb::engine::TableSegmentMVP *table_segment,
     const size_t limit,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
@@ -738,9 +777,9 @@ Status VecSearchExecutor::Search(
       filter_nodes,
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
-      table_segment->string_num_,
+      table_segment->var_len_attr_num_,
       table_segment->attribute_table_,
-      table_segment->string_table_);
+      table_segment->var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
   // TODO: support larger search results
@@ -779,6 +818,7 @@ Status VecSearchExecutor::Search(
       auto bruteForceQueueSize = std::min({brute_force_queue_.size(), limit});
       size_t candidateNum;
       if (bruteForceQueueSize > 0) {
+        // brute force happened with non-empty result
         MergeTwoQueuesInto1stQueueSeqFixed(
             set_L_,
             master_queue_start,
@@ -821,12 +861,12 @@ Status VecSearchExecutor::Search(
 }
 
 Status VecSearchExecutor::SearchByAttribute(
-    vectordb::engine::TableSegmentMVP* table_segment,
+    vectordb::engine::TableSegmentMVP *table_segment,
     const size_t skip,
     const size_t raw_limit,
     vectordb::Json &primary_keys,
-    std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
-    int64_t& result_size) {
+    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+    int64_t &result_size) {
   // TODO: leverage multithread to accelerate
   int64_t counter = -1;
   int64_t total_vector = table_segment->record_number_;
@@ -835,9 +875,9 @@ Status VecSearchExecutor::SearchByAttribute(
       filter_nodes,
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
-      table_segment->string_num_,
+      table_segment->var_len_attr_num_,
       table_segment->attribute_table_,
-      table_segment->string_table_);
+      table_segment->var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
   result_size = 0;
   int64_t limit = raw_limit;

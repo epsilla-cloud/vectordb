@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 namespace vectordb {
 namespace query {
@@ -13,18 +14,17 @@ ExprEvaluator::ExprEvaluator(
     int64_t& primitive_offset,
     int64_t& string_num,
     char* attribute_table,
-    std::string* string_table)
+    std::vector<engine::VariableLenAttrColumnContainer>& var_len_attr_table_)
     : nodes_(nodes),
       field_name_mem_offset_map_(field_name_mem_offset_map),
       primitive_offset_(primitive_offset),
-      string_num_(string_num),
+      var_len_attr_num_(string_num),
       attribute_table_(attribute_table),
-      string_table_(string_table) {
+      var_len_attr_table_(var_len_attr_table_) {
 }
 
 std::string ExprEvaluator::GetStrFieldValue(const std::string& field_name, const int64_t& cand_ind) {
-  auto offset = field_name_mem_offset_map_[field_name] + cand_ind * string_num_;
-  return string_table_[offset];
+  return std::get<std::string>(var_len_attr_table_[field_name_mem_offset_map_[field_name]][cand_ind]);
 }
 
 bool ExprEvaluator::GetBoolFieldValue(const std::string& field_name, const int64_t& cand_ind) {

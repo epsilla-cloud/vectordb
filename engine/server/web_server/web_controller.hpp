@@ -14,6 +14,7 @@
 #include "db/db_mvp.hpp"
 #include "db/db_server.hpp"
 #include "db/table_mvp.hpp"
+#include "db/vector.hpp"
 #include "server/web_server/dto/db_dto.hpp"
 #include "server/web_server/dto/status_dto.hpp"
 #include "server/web_server/handler/web_request_handler.hpp"
@@ -190,7 +191,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
       if (body_field.HasMember("dataType")) {
         std::string d_type;
-        field.field_type_ = WebUtil::GetFieldType(d_type.assign(body_field.GetString("dataType")));
+        field.field_type_ = engine::meta::GetFieldType(d_type.assign(body_field.GetString("dataType")));
       }
       if (
           field.field_type_ == vectordb::engine::meta::FieldType::VECTOR_DOUBLE ||
@@ -206,7 +207,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
       if (body_field.HasMember("metricType")) {
         std::string m_type;
-        field.metric_type_ = WebUtil::GetMetricType(m_type.assign(body_field.GetString("metricType")));
+        field.metric_type_ = engine::meta::GetMetricType(m_type.assign(body_field.GetString("metricType")));
         if (field.metric_type_ == vectordb::engine::meta::MetricType::UNKNOWN) {
           dto->statusCode = Status::CODE_400.code;
           dto->message = "invalid metric type: " + body_field.GetString("metricType");
@@ -535,27 +536,6 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     std::string table_name = parsedBody.GetString("table");
 
-    // vectordb::engine::meta::DatabaseSchema db_schema;
-    // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
-    // if (!db_status.ok()) {
-    //     status_dto->statusCode = Status::CODE_500.code;
-    //     status_dto->message = db_status.message();
-    //     return createDtoResponse(Status::CODE_500, status_dto);
-    // }
-
-    // vectordb::engine::meta::TableSchema table_schema;
-    // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
-    // if (!table_status.ok()) {
-    //     status_dto->statusCode = Status::CODE_500.code;
-    //     status_dto->message = table_status.message();
-    //     return createDtoResponse(Status::CODE_500, status_dto);
-    // }
-
-    // std::cout << db_schema.path_ << std::endl;
-    // // std::shared_ptr<vectordb::engine::TableMVP> table =
-    // //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
-    // auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
-    // auto table = db->GetTable(table_name);
     std::string field_name = parsedBody.GetString("queryField");
 
     std::vector<std::string> query_fields;
@@ -567,11 +547,45 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
-    size_t vector_size = parsedBody.GetArraySize("queryVector");
-    float query_vector[vector_size];
-    for (size_t i = 0; i < vector_size; i++) {
-      auto vector = parsedBody.GetArrayElement("queryVector", i);
-      query_vector[i] = (float)vector.GetDouble();
+    engine::VectorPtr query;
+    size_t dense_vector_size = 0;  // used by dense vector only
+    std::vector<engine::DenseVectorElement> denseQueryVec;
+    auto querySparseVecPtr = std::make_shared<engine::SparseVector>();
+    auto queryVecJson = parsedBody.Get("queryVector");
+    if (queryVecJson.IsArray()) {
+      dense_vector_size = queryVecJson.GetSize();
+      denseQueryVec.resize(dense_vector_size);
+      for (size_t i = 0; i < dense_vector_size; i++) {
+        auto elem = queryVecJson.GetArrayElement(i);
+        denseQueryVec[i] = static_cast<engine::DenseVectorElement>(elem.GetDouble());
+      }
+      query = denseQueryVec.data();
+    } else if (queryVecJson.IsObject()) {
+      if (!queryVecJson.HasMember("indices")) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "missing indices field for sparse vector";
+        return createDtoResponse(Status::CODE_400, status_dto);
+      }
+      if (!queryVecJson.HasMember("values")) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "missing values field for sparse vector";
+        return createDtoResponse(Status::CODE_400, status_dto);
+      }
+      auto numIdxElem = queryVecJson.GetArray("indices").GetSize();
+      auto numValElem = queryVecJson.GetArray("values").GetSize();
+      if (numIdxElem != numValElem) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "sparse vector indices and values array are of different sizes.";
+        return createDtoResponse(Status::CODE_400, status_dto);
+      }
+      querySparseVecPtr->resize(numIdxElem);
+      for (size_t i = 0; i < numIdxElem; i++) {
+        auto idx = queryVecJson.GetArrayElement("indices", i);
+        querySparseVecPtr->at(i).index = idx.GetInt();
+        auto val = queryVecJson.GetArrayElement("values", i);
+        querySparseVecPtr->at(i).value = static_cast<float>(val.GetDouble());
+      }
+      query = querySparseVecPtr;
     }
 
     int64_t limit = parsedBody.GetInt("limit");
@@ -592,8 +606,8 @@ class WebController : public oatpp::web::server::api::ApiController {
         table_name,
         field_name,
         query_fields,
-        vector_size,
-        query_vector,
+        dense_vector_size,
+        query,
         limit,
         result,
         filter,

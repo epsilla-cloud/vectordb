@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 #include "utils/common_util.hpp"
 
@@ -29,7 +30,9 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
       return 1;
     case meta::FieldType::STRING:
     case meta::FieldType::JSON:
-      // String or json attribute requires a 8-byte pointer to the string table.
+    case meta::FieldType::SPARSE_VECTOR_DOUBLE:
+    case meta::FieldType::SPARSE_VECTOR_FLOAT:
+      // Variable length attribute requires a 8-byte pointer to the string table.
       return 8;
     case meta::FieldType::VECTOR_FLOAT:
     case meta::FieldType::VECTOR_DOUBLE:
@@ -49,22 +52,32 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   primitive_offset_ = 0;
   schema = table_schema;
 
-  // Get how many primitive, vectors, and strings attributes.
+  // Get how many primitive, vectors, and variable-length attributes (string, sparse vectors).
   for (auto& field_schema : table_schema.fields_) {
+    auto current_total_vec_num = dense_vector_num_ + sparse_vector_num_;
     if (field_schema.field_type_ == meta::FieldType::STRING ||
-        field_schema.field_type_ == meta::FieldType::JSON) {
-      field_id_mem_offset_map_[field_schema.id_] = string_num_;
-      field_name_mem_offset_map_[field_schema.name_] = string_num_;
-      if (field_schema.is_primary_key_) {
-        string_pk_offset_ = std::make_unique<int64_t>(string_num_);
+        field_schema.field_type_ == meta::FieldType::JSON ||
+        field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
+        field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
+      field_id_mem_offset_map_[field_schema.id_] = var_len_attr_num_;
+      field_name_mem_offset_map_[field_schema.name_] = var_len_attr_num_;
+      if (field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
+          field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
+        vec_field_name_executor_pool_idx_map_[field_schema.name_] = current_total_vec_num;
+        sparse_vector_num_++;
       }
-      ++string_num_;
+      if (field_schema.is_primary_key_) {
+        string_pk_offset_ = std::make_unique<int64_t>(var_len_attr_num_);
+      }
+      var_len_attr_field_type_.push_back(field_schema.field_type_);
+      ++var_len_attr_num_;
     } else if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
       vector_dims_.push_back(field_schema.vector_dimension_);
-      field_id_mem_offset_map_[field_schema.id_] = vector_num_;
-      field_name_mem_offset_map_[field_schema.name_] = vector_num_;
-      ++vector_num_;
+      field_id_mem_offset_map_[field_schema.id_] = current_total_vec_num;
+      field_name_mem_offset_map_[field_schema.name_] = current_total_vec_num;
+      vec_field_name_executor_pool_idx_map_[field_schema.name_] = current_total_vec_num;
+      dense_vector_num_++;
     } else {
       field_id_mem_offset_map_[field_schema.id_] = primitive_offset_;
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
@@ -77,14 +90,16 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
     }
   }
 
-  string_table_ = new std::string[size_limit * string_num_];
-
   attribute_table_ = new char[size_limit * primitive_offset_];
+  var_len_attr_table_.resize(var_len_attr_num_);
+  for (auto& elem : var_len_attr_table_) {
+    elem.resize(size_limit_);
+  }
 
   // attribute_table_ = std::shared_ptr<char[]>(new char[size_limit * primitive_offset], std::default_delete<char[]>());
   // attribute_table_ = std::shared_ptr<char*>(new char[size_limit * primitive_offset]);
-  vector_tables_ = new float*[vector_num_];
-  for (auto i = 0; i < vector_num_; ++i) {
+  vector_tables_ = new float*[dense_vector_num_];
+  for (auto i = 0; i < dense_vector_num_; ++i) {
     // vector_tables_.emplace_back(std::make_shared<float[]>(size_limit * vector_dims_[i]);
     // vector_tables_.emplace_back(std::shared_ptr<float[]>(new float[size_limit * vector_dims_[i]], std::default_delete<float[]>()));
     vector_tables_[i] = new float[size_limit * vector_dims_[i]];
@@ -102,8 +117,9 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_t
       field_name_mem_offset_map_(0),
       field_id_mem_offset_map_(0),
       primitive_num_(0),
-      string_num_(0),
-      vector_num_(0),
+      var_len_attr_num_(0),
+      dense_vector_num_(0),
+      sparse_vector_num_(0),
       vector_dims_(0) {
   Init(table_schema, init_table_scale);
 }
@@ -116,8 +132,9 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       field_name_mem_offset_map_(0),
       field_id_mem_offset_map_(0),
       primitive_num_(0),
-      string_num_(0),
-      vector_num_(0),
+      var_len_attr_num_(0),
+      dense_vector_num_(0),
+      sparse_vector_num_(0),
       vector_dims_(0),
       wal_global_id_(-1) {
   // Init the containers.
@@ -194,25 +211,41 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     }
 
     // Read the string table
-    for (auto i = 0; i < record_number_; ++i) {
-      for (auto j = 0; j < string_num_; ++j) {
-        int64_t offset = i * string_num_ + j;
-        int64_t string_length = 0;
-        file.read(reinterpret_cast<char*>(&string_length), sizeof(string_length));
-        std::string str(string_length, '\0');
-        file.read(&str[0], string_length);
-        string_table_[offset] = str;
-
-        // add pk into set
-        if (!deleted_->test(i) && string_pk_offset_ && *string_pk_offset_ == j) {
-          // do not check existance to avoid additional overhead
-          primary_key_.addKeyIfNotExist(str, i);
+    // Loop order matters: on disk, the var-len attributes of whole entry is stored together
+    for (auto recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
+      for (auto attrIdx = 0; attrIdx < var_len_attr_num_; ++attrIdx) {
+        int64_t dataLen = 0;
+        file.read(reinterpret_cast<char*>(&dataLen), sizeof(dataLen));
+        switch (var_len_attr_field_type_[attrIdx]) {
+          case meta::FieldType::STRING: {
+            std::string str(dataLen, '\0');
+            file.read(&str[0], dataLen);
+            var_len_attr_table_[attrIdx][recordIdx] = std::move(str);
+            // add pk into set
+            if (!deleted_->test(recordIdx) && string_pk_offset_ && *string_pk_offset_ == attrIdx) {
+              // do not check existance to avoid additional overhead
+              primary_key_.addKeyIfNotExist(str, recordIdx);
+            }
+            break;
+          }
+          case meta::FieldType::JSON: {
+            std::string str(dataLen, '\0');
+            file.read(&str[0], dataLen);
+            var_len_attr_table_[attrIdx][recordIdx] = std::move(str);
+            break;
+          }
+          case meta::FieldType::SPARSE_VECTOR_DOUBLE:
+          case meta::FieldType::SPARSE_VECTOR_FLOAT:
+            auto v = std::make_shared<SparseVector>(dataLen / sizeof(SparseVectorElement));
+            file.read(reinterpret_cast<char*>(v->data()), dataLen);
+            var_len_attr_table_[attrIdx][recordIdx] = std::move(v);
+            break;
         }
       }
     }
 
     // Read the vector table
-    for (auto i = 0; i < vector_num_; ++i) {
+    for (auto i = 0; i < dense_vector_num_; ++i) {
       file.read(reinterpret_cast<char*>(vector_tables_[i]), sizeof(float) * record_number_ * vector_dims_[i]);
     }
 
@@ -260,17 +293,17 @@ bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
   return deleted_->test(id);
 }
 
-Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes, int64_t wal_id) {
+Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id) {
   wal_global_id_ = wal_id;
   size_t deleted_record = 0;
   size_t pk_list_size = records.GetSize();
   vectordb::query::expr::ExprEvaluator expr_evaluator(
-    filter_nodes,
-    field_name_mem_offset_map_,
-    primitive_offset_,
-    string_num_,
-    attribute_table_,
-    string_table_);
+      filter_nodes,
+      field_name_mem_offset_map_,
+      primitive_offset_,
+      var_len_attr_num_,
+      attribute_table_,
+      var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
 
   if (pk_list_size > 0) {
@@ -321,8 +354,7 @@ Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr:
             break;
         }
       } else if (isStringPK()) {
-        auto string_offset = field_id_mem_offset_map_[pkFieldIdx()] + id * string_num_;
-        auto pk = string_table_[string_offset];
+        auto pk = std::get<std::string>(var_len_attr_table_[field_id_mem_offset_map_[pkFieldIdx()]][id]);
         deleted_record += DeleteByStringPK(pk, expr_evaluator, filter_root_index).ok();
       } else {
         deleted_record += DeleteByID(id, expr_evaluator, filter_root_index).ok();
@@ -355,10 +387,9 @@ bool TableSegmentMVP::PK2ID(Json& record, size_t& id) {
 }
 
 Status TableSegmentMVP::DeleteByStringPK(
-  const std::string& pk,
-  vectordb::query::expr::ExprEvaluator& evaluator,
-  int filter_root_index
-) {
+    const std::string& pk,
+    vectordb::query::expr::ExprEvaluator& evaluator,
+    int filter_root_index) {
   size_t result = 0;
   auto found = primary_key_.getKey(pk, result);
   if (found && evaluator.LogicalEvaluate(filter_root_index, result)) {
@@ -370,10 +401,9 @@ Status TableSegmentMVP::DeleteByStringPK(
 }
 
 Status TableSegmentMVP::DeleteByID(
-  const size_t id,
-  vectordb::query::expr::ExprEvaluator& evaluator,
-  int filter_root_index
-) {
+    const size_t id,
+    vectordb::query::expr::ExprEvaluator& evaluator,
+    int filter_root_index) {
   // Caller needs to guarantee the id is within record range.
   if (evaluator.LogicalEvaluate(filter_root_index, id)) {
     deleted_->set(id);
@@ -382,41 +412,6 @@ Status TableSegmentMVP::DeleteByID(
   return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + id);
 }
 
-// Status TableSegmentMVP::DoubleSize() {
-//   std::cout << "DoubleSizing ..." << std::endl;
-//   int64_t new_size = size_limit_ * 2;
-
-//   // Resize the attribute table
-//   std::shared_ptr<AttributeTable> new_attribute_table = std::make_shared<AttributeTable>(AttributeTable(new_size * primitive_offset_));
-//   memcpy(new_attribute_table->data, attribute_table_->data, record_number_ * primitive_offset_);
-//   attribute_table_ = new_attribute_table;
-
-//   // Resize the string table
-//   std::string* new_string_table = new std::string[new_size * string_num_];
-//   memcpy(new_string_table, string_table_.get(), size_limit_ * string_num_);
-//   string_table_ = std::make_shared<std::string*>(new_string_table);
-
-//   // Resize the vector tables
-//   for (auto i = 0; i < vector_num_; ++i) {
-//     float* new_vector_table = new float[new_size * vector_dims_[i]];
-//     memcpy(new_vector_table, vector_tables_[i].get(), size_limit_ * vector_dims_[i]);
-//     vector_tables_[i] = std::make_shared<float*>(new_vector_table);
-//   }
-
-//   // Resize the deleted bitset
-//   auto new_bitset = std::make_shared<ConcurrentBitset>(new_size);
-//   for (int i = 0; i < deleted_->size(); ++i) {
-//     if (deleted_->test(i)) {
-//       new_bitset->set(i);
-//     }
-//   }
-//   deleted_ = new_bitset;
-
-//   // Update the size limit
-//   size_limit_ = new_size;
-
-//   return Status::OK();
-// }
 Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id) {
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
@@ -427,23 +422,15 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   // Check if the records are valid.
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
-    // std::cout << "records: " << records.DumpToString() << std::endl;
-    // std::cout << "record: " << record.DumpToString() << std::endl;
     for (auto& field : table_schema.fields_) {
       if (!record.HasMember(field.name_)) {
         return Status(INVALID_RECORD, "Record " + std::to_string(i) + " missing field: " + field.name_);
-      }
-      if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-          field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
-        if (record.GetArraySize(field.name_) != field.vector_dimension_) {
-          return Status(INVALID_RECORD, "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension.");
-        }
       }
     }
   }
 
   // Resize if needed.
-  if (record_number_ + new_record_size >= size_limit_) {
+  if (record_number_ + new_record_size > size_limit_) {
     return Status(
         DB_UNEXPECTED_ERROR,
         "Currently, each table in this database can hold up to " + std::to_string(size_limit_) + " records. " +
@@ -457,6 +444,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
   // Process the insert.
   size_t cursor = record_number_;
+
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
     for (auto& field : table_schema.fields_) {
@@ -466,27 +454,86 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         if (field.is_primary_key_) {
           auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
           if (exist) {
-            std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+            // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
             skipped_entry++;
             goto LOOP_END;
           }
         }
-        string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = value;
+        var_len_attr_table_[field_id_mem_offset_map_[field.id_]][cursor] = value;
       } else if (field.field_type_ == meta::FieldType::JSON) {
         // Insert json dumped string attribute.
-        auto value = record.Get(field.name_);
-        string_table_[cursor * string_num_ + field_id_mem_offset_map_[field.id_]] = value.DumpToString();
+        auto value = record.Get(field.name_).DumpToString();
+        var_len_attr_table_[field_id_mem_offset_map_[field.id_]][cursor] = value;
+      } else if (field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+                 field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        // Insert vector attribute.
+        auto sparseVecObject = record.GetObject(field.name_);
+
+        auto indices = record.Get(field.name_).GetArray(SparseVecObjIndicesKey);
+        auto values = record.Get(field.name_).GetArray(SparseVecObjValuesKey);
+        auto nonZeroValueSize = indices.GetSize();
+        if (indices.GetSize() != values.GetSize()) {
+          std::cerr << "mismatched indices array length (" << indices.GetSize() << ") and value array length (" << values.GetSize() << "), skipping." << std::endl;
+          skipped_entry++;
+          goto LOOP_END;
+        }
+
+        auto size = indices.GetSize();
+        auto vecDim = size > 0 ? indices.GetArrayElement(size - 1).GetInt() : field.vector_dimension_;  // if size is 0, the vector is zero
+        if (vecDim >= field.vector_dimension_) {
+          std::cerr << "Record " + std::to_string(i) + " field " + field.name_ +
+                           " has wrong dimension, expecting: " + std::to_string(field.vector_dimension_) + " actual: " + std::to_string(vecDim)
+                    << std::endl;
+          skipped_entry++;
+          goto LOOP_END;
+        }
+
+        auto vec = std::make_shared<SparseVector>();
+
+        float sum = 0;
+        for (auto j = 0; j < indices.GetSize(); ++j) {
+          auto index_signed = indices.GetArrayElement(j).GetInt();
+          if (index_signed < 0) {
+            std::cerr << "entry has negative index value" << index_signed << ", skipping." << std::endl;
+            skipped_entry++;
+            goto LOOP_END;
+          }
+          size_t index = static_cast<size_t>(index_signed);
+          if (j > 0 && index <= vec->back().index) {
+            std::cerr << "the index is not increasing: [...," << vec->back().index << " , " << index << ",...], skipping." << std::endl;
+            skipped_entry++;
+            goto LOOP_END;
+          }
+          float value = static_cast<float>(values.GetArrayElement(j).GetDouble());
+          sum += value * value;
+          vec->emplace_back(SparseVectorElement{index, value});
+        }
+        // convert to length
+        if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
+          sum = std::sqrt(sum);
+          // normalize value
+          for (auto& elem : *vec) {
+            elem.value /= sum;
+          }
+        }
+        var_len_attr_table_[field_id_mem_offset_map_[field.id_]][cursor] = std::move(vec);
       } else if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                  field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
         // Insert vector attribute.
         auto vector = record.GetArray(field.name_);
+        if (vector.GetSize() != field.vector_dimension_) {
+          std::cerr << "Record " + std::to_string(i) + " field " + field.name_ + " has wrong dimension, expecting: " +
+                           std::to_string(field.vector_dimension_) + " actual: " + std::to_string(record.GetArraySize(field.name_));
+          skipped_entry++;
+          goto LOOP_END;
+        }
         float sum = 0;
         for (auto j = 0; j < field.vector_dimension_; ++j) {
           float value = static_cast<float>((float)(vector.GetArrayElement(j).GetDouble()));
           sum += value * value;
           std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
         }
-        // covert to length
+        // convert to length
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           sum = std::sqrt(sum);
           // normalize value
@@ -502,7 +549,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -515,7 +562,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -528,7 +575,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -541,7 +588,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             if (field.is_primary_key_) {
               auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
               if (exist) {
-                std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
                 goto LOOP_END;
               }
@@ -570,20 +617,26 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       }
     }
     ++cursor;
-
   LOOP_END: {}
     // nothing should be done at the end of block
   }
+
+  // update the vector size
   record_number_.store(cursor);
+
   auto msg = std::string("successfully inserted " +
                          std::to_string(new_record_size - skipped_entry) +
                          " records. ");
+  auto statusCode = DB_SUCCESS;
   if (skipped_entry > 0) {
     msg += "skipped " +
            std::to_string(skipped_entry) + " records with primary key values that already exist.";
+    std::cerr << msg << std::endl;
   }
-  std::cerr << msg << std::endl;
-  return Status(DB_SUCCESS, msg);
+  if (skipped_entry == new_record_size) {
+    statusCode = INVALID_RECORD;
+  }
+  return Status(statusCode, msg);
 }
 
 Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result) {
@@ -648,7 +701,6 @@ Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks
   return Status(DB_SUCCESS, "");
 }
 
-
 // Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
 //   if (skip_sync_disk_) {
 //     return Status::OK();
@@ -678,11 +730,11 @@ Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks
 
 //   // Write the string table.
 //   for (auto i = 0; i < record_number_; ++i) {
-//     for (auto j = 0; j < string_num_; ++j) {
-//       int64_t offset = i * string_num_ + j;
-//       int64_t string_length = string_table_[offset].size();
+//     for (auto j = 0; j < var_len_attr_num_; ++j) {
+//       int64_t offset = i * var_len_attr_num_ + j;
+//       int64_t string_length = var_len_attr_table_[offset].size();
 //       file.write(reinterpret_cast<const char*>(&string_length), sizeof(string_length));
-//       file.write(string_table_[offset].c_str(), string_length);
+//       file.write(var_len_attr_table_[offset].c_str(), string_length);
 //     }
 //   }
 
@@ -737,18 +789,27 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   // Write the attribute table.
   fwrite(attribute_table_, record_number_ * primitive_offset_, 1, file);
 
-  // Write the string table.
-  for (auto i = 0; i < record_number_; ++i) {
-    for (auto j = 0; j < string_num_; ++j) {
-      int64_t offset = i * string_num_ + j;
-      int64_t string_length = string_table_[offset].size();
-      fwrite(&string_length, sizeof(string_length), 1, file);
-      fwrite(string_table_[offset].c_str(), string_length, 1, file);
+  // Write the variable length table.
+  for (auto recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
+    for (auto attrIdx = 0; attrIdx < var_len_attr_num_; ++attrIdx) {
+      auto& entry = var_len_attr_table_[attrIdx][recordIdx];
+      if (std::holds_alternative<std::string>(entry)) {
+        auto& str = std::get<std::string>(entry);
+        int64_t attr_len = str.size();
+        fwrite(&attr_len, sizeof(attr_len), 1, file);
+        fwrite(&str[0], attr_len, 1, file);
+      } else {
+        // sparse vector
+        auto& vec = std::get<SparseVectorPtr>(entry);
+        int64_t attr_len = vec->size() * sizeof(SparseVectorElement);
+        fwrite(&attr_len, sizeof(attr_len), 1, file);
+        fwrite(vec->data(), attr_len, 1, file);
+      }
     }
   }
 
   // Write the vector table.
-  for (auto i = 0; i < vector_num_; ++i) {
+  for (auto i = 0; i < dense_vector_num_; ++i) {
     fwrite(vector_tables_[i], sizeof(float) * record_number_ * vector_dims_[i], 1, file);
   }
 
@@ -786,8 +847,8 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
   std::cout << "\n";
 
   std::cout << "primitive_num_: " << primitive_num_ << "\n";
-  std::cout << "string_num_: " << string_num_ << "\n";
-  std::cout << "vector_num_: " << vector_num_ << "\n";
+  std::cout << "var_len_attr_num_: " << var_len_attr_num_ << "\n";
+  std::cout << "vector_num_: " << dense_vector_num_ << "\n";
 
   // Print out attribute_table_
   std::cout << "attribute_table_: \n";
@@ -803,7 +864,9 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
       if (field.field_type_ != meta::FieldType::STRING &&
           field.field_type_ != meta::FieldType::JSON &&
           field.field_type_ != meta::FieldType::VECTOR_FLOAT &&
-          field.field_type_ != meta::FieldType::VECTOR_DOUBLE) {
+          field.field_type_ != meta::FieldType::VECTOR_DOUBLE &&
+          field.field_type_ != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+          field.field_type_ != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
         // Extract primitive attribute.
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
@@ -856,14 +919,36 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
     std::cout << "\n";
   }
 
-  // Print out string_table_
-  std::cout << "string_table_:  \n";
-  for (size_t i = 0; i < record_number_; ++i) {
-    for (size_t j = 0; j < string_num_; ++j) {
-      size_t offset = i * string_num_ + j;
-      std::cout << string_table_[offset] << ", ";
+  // Print out var_len_attr_table_
+  std::cout << "var_len_attr_table_:  \n";
+  for (size_t recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
+    for (auto& field : table_schema.fields_) {
+      if (field.field_type_ == meta::FieldType::STRING ||
+          field.field_type_ == meta::FieldType::JSON ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        switch (field.field_type_) {
+          case meta::FieldType::STRING:
+          case meta::FieldType::JSON:
+            std::cout << std::get<std::string>(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx])
+                      << ", "
+                      << std::endl;
+            break;
+          case meta::FieldType::SPARSE_VECTOR_FLOAT:
+          case meta::FieldType::SPARSE_VECTOR_DOUBLE: {
+            auto& vec = std::get<SparseVectorPtr>(var_len_attr_table_[field_id_mem_offset_map_[field.id_]][recordIdx]);
+            for (int i = 0; i < vec->size(); i++) {
+              std::cout << ((*vec)[i].index) << ":" << (*vec)[i].value << ",";
+            }
+            std::cout << std::endl;
+            break;
+          }
+          default:
+            // do nothing
+            break;
+        }
+      }
     }
-    std::cout << "\n";
   }
 
   std::cout << "vector_dims_:  \n";
@@ -874,7 +959,7 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
 
   // Print out vector_tables_
   std::cout << "vector_tables_:  \n";
-  for (size_t i = 0; i < vector_num_; ++i) {
+  for (size_t i = 0; i < dense_vector_num_; ++i) {
     for (size_t j = 0; j < record_number_; ++j) {
       for (size_t k = 0; k < vector_dims_[i]; ++k) {
         size_t offset = j * vector_dims_[i] + k;
@@ -898,13 +983,10 @@ TableSegmentMVP::~TableSegmentMVP() {
     delete[] attribute_table_;
   }
   if (vector_tables_ != nullptr) {
-    for (auto i = 0; i < vector_num_; ++i) {
+    for (auto i = 0; i < dense_vector_num_; ++i) {
       delete[] vector_tables_[i];
     }
     delete[] vector_tables_;
-  }
-  if (string_table_ != nullptr) {
-    delete[] string_table_;
   }
   if (deleted_ != nullptr) {
     delete deleted_;

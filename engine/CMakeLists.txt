@@ -2,8 +2,13 @@ cmake_minimum_required(VERSION 3.10)
 project(vectordb)
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 -g")
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# enable symbol flag for every build type
+# ref: https://stackoverflow.com/questions/55275743/cmake-build-types-release-debug-etc-compiler-flags
+set(CMAKE_CXX_FLAGS_INIT "-g")
 
+SET(CMAKE_COLOR_MAKEFILE ON)
+SET(CMAKE_VERBOSE_MAKEFILE ON)
 
 # get build time
 MACRO(GET_CURRENT_TIME CURRENT_TIME)
@@ -12,6 +17,34 @@ ENDMACRO(GET_CURRENT_TIME)
 GET_CURRENT_TIME(BUILD_TIME)
 string(REGEX REPLACE "\n" "" BUILD_TIME ${BUILD_TIME})
 message(STATUS "Build time = ${BUILD_TIME}")
+
+# include modules
+include(FetchContent)
+include(GoogleTest)
+
+# configure modules
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+FetchContent_MakeAvailable(googletest)
+FetchContent_Declare(
+  oatpp
+  URL https://github.com/oatpp/oatpp/archive/refs/tags/1.3.0.zip
+)
+FetchContent_GetProperties(oatpp)
+if(NOT ExternalPackage_POPULATED)
+    FetchContent_Populate(oatpp)
+
+    # Set compiler flags for the fetched package
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fpic")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpic")
+
+    # Add the subdirectory for the fetched package
+    add_subdirectory(${oatpp_SOURCE_DIR} ${oatpp_BINARY_DIR})
+endif()
+FetchContent_MakeAvailable(oatpp)
+
 
 # Now all includes are relative to the engine directory
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -59,12 +92,7 @@ list(APPEND LIB_FILES ${QUERY_FILES})
 
 # used by PyBinding
 find_package(PythonLibs REQUIRED)
-
-add_library(oatpp STATIC IMPORTED)
-set_target_properties(oatpp PROPERTIES
-  IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/build/dependencies/lib/oatpp-1.3.0/liboatpp.a"
-  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/build/dependencies/include/oatpp-1.3.0/oatpp/"
-)
+find_package(oatpp REQUIRED)
 
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
@@ -103,3 +131,27 @@ if(OpenMP_CXX_FOUND)
     target_link_libraries(vectordb_lib PUBLIC OpenMP::OpenMP_CXX)
     target_link_libraries(vectordb_dylib PUBLIC OpenMP::OpenMP_CXX)
 endif()
+
+
+
+enable_testing()
+
+set(DB_TEST_FILES)
+
+# Add source files in the utils directory
+file(GLOB ENGINE_DB_TEST_FILES "test/engine/db/*.cpp")
+list(APPEND DB_TEST_FILES ${ENGINE_DB_TEST_FILES})
+
+add_executable(
+  vector_db_test
+  ${DB_TEST_FILES}
+)
+file(COPY test/engine/db/testdata DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/engine/db)
+
+target_link_libraries(
+  vector_db_test
+  GTest::gtest_main
+  vectordb_lib
+)
+
+gtest_discover_tests(vector_db_test)

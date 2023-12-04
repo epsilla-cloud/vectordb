@@ -13,6 +13,7 @@
 #include "db/index/space_ip.hpp"
 #include "db/index/space_l2.hpp"
 #include "db/table_segment_mvp.hpp"
+#include "db/vector.hpp"
 #include "db/wal/write_ahead_log.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/concurrent_bitset.hpp"
@@ -44,16 +45,15 @@ class TableMVP {
   Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
 
   Status Delete(
-    vectordb::Json &records,
-    const std::string& filter,
-    std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes
-  );
+      vectordb::Json &records,
+      const std::string &filter,
+      std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes);
 
   Status Search(
       const std::string &field_name,
       std::vector<std::string> &query_fields,
       int64_t query_dimension,
-      const float *query_data,
+      const VectorPtr query_data,
       const int64_t limit,
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
@@ -88,15 +88,17 @@ class TableMVP {
   // The table schema.
   meta::TableSchema table_schema_;
   // Map from field name to field type.
-  std::unordered_map<std::string, meta::FieldType> field_name_type_map_;
+  std::unordered_map<std::string, meta::FieldType> field_name_field_type_map_;
+  // Map from field name to field type.
+  std::unordered_map<std::string, meta::MetricType> field_name_metric_type_map_;
+
   // int64_t executors_num_;
   std::shared_ptr<TableSegmentMVP> table_segment_;  // The table segment loaded/synced from disk.
   // TODO: make this multi threading for higher throughput.
 
   ThreadSafeVector<std::shared_ptr<execution::ExecutorPool>> executor_pool_;  // The executor for vector search.
   std::mutex executor_pool_mutex_;
-  std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;      // The ann graph segment for each vector field.
-  std::vector<std::shared_ptr<vectordb::SpaceInterface<float>>> space_;  // The space for each vector field.
+  std::vector<std::shared_ptr<ANNGraphSegment>> ann_graph_segment_;  // The ann graph segment for each vector field.
 
   // One write ahead log per table.
   std::shared_ptr<WriteAheadLog> wal_;
