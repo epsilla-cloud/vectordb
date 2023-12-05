@@ -184,13 +184,13 @@ BasicMetaImpl::~BasicMetaImpl() {}
 
 Status BasicMetaImpl::LoadDatabase(const std::string& db_catalog_path, const std::string& db_name) {
   if (loaded_databases_paths_.find(db_catalog_path) != loaded_databases_paths_.end()) {
-    return Status(DB_UNEXPECTED_ERROR, "Database catalog file is already loaded: " + db_catalog_path);
+    return Status(DB_ALREADY_EXIST, "Database catalog file is already loaded: " + db_catalog_path);
   }
   if (databases_.find(db_name) != databases_.end()) {
-    return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
+    return Status(DB_ALREADY_EXIST, "DB already exists: " + db_name);
   }
   if (!server::CommonUtil::IsValidName(db_name)) {
-    return Status(DB_UNEXPECTED_ERROR, "DB name should start with a letter or '_' and can contain only letters, digits, and underscores.");
+    return Status(INVALID_NAME, "DB name should start with a letter or '_' and can contain only letters, digits, and underscores.");
   }
 
   DatabaseSchema db_schema;

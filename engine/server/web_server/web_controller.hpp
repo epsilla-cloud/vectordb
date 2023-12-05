@@ -19,6 +19,7 @@
 #include "server/web_server/dto/status_dto.hpp"
 #include "server/web_server/handler/web_request_handler.hpp"
 #include "server/web_server/utils/util.hpp"
+#include "utils/error.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 
@@ -91,7 +92,12 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
     vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale, wal_enabled);
 
-    if (!status.ok()) {
+    if (status.code() == DB_ALREADY_EXIST) {
+      // DB already exists error.
+      dto->statusCode = Status::CODE_409.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_409, dto);
+    } else if (!status.ok()) {
       dto->statusCode = Status::CODE_500.code;
       dto->message = status.message();
       return createDtoResponse(Status::CODE_500, dto);
