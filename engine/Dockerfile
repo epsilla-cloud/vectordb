@@ -2,7 +2,7 @@ FROM epsilla/base as builder
 ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
-# RUN scripts/install_oatpp_modules.sh
+RUN scripts/install_oatpp_modules.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod +x vectordb
 
 
