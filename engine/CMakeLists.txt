@@ -18,34 +18,6 @@ GET_CURRENT_TIME(BUILD_TIME)
 string(REGEX REPLACE "\n" "" BUILD_TIME ${BUILD_TIME})
 message(STATUS "Build time = ${BUILD_TIME}")
 
-# include modules
-include(FetchContent)
-include(GoogleTest)
-
-# configure modules
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-)
-FetchContent_MakeAvailable(googletest)
-FetchContent_Declare(
-  oatpp
-  URL https://github.com/oatpp/oatpp/archive/refs/tags/1.3.0.zip
-)
-FetchContent_GetProperties(oatpp)
-if(NOT ExternalPackage_POPULATED)
-    FetchContent_Populate(oatpp)
-
-    # Set compiler flags for the fetched package
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fpic")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fpic")
-
-    # Add the subdirectory for the fetched package
-    add_subdirectory(${oatpp_SOURCE_DIR} ${oatpp_BINARY_DIR})
-endif()
-FetchContent_MakeAvailable(oatpp)
-
-
 # Now all includes are relative to the engine directory
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -92,7 +64,12 @@ list(APPEND LIB_FILES ${QUERY_FILES})
 
 # used by PyBinding
 find_package(PythonLibs REQUIRED)
-find_package(oatpp REQUIRED)
+
+add_library(oatpp STATIC IMPORTED)
+set_target_properties(oatpp PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/build/dependencies/lib/oatpp-1.3.0/liboatpp.a"
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/build/dependencies/include/oatpp-1.3.0/oatpp/"
+)
 
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
@@ -133,6 +110,14 @@ if(OpenMP_CXX_FOUND)
 endif()
 
 
+
+include(FetchContent)
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+FetchContent_MakeAvailable(googletest)
+include(GoogleTest)
 
 enable_testing()
 

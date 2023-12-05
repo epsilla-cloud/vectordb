@@ -31,8 +31,9 @@ jobs:
         SHA_TAG: ${{ github.sha }}
       run: |
         export IMAGE_TAG=${{ steps.date.outputs.date }};
-        export IMAGE_TAG_LATEST="latest";
         echo "IMAGE_TAG: ${IMAGE_TAG}";
+        export IMAGE_TAG_LATEST="latest";
+        
         echo "SHA: ${SHA_TAG}";
 
         export RELEASE_TAG=`cat VERSION`;
@@ -74,7 +75,6 @@ jobs:
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
                             --push \
-                            -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST} .
 
