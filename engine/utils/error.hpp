@@ -30,12 +30,14 @@ constexpr ErrorCode INFRA_UNSUPPORTED_ERROR = ToInfraErrorCode(2);
 constexpr ErrorCode DB_UNEXPECTED_ERROR = ToDbErrorCode(1);
 constexpr ErrorCode DB_UNSUPPORTED_ERROR = ToDbErrorCode(2);
 constexpr ErrorCode DB_NOT_FOUND = ToDbErrorCode(3);
+constexpr ErrorCode DB_ALREADY_EXIST = ToDbErrorCode(31);
 constexpr ErrorCode TABLE_ALREADY_EXISTS = ToDbErrorCode(4);
 constexpr ErrorCode TABLE_NOT_FOUND = ToDbErrorCode(5);
 constexpr ErrorCode INVALID_RECORD = ToDbErrorCode(6);
 constexpr ErrorCode RECORD_NOT_FOUND = ToDbErrorCode(7);
 constexpr ErrorCode INVALID_EXPR = ToDbErrorCode(8);
 constexpr ErrorCode NOT_IMPLEMENTED_ERROR = ToDbErrorCode(9);
+constexpr ErrorCode INVALID_NAME = ToDbErrorCode(101);
 
 namespace server {
 
