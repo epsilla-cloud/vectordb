@@ -8,7 +8,7 @@
 <a href="https://epsilla-inc.gitbook.io/epsilladb/">Documentation</a> •
 <a href="https://discord.gg/cDaY2CxZc5">Discord</a> •
 <a href="https://twitter.com/epsilla_inc">Twitter</a> •
-<a href="https://twitter.com/epsilla_inc">Twitter</a> •
+<a href="https://blog.epsilla.com">Blog</a> •
 <a href="https://www.youtube.com/@Epsilla-kp5cx">YouTube</a> •
 <a href="https://forms.gle/z73ra1sGBxH9wiUR8">Feedback</a>
 
