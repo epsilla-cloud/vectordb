@@ -24,7 +24,15 @@ The key features of Epsilla include:
 
 * Full fledged database management system with familiar database, table, and field concepts. Vector is just another field type.
 
-* Native Python support and REST API interface.
+* Metadata filtering.
+
+* Hybrid search with a fusion of dense and sparse vectors.
+
+* Cloud native architecture with compute storage separation, serverless, and multi-tenancy.
+
+* Rich ecosystem integrations including LangChain and LlamaIndex.
+
+* Python/JavaScript/Ruby clients, and REST API interface.
 
 Epsilla's core is written in C++ and leverages the advanced academic parallel graph traversal techniques for vector indexing, achieving 10 times faster vector search than HNSW while maintaining precision levels of over 99.9%.
 
