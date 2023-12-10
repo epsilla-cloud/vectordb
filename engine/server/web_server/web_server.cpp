@@ -33,7 +33,7 @@ Status WebServer::StartService() {
   // TODO: remove this code.
   {
     // Initialize the base URL of the embedding service
-    std::string baseUrl = "http://runner.epsilla.com:9999/"; // Change this to your actual service URL
+    std::string baseUrl = "http://runner.epsilla.com:9999"; // Change this to your actual service URL
 
     // Create an instance of the EmbeddingService
     vectordb::engine::EmbeddingService embeddingService(baseUrl);
