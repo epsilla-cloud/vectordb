@@ -6,6 +6,8 @@
 #include "request_interceptor.hpp"
 #include "web_controller.hpp"
 
+#include "services/embedding_service.hpp"
+
 namespace vectordb {
 namespace server {
 namespace web {
@@ -28,6 +30,24 @@ void WebServer::Stop() {
 
 Status WebServer::StartService() {
   oatpp::base::Environment::init();
+  // TODO: remove this code.
+  {
+    // Initialize the base URL of the embedding service
+    std::string baseUrl = "http://runner.epsilla.com:9999/"; // Change this to your actual service URL
+
+    // Create an instance of the EmbeddingService
+    vectordb::engine::EmbeddingService embeddingService(baseUrl);
+
+    // Retrieve the list of supported embedding models
+    std::vector<vectordb::engine::EmbeddingModel> models;
+    auto status = embeddingService.getSupportedModels(models);
+    
+    // Display the retrieved models
+    std::cout << "Supported Embedding Models:" << std::endl;
+    for (const auto& model : models) {
+        std::cout << "Model: " << model.model << ", Dimension: " << model.dim << std::endl;
+    }
+  }
   {
     WebComponent components = WebComponent(port_);
 
