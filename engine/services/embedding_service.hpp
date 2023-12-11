@@ -12,6 +12,7 @@ namespace engine {
 struct EmbeddingModel {
   std::string model;
   size_t dim;
+  bool dense;
   // std::string description;
   // double size_in_GB;
 };

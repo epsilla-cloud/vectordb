@@ -235,6 +235,18 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
+    if (parsedBody.HasMember("indices")) {
+      size_t indices_size = parsedBody.GetArraySize("indices");
+      for (size_t i = 0; i < indices_size; i++) {
+        auto body_index = parsedBody.GetArrayElement("indices", i);
+        vectordb::engine::meta::Index index;
+        index.name_ = body_index.GetString("name");
+        index.field_name_ = body_index.GetString("field");
+        index.embedding_model_name_ = body_index.GetString("model");
+        table_schema.indices_.push_back(index);
+      }
+    }
+
     size_t table_id;
     vectordb::Status status = db_server->CreateTable(db_name, table_schema, table_id);
 
