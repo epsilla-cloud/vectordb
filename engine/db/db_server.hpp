@@ -12,6 +12,7 @@
 #include "db/vector.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -89,6 +90,11 @@ class DBServer {
 
   Status Rebuild();
 
+  void InjectEmbeddingService(std::string& embedding_service_url) {
+    embedding_service_ = std::make_shared<vectordb::engine::EmbeddingService>(embedding_service_url);
+    meta_->InjectEmbeddingService(embedding_service_);
+  }
+
  private:
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
@@ -97,6 +103,7 @@ class DBServer {
   std::thread rebuild_thread_;
   bool stop_rebuild_thread_ = false;
   bool rebuild_started_ = false;
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 
   // periodically in a separate thread
   void RebuildPeriodically() {

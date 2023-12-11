@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
   uint16_t port = 8888;
   bool rebuild = true;
   bool is_leader = true;
-  std::string embedding_baseurl = "http://localhost:8889/";
+  std::string embedding_baseurl = "http://localhost:8889";
   while ((value = getopt_long(argc, argv, "c:p:r:l:e:h", long_options, &option_index)) != -1) {
     switch (value) {
       case 'c': {
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
 
   server.Init(config_filename);
 
-  status = server.Start(port, rebuild, is_leader);
+  status = server.Start(port, rebuild, is_leader, embedding_baseurl);
   if (status.ok()) {
     std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
     std::cout << "Server running on http://0.0.0.0:" << port << std::endl;

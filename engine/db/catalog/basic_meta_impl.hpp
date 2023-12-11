@@ -6,6 +6,7 @@
 #include <unordered_set>
 
 #include "db/catalog/meta.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -38,11 +39,15 @@ class BasicMetaImpl : public Meta {
 
   void SetLeader(bool is_leader) override;
 
+  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) override;
+
  private:
   std::unordered_map<std::string, DatabaseSchema> databases_;
   std::unordered_set<std::string> loaded_databases_paths_;  // We cannot allow loading the same database twice
   // If the segment is leader (handle sync to storage) or follower (passively sync from storage)
   std::atomic<bool> is_leader_;
+
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 };  // BasicMetaImpl
 
 }  // namespace meta

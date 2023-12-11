@@ -35,6 +35,7 @@ class WebController : public oatpp::web::server::api::ApiController {
  public:
   WebController(const std::shared_ptr<ObjectMapper>& objectMapper)
       : oatpp::web::server::api::ApiController(objectMapper) {
+    db_server = std::make_shared<vectordb::engine::DBServer>();
   }
 
  public:
@@ -43,8 +44,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     return std::make_shared<WebController>(objectMapper);
   }
 
-  std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
-  // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
+  std::shared_ptr<vectordb::engine::DBServer> db_server;
 
 /**
  *  Begin ENDPOINTs generation ('ApiController' codegen)

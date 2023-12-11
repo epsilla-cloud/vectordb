@@ -443,6 +443,10 @@ void BasicMetaImpl::SetLeader(bool is_leader) {
   is_leader_ = is_leader;
 }
 
+void BasicMetaImpl::InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+  embedding_service_ = embedding_service;
+}
+
 }  // namespace meta
 }  // namespace engine
 }  // namespace vectordb
