@@ -40,6 +40,7 @@ Status DBServer::LoadDB(const std::string& db_name,
     }
 
     auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_);
+    db->InjectEmbeddingService(embedding_service_);
     db->SetWALEnabled(wal_enabled);
     dbs_.push_back(db);
     db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;

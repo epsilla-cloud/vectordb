@@ -93,6 +93,9 @@ class DBServer {
   void InjectEmbeddingService(std::string& embedding_service_url) {
     embedding_service_ = std::make_shared<vectordb::engine::EmbeddingService>(embedding_service_url);
     meta_->InjectEmbeddingService(embedding_service_);
+    for (auto db : dbs_) {
+      db->InjectEmbeddingService(embedding_service_);
+    }
   }
 
  private:

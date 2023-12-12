@@ -20,6 +20,7 @@
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/concurrent_vector.hpp"
 #include "utils/status.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -83,6 +84,11 @@ class TableMVP {
 
   ~TableMVP();
 
+  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+    embedding_service_ = embedding_service;
+    table_segment_->InjectEmbeddingService(embedding_service);
+  }
+
  public:
   std::string db_catalog_path_;
   // The table schema.
@@ -105,6 +111,8 @@ class TableMVP {
 
   // If the segment is leader (handle sync to storage) or follower (passively sync from storage)
   std::atomic<bool> is_leader_;
+
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 };
 
 }  // namespace engine

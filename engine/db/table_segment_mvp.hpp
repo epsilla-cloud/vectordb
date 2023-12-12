@@ -15,6 +15,7 @@
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -54,6 +55,10 @@ class TableSegmentMVP {
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
 
   void Debug(meta::TableSchema& table_schema);
+
+  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+    embedding_service_ = embedding_service;
+  }
 
   ~TableSegmentMVP();
 
@@ -104,6 +109,8 @@ class TableSegmentMVP {
   // we can keep the raw pointer here. In addition, the table_segment_mvp's lifecycle is always longer
   // than the owner, so so don't need to worry about invalid pointer here.
   meta::TableSchema schema;
+
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 
   Status DeleteByStringPK(const std::string& pk, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index);
 

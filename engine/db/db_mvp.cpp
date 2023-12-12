@@ -23,6 +23,7 @@ Status DBMVP::CreateTable(meta::TableSchema& table_schema) {
     return Status(TABLE_ALREADY_EXISTS, "Table already exists: " + table_schema.name_);
   }
   auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_, init_table_scale_, is_leader_);
+  table->InjectEmbeddingService(embedding_service_);
   tables_.push_back(table);
   table_name_to_id_map_[table_schema.name_] = tables_.size() - 1;
   return Status::OK();

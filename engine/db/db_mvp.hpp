@@ -8,6 +8,7 @@
 #include "db/catalog/meta.hpp"
 #include "db/table_mvp.hpp"
 #include "utils/status.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -37,6 +38,10 @@ class DBMVP {
     }
   }
 
+  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+    embedding_service_ = embedding_service;
+  }
+
  public:
   std::string db_catalog_path_;                                   // The path to the db catalog.
   // TODO: change to concurrent version.
@@ -44,6 +49,7 @@ class DBMVP {
   std::vector<std::shared_ptr<TableMVP>> tables_;                    // The tables in this database.
   int64_t init_table_scale_;
   std::atomic<bool> is_leader_;
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 };
 
 using DBMVPPtr = std::shared_ptr<DBMVP>;
