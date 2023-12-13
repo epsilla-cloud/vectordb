@@ -15,7 +15,7 @@ namespace engine {
 
 class DBMVP {
  public:
-  explicit DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale, bool is_leader);
+  explicit DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale, bool is_leader, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
 
   ~DBMVP() {}
 
@@ -36,10 +36,6 @@ class DBMVP {
     for (auto table : tables_) {
       table->SetLeader(is_leader);
     }
-  }
-
-  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
-    embedding_service_ = embedding_service;
   }
 
  public:

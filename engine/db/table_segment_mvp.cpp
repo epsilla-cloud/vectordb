@@ -109,7 +109,7 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   return Status::OK();
 }
 
-TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale)
+TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service)
     : skip_sync_disk_(false),
       size_limit_(init_table_scale),
       first_record_id_(0),
@@ -121,10 +121,11 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_t
       dense_vector_num_(0),
       sparse_vector_num_(0),
       vector_dims_(0) {
+  embedding_service_ = embedding_service;
   Init(table_schema, init_table_scale);
 }
 
-TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale)
+TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service)
     : skip_sync_disk_(true),
       size_limit_(init_table_scale),
       first_record_id_(0),
@@ -137,6 +138,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       sparse_vector_num_(0),
       vector_dims_(0),
       wal_global_id_(-1) {
+  embedding_service_ = embedding_service;
   // Init the containers.
   Init(table_schema, init_table_scale);
   std::string path = db_catalog_path + "/" + std::to_string(table_schema.id_) + "/data_mvp.bin";
@@ -643,8 +645,22 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   }
 
   // Now process the index fields.
+  // The record rows needs to be processed are [record_number_, cursor).
+  // Assume the embedding service already normalize the vectors for dense vectors.
   for (auto& index: table_schema.indices_) {
-    
+    // TODO: support sparse embedding.
+    auto status = embedding_service_->denseEmbedDocuments(
+      index.embedding_model_name_,
+      var_len_attr_table_[field_id_mem_offset_map_[index.src_field_id_]],
+      vector_tables_[field_id_mem_offset_map_[index.tgt_field_id_]],
+      record_number_,
+      cursor,
+      table_schema.fields_[index.tgt_field_id_].vector_dimension_
+    );
+    if (!status.ok()) {
+      std::cerr << "embedding service error: " << status.message() << std::endl;
+      return status;
+    }
   }
 
   // update the vector size

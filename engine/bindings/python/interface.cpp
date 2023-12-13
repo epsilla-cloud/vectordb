@@ -55,7 +55,8 @@ static PyObject *load_db(PyObject *self, PyObject *args, PyObject *kwargs) {
       path,
       vectordb::server::web::InitTableScale,
       // TODO: make it variable
-      true);
+      true,
+      nullptr);
   return PyLong_FromLong(status.code());
 }
 
@@ -127,7 +128,7 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
 
   // TODO: add auto embedding here
   size_t table_id;
-  auto status = db->CreateTable(db_name, schema_json, table_id);
+  auto status = db->CreateTable(db_name, schema_json, table_id, nullptr);
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
     return NULL;

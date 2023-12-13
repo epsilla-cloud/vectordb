@@ -10,11 +10,15 @@ namespace vectordb {
 namespace engine {
 
 TableMVP::TableMVP(meta::TableSchema &table_schema,
-                   const std::string &db_catalog_path, int64_t init_table_scale, bool is_leader)
+                   const std::string &db_catalog_path,
+                   int64_t init_table_scale,
+                   bool is_leader,
+                   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service)
     : table_schema_(table_schema),
       // executors_num_(executors_num),
       table_segment_(nullptr),
       is_leader_(is_leader) {
+  embedding_service_ = embedding_service;
   db_catalog_path_ = db_catalog_path;
   // Construct field name to field type map.
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
@@ -26,7 +30,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
 
   // Load the table data from disk.
   table_segment_ = std::make_shared<TableSegmentMVP>(
-      table_schema, db_catalog_path, init_table_scale);
+      table_schema, db_catalog_path, init_table_scale, embedding_service_);
 
   // Replay operations in write ahead log.
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_, is_leader_);

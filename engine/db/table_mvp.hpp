@@ -36,7 +36,12 @@ constexpr const int RebuildThreads = 4;
 
 class TableMVP {
  public:
-  explicit TableMVP(meta::TableSchema &table_schema, const std::string &db_catalog_path, int64_t init_table_scale, bool is_leader /*, int64_t executors_num*/);
+  explicit TableMVP(
+    meta::TableSchema &table_schema,
+    const std::string &db_catalog_path,
+    int64_t init_table_scale,
+    bool is_leader,
+    std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service /*, int64_t executors_num*/);
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
@@ -83,11 +88,6 @@ class TableMVP {
   void SetLeader(bool is_leader);
 
   ~TableMVP();
-
-  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
-    embedding_service_ = embedding_service;
-    table_segment_->InjectEmbeddingService(embedding_service);
-  }
 
  public:
   std::string db_catalog_path_;

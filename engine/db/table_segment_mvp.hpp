@@ -34,9 +34,9 @@ struct AttributeTable {
 class TableSegmentMVP {
  public:
   // Default constructor just for table level init.
-  explicit TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale);
+  explicit TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
   // Load segment from disk.
-  explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale);
+  explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
 
   Status Init(meta::TableSchema& table_schema, int64_t size_limit);
 
@@ -54,10 +54,6 @@ class TableSegmentMVP {
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
 
   void Debug(meta::TableSchema& table_schema);
-
-  void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
-    embedding_service_ = embedding_service;
-  }
 
   ~TableSegmentMVP();
 
