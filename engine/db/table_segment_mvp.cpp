@@ -451,14 +451,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       if (field.field_type_ == meta::FieldType::STRING) {
         // Insert string attribute.
         auto value = record.GetString(field.name_);
-        if (field.is_primary_key_) {
-          auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
-          if (exist) {
-            // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-            skipped_entry++;
-            goto LOOP_END;
-          }
-        }
         var_len_attr_table_[field_id_mem_offset_map_[field.id_]][cursor] = value;
       } else if (field.field_type_ == meta::FieldType::JSON) {
         // Insert json dumped string attribute.
@@ -546,53 +538,21 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = static_cast<int8_t>((int8_t)(record.GetInt(field.name_)));
-            if (field.is_primary_key_) {
-              auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
-              if (exist) {
-                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-                skipped_entry++;
-                goto LOOP_END;
-              }
-            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value = static_cast<int16_t>((int16_t)(record.GetInt(field.name_)));
-            if (field.is_primary_key_) {
-              auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
-              if (exist) {
-                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-                skipped_entry++;
-                goto LOOP_END;
-              }
-            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
-            if (field.is_primary_key_) {
-              auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
-              if (exist) {
-                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-                skipped_entry++;
-                goto LOOP_END;
-              }
-            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value = static_cast<int64_t>((int64_t)(record.GetInt(field.name_)));
-            if (field.is_primary_key_) {
-              auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
-              if (exist) {
-                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-                skipped_entry++;
-                goto LOOP_END;
-              }
-            }
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
             break;
           }
@@ -616,6 +576,62 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         }
       }
     }
+    // Handle pk.
+    if (pk_field_idx_) {
+      auto& field = schema.fields_[*pk_field_idx_];
+      if (field.field_type_ == meta::FieldType::STRING) {
+        auto value = record.GetString(field.name_);
+        auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+        if (exist) {
+          // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+          skipped_entry++;
+          goto LOOP_END;
+        }
+      } else {
+        switch (field.field_type_) {
+          case meta::FieldType::INT1: {
+            int8_t value = static_cast<int8_t>((int8_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
+            break;
+          }
+          case meta::FieldType::INT2: {
+            int16_t value = static_cast<int16_t>((int16_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
+            break;
+          }
+          case meta::FieldType::INT4: {
+            int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
+            break;
+          }
+          case meta::FieldType::INT8: {
+            int64_t value = static_cast<int64_t>((int64_t)(record.GetInt(field.name_)));
+            auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
+            if (exist) {
+              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+              skipped_entry++;
+              goto LOOP_END;
+            }
+            break;
+          }
+        }
+      }
+    }
     ++cursor;
   LOOP_END: {}
     // nothing should be done at the end of block
@@ -630,7 +646,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   auto statusCode = DB_SUCCESS;
   if (skipped_entry > 0) {
     msg += "skipped " +
-           std::to_string(skipped_entry) + " records with primary key values that already exist.";
+           std::to_string(skipped_entry) + " records with primary key values that already exist, or invalid fields.";
     std::cerr << msg << std::endl;
   }
   if (skipped_entry == new_record_size) {
