@@ -42,7 +42,6 @@ class TableSegmentMVP {
 
   Status DoubleSize();
 
-  Status Insert(meta::TableSchema& table_schema, Json& records);
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
 

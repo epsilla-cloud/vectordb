@@ -35,7 +35,7 @@ Status EmbeddingService::getSupportedModels(std::vector<EmbeddingModel> &models)
 Status EmbeddingService::embedDocuments(
   const std::string& modelName,
   const std::vector<std::string>& documents,
-  std::vector<std::vector<double>> &embeddings
+  std::vector<std::vector<float>> &embeddings
 ) {
   try {
     nlohmann::json requestBody = {

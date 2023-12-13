@@ -25,7 +25,7 @@ public:
   Status embedDocuments(
     const std::string& modelName,
     const std::vector<std::string>& documents,
-    std::vector<std::vector<double>> &embeddings
+    std::vector<std::vector<float>> &embeddings
   );
 
 private:
