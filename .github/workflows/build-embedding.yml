@@ -1,0 +1,57 @@
+name: Build Embedding Docker Image
+
+on:
+  push:
+    branches: [ "auto-embedding" ]
+
+jobs:
+  build:
+  
+    name: Build Embedding Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Get Current Date 
+      id: date
+      run: echo "::set-output name=date::$(date +'%Y%m%d%H%M%S')"
+          
+    - name: Build
+      env:
+        DOCKER_HUB_REPOSITORY: epsilla/vectordb
+        SHA_TAG: ${{ github.sha }}
+      run: |
+        export BUILD_TIMESTAMP=${{ steps.date.outputs.date }}
+        echo "BUILD_TIMESTAMP: ${BUILD_TIMESTAMP}"
+
+        wget https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
+        chmod +x buildx-v0.11.2.linux-amd64
+        mkdir -p $HOME/.docker/cli-plugins
+        mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
+        docker buildx create --use
+
+        cd ./engine
+        
+        docker buildx build --platform linux/amd64 \
+                            --pull \
+                            --push \
+                            --label "org.opencontainers.image.version"=${BUILD_TIMESTAMP} \
+                            -t ${DOCKER_HUB_REPOSITORY}:embedding .
+
+
+
+
+
+
+        
+
+
+        
