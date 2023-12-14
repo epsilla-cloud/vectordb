@@ -3,19 +3,21 @@
 ## install oatpp
 
 install_module() {
-    local MODULE_NAME=$1
-    echo "Installing module: ${MODULE_NAME}"
+    local ORG_NAME=$1
+    local MODULE_NAME=$2
+    local TAG=$3
+    echo "Installing module: ${ORG_NAME}/${MODULE_NAME}"
 
     # Create a temporary working directory
     local working_dir="$(mktemp -d)"
     cd "${working_dir}"
 
     # Clone the repository
-    git clone https://github.com/oatpp/${MODULE_NAME}
+    git clone https://github.com/${ORG_NAME}/${MODULE_NAME}
     cd ${MODULE_NAME}
 
     # Checkout the desired tag
-    git checkout tags/1.3.0
+    git checkout tags/${TAG}
 
     # Build and install
     mkdir build
@@ -27,7 +29,7 @@ install_module() {
         -DCMAKE_INSTALL_PREFIX:PATH="${INSTALL_PATH}" \
         ..
     make -j "${N_PROCESSOR}"
-    echo "Installing ${MODULE_NAME} to path ${INSTALL_PATH}"
+    echo "Installing ${ORG_NAME}/${MODULE_NAME} to path ${INSTALL_PATH}"
     make install
 
     # Clean up
@@ -56,9 +58,9 @@ else
 fi
 
 # Install oatpp
-install_module "oatpp"
+install_module "oatpp" "oatpp" "1.3.0"
 
 # Install oatpp-curl
-install_module "oatpp-curl"
+install_module "epsilla-cloud" "oatpp-curl" "epsilla"
 
 ##########################################################
