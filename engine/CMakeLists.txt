@@ -81,6 +81,9 @@ set_target_properties(oatpp_curl PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/build/dependencies/include/oatpp-1.3.0/oatpp-curl/"
 )
 
+# Add this line right here
+set_property(TARGET oatpp_curl APPEND PROPERTY INTERFACE_LINK_LIBRARIES oatpp)
+
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
 find_package(Boost REQUIRED COMPONENTS filesystem)
