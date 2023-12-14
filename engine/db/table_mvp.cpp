@@ -354,6 +354,10 @@ Status TableMVP::Project(
   // If query fields is empty, fill in with all fields.
   if (query_fields.size() == 0) {
     for (int i = 0; i < table_schema_.fields_.size(); ++i) {
+      // Index fields are not responsed by default.
+      if (table_schema_.fields_[i].is_index_field_) {
+        continue;
+      }
       query_fields.push_back(table_schema_.fields_[i].name_);
     }
   }
