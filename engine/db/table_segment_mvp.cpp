@@ -414,7 +414,7 @@ Status TableSegmentMVP::DeleteByID(
   return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + id);
 }
 
-Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id) {
+Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers) {
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
@@ -655,7 +655,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       vector_tables_[field_id_mem_offset_map_[index.tgt_field_id_]],
       record_number_,
       cursor,
-      table_schema.fields_[index.tgt_field_id_].vector_dimension_
+      table_schema.fields_[index.tgt_field_id_].vector_dimension_,
+      headers
     );
     if (!status.ok()) {
       std::cerr << "embedding service error: " << status.message() << std::endl;

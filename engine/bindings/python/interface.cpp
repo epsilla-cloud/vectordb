@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "db/db_server.hpp"
 #include "server/web_server/web_controller.hpp"
@@ -50,13 +51,14 @@ static PyObject *load_db(PyObject *self, PyObject *args, PyObject *kwargs) {
     return NULL;
   }
 
+  std::unordered_map<std::string, std::string> headers;
   auto status = db->LoadDB(
       name,
       path,
       vectordb::server::web::InitTableScale,
       // TODO: make it variable
       true,
-      nullptr);
+      headers);
   return PyLong_FromLong(status.code());
 }
 
@@ -187,7 +189,9 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
   records.LoadFromString(std::string(utf8_str));
   Py_DECREF(json_str);
 
-  auto status = db->Insert(db_name, tableName, records);
+  std::unordered_map<std::string, std::string> headers;
+
+  auto status = db->Insert(db_name, tableName, records, headers);
   return PyLong_FromLong(int(status.code()));
 }
 
@@ -304,6 +308,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
   Py_XDECREF(queryVector);
   auto result = vectordb::Json();
+  std::unordered_map<std::string, std::string> headers;
   auto status = db->Search(
       db_name,
       tableName,
@@ -314,7 +319,8 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       limit,
       result,
       queryFilter,
-      withDistance);
+      withDistance,
+      headers);
 
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());

@@ -15,7 +15,12 @@ namespace engine {
 
 class DBMVP {
  public:
-  explicit DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale, bool is_leader, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
+  explicit DBMVP(
+    meta::DatabaseSchema& database_schema,
+    int64_t init_table_scale,
+    bool is_leader,
+    std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service,
+    std::unordered_map<std::string, std::string> &headers);
 
   ~DBMVP() {}
 

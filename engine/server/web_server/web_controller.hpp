@@ -8,6 +8,7 @@
 #include <oatpp/web/server/api/ApiController.hpp>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/catalog/meta.hpp"
@@ -22,6 +23,7 @@
 #include "utils/error.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
+#include "utils/constants.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -70,7 +72,9 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ADD_CORS(LoadDB)
 
-  ENDPOINT("POST", "/api/load", LoadDB, BODY_STRING(String, body)) {
+  ENDPOINT("POST", "/api/load", LoadDB,
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     vectordb::Json parsedBody;
     auto dto = StatusDto::createShared();
     auto valid = parsedBody.LoadFromString(body);
@@ -78,6 +82,13 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->statusCode = Status::CODE_400.code;
       dto->message = "Invalid payload.";
       return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    // Collect request headers
+    std::unordered_map<std::string, std::string> headers;
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER); // Replace 'Your-Header-Name' with the actual header name
+    if (headerValue != nullptr) {
+      headers[OPENAI_KEY_HEADER] = headerValue->c_str();
     }
 
     std::string db_path = parsedBody.GetString("path");
@@ -90,7 +101,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     if (parsedBody.HasMember("walEnabled")) {
       wal_enabled = parsedBody.GetBool("walEnabled");
     }
-    vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale, wal_enabled);
+    vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale, wal_enabled, headers);
 
     if (status.code() == DB_ALREADY_EXIST) {
       // DB already exists error.
@@ -345,9 +356,9 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ENDPOINT("POST", "/api/{db_name}/data/insert", InsertRecords,
            PATH(String, db_name, "db_name"),
-           BODY_STRING(String, body)) {
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     auto status_dto = StatusDto::createShared();
-
     vectordb::Json parsedBody;
     auto valid = parsedBody.LoadFromString(body);
     if (!valid) {
@@ -390,8 +401,15 @@ class WebController : public oatpp::web::server::api::ApiController {
     // auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
     // auto table = db->GetTable(table_name);
 
+    // Collect request headers
+    std::unordered_map<std::string, std::string> headers;
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER); // Replace 'Your-Header-Name' with the actual header name
+    if (headerValue != nullptr) {
+      headers[OPENAI_KEY_HEADER] = headerValue->c_str();
+    }
+
     auto data = parsedBody.GetArray("data");
-    vectordb::Status insert_status = db_server->Insert(db_name, table_name, data);
+    vectordb::Status insert_status = db_server->Insert(db_name, table_name, data, headers);
     if (!insert_status.ok()) {
       status_dto->statusCode = Status::CODE_500.code;
       status_dto->message = insert_status.message();
@@ -521,7 +539,8 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ENDPOINT("POST", "/api/{db_name}/data/query", Query,
            PATH(String, db_name, "db_name"),
-           BODY_STRING(String, body)) {
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     auto status_dto = StatusDto::createShared();
 
     vectordb::Json parsedBody;
@@ -580,6 +599,13 @@ class WebController : public oatpp::web::server::api::ApiController {
     bool with_distance = false;
     if (parsedBody.HasMember("withDistance")) {
       with_distance = parsedBody.GetBool("withDistance");
+    }
+
+    // Collect request headers
+    std::unordered_map<std::string, std::string> headers;
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER); // Replace 'Your-Header-Name' with the actual header name
+    if (headerValue != nullptr) {
+      headers[OPENAI_KEY_HEADER] = headerValue->c_str();
     }
 
     vectordb::Json result;
@@ -651,7 +677,8 @@ class WebController : public oatpp::web::server::api::ApiController {
         limit,
         result,
         filter,
-        with_distance);
+        with_distance,
+        headers);
     } else {
       status_dto->statusCode = Status::CODE_400.code;
       status_dto->message = "query or queryVector must be provided.";

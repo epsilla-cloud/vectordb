@@ -41,12 +41,13 @@ class TableMVP {
     const std::string &db_catalog_path,
     int64_t init_table_scale,
     bool is_leader,
-    std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service /*, int64_t executors_num*/);
+    std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service,
+    std::unordered_map<std::string, std::string> &headers /*, int64_t executors_num*/);
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
 
-  Status Insert(vectordb::Json &records);
+  Status Insert(vectordb::Json &records, std::unordered_map<std::string, std::string> &headers);
 
   Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
 

@@ -25,14 +25,14 @@ class DBServer {
 
   ~DBServer();
 
-  Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled);
+  Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled, std::unordered_map<std::string, std::string> &headers);
   Status UnloadDB(const std::string& db_name);
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema, size_t& table_id);
   Status CreateTable(const std::string& db_name, const std::string& table_schema_json, size_t& table_id);
   Status DropTable(const std::string& db_name, const std::string& table_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
   Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
-  Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
+  Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records, std::unordered_map<std::string, std::string> &headers);
   Status InsertPrepare(const std::string& db_name, const std::string& table_name, vectordb::Json& pks, vectordb::Json& result);
   Status Delete(
       const std::string& db_name,
@@ -59,7 +59,8 @@ class DBServer {
       const int64_t limit,
       vectordb::Json& result,
       const std::string& filter,
-      bool with_distance);
+      bool with_distance,
+      std::unordered_map<std::string, std::string> &headers);
 
   Status Project(
       const std::string& db_name,

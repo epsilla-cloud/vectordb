@@ -25,7 +25,8 @@ DBServer::~DBServer() {
 
 Status DBServer::LoadDB(const std::string& db_name,
                         const std::string& db_catalog_path, int64_t init_table_scale,
-                        bool wal_enabled) {
+                        bool wal_enabled,
+                        std::unordered_map<std::string, std::string> &headers) {
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
@@ -39,7 +40,7 @@ Status DBServer::LoadDB(const std::string& db_name,
       return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
     }
 
-    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_, embedding_service_);
+    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_, embedding_service_, headers);
     db->SetWALEnabled(wal_enabled);
     dbs_.push_back(db);
     db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
@@ -201,7 +202,8 @@ Status DBServer::ListTables(const std::string& db_name, std::vector<std::string>
 
 Status DBServer::Insert(const std::string& db_name,
                         const std::string& table_name,
-                        vectordb::Json& records) {
+                        vectordb::Json& records,
+                        std::unordered_map<std::string, std::string> &headers) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -210,7 +212,7 @@ Status DBServer::Insert(const std::string& db_name,
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  return table->Insert(records);
+  return table->Insert(records, headers);
 }
 
 Status DBServer::InsertPrepare(const std::string& db_name,
@@ -347,7 +349,8 @@ Status DBServer::SearchByContent(
       const int64_t limit,
       vectordb::Json& result,
       const std::string& filter,
-      bool with_distance) {
+      bool with_distance,
+      std::unordered_map<std::string, std::string> &headers) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -400,7 +403,8 @@ Status DBServer::SearchByContent(
       index.embedding_model_name_,
       query,
       denseQueryVec,
-      query_dimension
+      query_dimension,
+      headers
     );
 
     if (!status.ok()) {

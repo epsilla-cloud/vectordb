@@ -5,6 +5,8 @@
 #include "db/vector.hpp"
 #include <vector>
 #include <string>
+#include <unordered_map>
+#include <utils/constants.hpp>
 
 #include "oatpp-curl/RequestExecutor.hpp"
 #include "oatpp/web/client/ApiClient.hpp"
@@ -42,7 +44,7 @@ class MyApiClient : public oatpp::web::client::ApiClient {
   API_CLIENT_INIT(MyApiClient)
 
   API_CALL("GET", "{path}", getEmbeddings, PATH(String, path))
-  API_CALL("POST", "{path}", denseEmbedDocuments, PATH(String, path), BODY_DTO(Object<EmbeddingRequestBody>, body))
+  API_CALL("POST", "{path}", denseEmbedDocuments, PATH(String, path), HEADER(String, openaiHeader, OPENAI_KEY_HEADER), BODY_DTO(Object<EmbeddingRequestBody>, body))
 
 
  #include OATPP_CODEGEN_END(ApiClient) //<- End codegen
@@ -67,13 +69,15 @@ public:
     float* vector_table,
     size_t start_record,
     size_t end_record,
-    size_t dimension
+    size_t dimension,
+    std::unordered_map<std::string, std::string> &headers
   );
   Status denseEmbedQuery(
     const std::string& model_name,
     const std::string &query,
     std::vector<engine::DenseVectorElement> &denseQueryVec,
-    size_t dimension
+    size_t dimension,
+    std::unordered_map<std::string, std::string> &headers
   );
 
 private:

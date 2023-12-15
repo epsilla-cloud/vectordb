@@ -42,7 +42,7 @@ class TableSegmentMVP {
 
   Status DoubleSize();
 
-  Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
+  Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers);
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
 
   Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id);

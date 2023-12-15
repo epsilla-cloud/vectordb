@@ -113,17 +113,17 @@ if(CURL_FOUND)
   target_link_libraries(vectordb PUBLIC ${CURL_LIBRARIES})
 endif()
 
-#add_library(pybinding SHARED bindings/python/interface.cpp)
-#
-#target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
-## the binding library name must match the module name
-#set_target_properties(pybinding PROPERTIES
-#    PREFIX ""
-#    SUFFIX ".so"
-#    OUTPUT_NAME "epsilla"
-#)
-#target_link_libraries(pybinding PUBLIC vectordb_dylib)
-#target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})
+add_library(pybinding SHARED bindings/python/interface.cpp)
+
+target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
+# the binding library name must match the module name
+set_target_properties(pybinding PROPERTIES
+   PREFIX ""
+   SUFFIX ".so"
+   OUTPUT_NAME "epsilla"
+)
+target_link_libraries(pybinding PUBLIC vectordb_dylib)
+target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})
 
 if(APPLE)
     set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/Cellar/libomp/16.0.6/include")

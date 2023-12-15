@@ -5,7 +5,12 @@
 namespace vectordb {
 namespace engine {
 
-DBMVP::DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale, bool is_leader, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+DBMVP::DBMVP(
+  meta::DatabaseSchema& database_schema,
+  int64_t init_table_scale,
+  bool is_leader,
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service,
+  std::unordered_map<std::string, std::string> &headers) {
   embedding_service_ = embedding_service;
   is_leader_ = is_leader;
   // Here you might want to initialize your database based on the provided schema
@@ -13,7 +18,13 @@ DBMVP::DBMVP(meta::DatabaseSchema& database_schema, int64_t init_table_scale, bo
   init_table_scale_ = init_table_scale;
   db_catalog_path_ = database_schema.path_;
   for (int i = 0; i < database_schema.tables_.size(); ++i) {
-    auto table = std::make_shared<TableMVP>(database_schema.tables_[i], db_catalog_path_, init_table_scale_, is_leader_, embedding_service_);
+    auto table = std::make_shared<TableMVP>(
+      database_schema.tables_[i],
+      db_catalog_path_,
+      init_table_scale_,
+      is_leader_,
+      embedding_service_,
+      headers);
     tables_.push_back(table);
     table_name_to_id_map_[database_schema.tables_[i].name_] = tables_.size() - 1;
   }
@@ -23,7 +34,8 @@ Status DBMVP::CreateTable(meta::TableSchema& table_schema) {
   if (table_name_to_id_map_.find(table_schema.name_) != table_name_to_id_map_.end()) {
     return Status(TABLE_ALREADY_EXISTS, "Table already exists: " + table_schema.name_);
   }
-  auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_, init_table_scale_, is_leader_, embedding_service_);
+  std::unordered_map<std::string, std::string> headers;
+  auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_, init_table_scale_, is_leader_, embedding_service_, headers);
   tables_.push_back(table);
   table_name_to_id_map_[table_schema.name_] = tables_.size() - 1;
   return Status::OK();

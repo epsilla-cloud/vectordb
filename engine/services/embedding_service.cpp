@@ -6,6 +6,8 @@
 #include <thread>
 #include <random>
 
+#include "utils/common_util.hpp"
+
 namespace vectordb {
 namespace engine {
 
@@ -47,20 +49,31 @@ Status EmbeddingService::denseEmbedDocuments(
   float* vector_table,
   size_t start_record,
   size_t end_record,
-  size_t dimension
+  size_t dimension,
+  std::unordered_map<std::string, std::string> &headers
 ) {
   int attempt = 0;
   while (attempt < EmbeddingDocsRetry) {
     try {
       auto requestBody = EmbeddingRequestBody::createShared();
       requestBody->model = model_name;
+
+      std::string openai_key = "";
+      // Inject 3rd party service key based on their model name.
+      if (server::CommonUtil::StartsWith(model_name, "openai/")) {
+        if (headers.find(OPENAI_KEY_HEADER) == headers.end()) {
+          return Status(INVALID_PAYLOAD, "Missing OpenAI API key.");
+        }
+        openai_key = headers[OPENAI_KEY_HEADER];
+      }
+
       // Constructing documents list from attr_column_container
       requestBody->documents = oatpp::List<oatpp::String>({});
       for (size_t idx = start_record; idx < end_record; ++idx) {
         // Assuming attr_column_container[idx] returns a string or can be converted to string
         requestBody->documents->push_back(oatpp::String(std::get<std::string>(attr_column_container[idx]).c_str()));
       }
-      auto response = m_client->denseEmbedDocuments("/v1/embeddings", requestBody);
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       vectordb::Json json;
@@ -94,7 +107,8 @@ Status EmbeddingService::denseEmbedQuery(
   const std::string& model_name,
   const std::string &query,
   std::vector<engine::DenseVectorElement> &denseQueryVec,
-  size_t dimension
+  size_t dimension,
+  std::unordered_map<std::string, std::string> &headers
 ) {
   int attempt = 0;
   while (attempt < EmbeddingQueryRetry) {
@@ -105,7 +119,16 @@ Status EmbeddingService::denseEmbedQuery(
       requestBody->documents = oatpp::List<oatpp::String>({});
       requestBody->documents->push_back(oatpp::String(query.c_str()));
 
-      auto response = m_client->denseEmbedDocuments("/v1/embeddings", requestBody);
+      std::string openai_key = "";
+      // Inject 3rd party service key based on their model name.
+      if (server::CommonUtil::StartsWith(model_name, "openai/")) {
+        if (headers.find(OPENAI_KEY_HEADER) == headers.end()) {
+          return Status(INVALID_PAYLOAD, "Missing OpenAI API key.");
+        }
+        openai_key = headers[OPENAI_KEY_HEADER];
+      }
+
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       vectordb::Json json;

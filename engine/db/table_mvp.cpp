@@ -13,7 +13,8 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
                    const std::string &db_catalog_path,
                    int64_t init_table_scale,
                    bool is_leader,
-                   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service)
+                   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service,
+                   std::unordered_map<std::string, std::string> &headers)
     : table_schema_(table_schema),
       // executors_num_(executors_num),
       table_segment_(nullptr),
@@ -34,7 +35,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
 
   // Replay operations in write ahead log.
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_, is_leader_);
-  wal_->Replay(table_schema, field_name_field_type_map_, table_segment_);
+  wal_->Replay(table_schema, field_name_field_type_map_, table_segment_, headers);
 
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     auto fType = table_schema_.fields_[i].field_type_;
@@ -198,10 +199,10 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   return Status::OK();
 }
 
-Status TableMVP::Insert(vectordb::Json &record) {
+Status TableMVP::Insert(vectordb::Json &record, std::unordered_map<std::string, std::string> &headers) {
   int64_t wal_id =
       wal_->WriteEntry(LogEntryType::INSERT, record.DumpToString());
-  return table_segment_->Insert(table_schema_, record, wal_id);
+  return table_segment_->Insert(table_schema_, record, wal_id, headers);
 }
 
 Status TableMVP::InsertPrepare(vectordb::Json &pks, vectordb::Json &result) {

@@ -2,6 +2,7 @@
 
 #include <omp.h>
 #include <unistd.h>
+#include <unordered_map>
 
 #include <chrono>
 #include <cstdio>
@@ -90,7 +91,8 @@ class WriteAheadLog {
   void Replay(
     meta::TableSchema &table_schema,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    std::shared_ptr<TableSegmentMVP> segment
+    std::shared_ptr<TableSegmentMVP> segment,
+    std::unordered_map<std::string, std::string> &headers
   ) {
     std::vector<std::filesystem::path> files;
     GetSortedLogFiles(files);
@@ -118,7 +120,7 @@ class WriteAheadLog {
         std::string content = line.substr(second_space + 1);
 
         // Otherwise, replay the entry
-        ApplyEntry(table_schema, field_name_type_map, segment, global_id, type, content);
+        ApplyEntry(table_schema, field_name_type_map, segment, global_id, type, content, headers);
       }
       // Close the file.
       in.close();
@@ -185,13 +187,14 @@ class WriteAheadLog {
     std::shared_ptr<TableSegmentMVP> segment,
     int64_t global_id,
     LogEntryType &type,
-    std::string &content
+    std::string &content,
+    std::unordered_map<std::string, std::string> &headers
   ) {
     vectordb::Json record;
     record.LoadFromString(content);
     switch (type) {
       case LogEntryType::INSERT: {
-        auto status = segment->Insert(table_schema, record, global_id);
+        auto status = segment->Insert(table_schema, record, global_id, headers);
         if (!status.ok()) {
           std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
         }
