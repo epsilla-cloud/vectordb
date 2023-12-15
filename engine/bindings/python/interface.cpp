@@ -130,7 +130,7 @@ static PyObject *create_table(PyObject *self, PyObject *args, PyObject *kwargs) 
 
   // TODO: add auto embedding here
   size_t table_id;
-  auto status = db->CreateTable(db_name, schema_json, table_id, nullptr);
+  auto status = db->CreateTable(db_name, schema_json, table_id);
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
     return NULL;
@@ -308,7 +308,6 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
   Py_XDECREF(queryVector);
   auto result = vectordb::Json();
-  std::unordered_map<std::string, std::string> headers;
   auto status = db->Search(
       db_name,
       tableName,
@@ -319,8 +318,7 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       limit,
       result,
       queryFilter,
-      withDistance,
-      headers);
+      withDistance);
 
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
