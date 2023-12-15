@@ -242,7 +242,11 @@ class WebController : public oatpp::web::server::api::ApiController {
         vectordb::engine::meta::Index index;
         index.name_ = body_index.GetString("name");
         index.field_name_ = body_index.GetString("field");
-        index.embedding_model_name_ = body_index.GetString("model");
+        if (body_index.HasMember("model")) {
+          index.embedding_model_name_ = body_index.GetString("model");
+        } else {
+          index.embedding_model_name_ = vectordb::engine::meta::DEFAULT_MODEL_NAME;
+        }
         table_schema.indices_.push_back(index);
       }
     }

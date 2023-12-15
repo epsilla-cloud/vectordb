@@ -11,7 +11,7 @@ namespace engine {
 namespace meta {
 
 constexpr size_t DEFAULT_VECTOR_DIMENSION = 0;
-constexpr const char* DEFAULT_MODEL_NAME = "sentence-transformers/paraphrase-albert-small-v2";
+constexpr const char* DEFAULT_MODEL_NAME = "BAAI/bge-small-en-v1.5";
 
 using DateT = int;
 const DateT EmptyDate = -1;
