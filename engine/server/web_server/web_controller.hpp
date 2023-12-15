@@ -528,22 +528,27 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, status_dto);
     }
 
+    std::string table_name;
     if (!parsedBody.HasMember("table")) {
       status_dto->statusCode = Status::CODE_400.code;
       status_dto->message = "table is missing in your payload.";
       return createDtoResponse(Status::CODE_400, status_dto);
+    } else {
+      table_name = parsedBody.GetString("table");
     }
 
-    if (!parsedBody.HasMember("queryField")) {
-      status_dto->statusCode = Status::CODE_400.code;
-      status_dto->message = "queryField is missing in your payload.";
-      return createDtoResponse(Status::CODE_400, status_dto);
+    // If field_name is empty, in query there must only have 1 vector field / index.
+    std::string field_name = "";
+    if (parsedBody.HasMember("queryField")) {
+      field_name = parsedBody.GetString("queryField");
+      if (parsedBody.HasMember("queryIndex")) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "Can only specify either queryField or queryIndex, but not both.";
+        return createDtoResponse(Status::CODE_400, status_dto);
+      }
     }
-
-    if (!parsedBody.HasMember("queryVector")) {
-      status_dto->statusCode = Status::CODE_400.code;
-      status_dto->message = "queryVector is missing in your payload.";
-      return createDtoResponse(Status::CODE_400, status_dto);
+    if (parsedBody.HasMember("queryIndex")) {
+      field_name = parsedBody.GetString("queryIndex");
     }
 
     if (!parsedBody.HasMember("limit")) {
@@ -552,10 +557,6 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, status_dto);
     }
 
-    std::string table_name = parsedBody.GetString("table");
-
-    std::string field_name = parsedBody.GetString("queryField");
-
     std::vector<std::string> query_fields;
     if (parsedBody.HasMember("response")) {
       size_t field_size = parsedBody.GetArraySize("response");
@@ -563,47 +564,6 @@ class WebController : public oatpp::web::server::api::ApiController {
         auto field = parsedBody.GetArrayElement("response", i);
         query_fields.push_back(field.GetString());
       }
-    }
-
-    engine::VectorPtr query;
-    size_t dense_vector_size = 0;  // used by dense vector only
-    std::vector<engine::DenseVectorElement> denseQueryVec;
-    auto querySparseVecPtr = std::make_shared<engine::SparseVector>();
-    auto queryVecJson = parsedBody.Get("queryVector");
-    if (queryVecJson.IsArray()) {
-      dense_vector_size = queryVecJson.GetSize();
-      denseQueryVec.resize(dense_vector_size);
-      for (size_t i = 0; i < dense_vector_size; i++) {
-        auto elem = queryVecJson.GetArrayElement(i);
-        denseQueryVec[i] = static_cast<engine::DenseVectorElement>(elem.GetDouble());
-      }
-      query = denseQueryVec.data();
-    } else if (queryVecJson.IsObject()) {
-      if (!queryVecJson.HasMember("indices")) {
-        status_dto->statusCode = Status::CODE_400.code;
-        status_dto->message = "missing indices field for sparse vector";
-        return createDtoResponse(Status::CODE_400, status_dto);
-      }
-      if (!queryVecJson.HasMember("values")) {
-        status_dto->statusCode = Status::CODE_400.code;
-        status_dto->message = "missing values field for sparse vector";
-        return createDtoResponse(Status::CODE_400, status_dto);
-      }
-      auto numIdxElem = queryVecJson.GetArray("indices").GetSize();
-      auto numValElem = queryVecJson.GetArray("values").GetSize();
-      if (numIdxElem != numValElem) {
-        status_dto->statusCode = Status::CODE_400.code;
-        status_dto->message = "sparse vector indices and values array are of different sizes.";
-        return createDtoResponse(Status::CODE_400, status_dto);
-      }
-      querySparseVecPtr->resize(numIdxElem);
-      for (size_t i = 0; i < numIdxElem; i++) {
-        auto idx = queryVecJson.GetArrayElement("indices", i);
-        querySparseVecPtr->at(i).index = idx.GetInt();
-        auto val = queryVecJson.GetArrayElement("values", i);
-        querySparseVecPtr->at(i).value = static_cast<float>(val.GetDouble());
-      }
-      query = querySparseVecPtr;
     }
 
     int64_t limit = parsedBody.GetInt("limit");
@@ -619,7 +579,52 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     vectordb::Json result;
-    vectordb::Status search_status = db_server->Search(
+    vectordb::Status search_status;
+    if (parsedBody.HasMember("queryVector")) {
+      // Query by provided vector.
+      engine::VectorPtr query;
+      size_t dense_vector_size = 0;  // used by dense vector only
+      std::vector<engine::DenseVectorElement> denseQueryVec;
+      auto querySparseVecPtr = std::make_shared<engine::SparseVector>();
+      auto queryVecJson = parsedBody.Get("queryVector");
+      if (queryVecJson.IsArray()) {
+        dense_vector_size = queryVecJson.GetSize();
+        denseQueryVec.resize(dense_vector_size);
+        for (size_t i = 0; i < dense_vector_size; i++) {
+          auto elem = queryVecJson.GetArrayElement(i);
+          denseQueryVec[i] = static_cast<engine::DenseVectorElement>(elem.GetDouble());
+        }
+        query = denseQueryVec.data();
+      } else if (queryVecJson.IsObject()) {
+        if (!queryVecJson.HasMember("indices")) {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "missing indices field for sparse vector";
+          return createDtoResponse(Status::CODE_400, status_dto);
+        }
+        if (!queryVecJson.HasMember("values")) {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "missing values field for sparse vector";
+          return createDtoResponse(Status::CODE_400, status_dto);
+        }
+        auto numIdxElem = queryVecJson.GetArray("indices").GetSize();
+        auto numValElem = queryVecJson.GetArray("values").GetSize();
+        if (numIdxElem != numValElem) {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "sparse vector indices and values array are of different sizes.";
+          return createDtoResponse(Status::CODE_400, status_dto);
+        }
+        querySparseVecPtr->resize(numIdxElem);
+        for (size_t i = 0; i < numIdxElem; i++) {
+          auto idx = queryVecJson.GetArrayElement("indices", i);
+          querySparseVecPtr->at(i).index = idx.GetInt();
+          auto val = queryVecJson.GetArrayElement("values", i);
+          querySparseVecPtr->at(i).value = static_cast<float>(val.GetDouble());
+        }
+        query = querySparseVecPtr;
+      }
+
+      // Search by vector.
+      search_status = db_server->Search(
         db_name,
         table_name,
         field_name,
@@ -630,11 +635,30 @@ class WebController : public oatpp::web::server::api::ApiController {
         result,
         filter,
         with_distance);
+    } else if (parsedBody.HasMember("query")) {
+      // Query by provided content.
+      std::string query_content = parsedBody.GetString("query");
+      search_status = db_server->SearchByContent(
+        db_name,
+        table_name,
+        field_name,
+        query_fields,
+        query_content,
+        limit,
+        result,
+        filter,
+        with_distance);
+    } else {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "query or queryVector must be provided.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
 
     if (!search_status.ok()) {
       oatpp::web::protocol::http::Status status;
       switch (search_status.code()) {
         case INVALID_EXPR:
+        case INVALID_PAYLOAD:
           status = Status::CODE_400;
           break;
         case NOT_IMPLEMENTED_ERROR:

@@ -18,7 +18,8 @@ namespace vectordb {
 namespace engine {
 
 // TODO: make retry and backoff time configurable.
-constexpr const int EmbeddingRetry = 5;
+constexpr const int EmbeddingDocsRetry = 3;
+constexpr const int EmbeddingQueryRetry = 2;
 constexpr const int EmbeddingBackoffInitialDelaySec = 1;
 constexpr const int EmbeddingBackoffExpBase = 2;
 constexpr const int EmbeddingBackoffJitter = 1;  // 0 means no jitter, 1 means with jitter
@@ -66,6 +67,12 @@ public:
     float* vector_table,
     size_t start_record,
     size_t end_record,
+    size_t dimension
+  );
+  Status denseEmbedQuery(
+    const std::string& model_name,
+    const std::string &query,
+    std::vector<engine::DenseVectorElement> &denseQueryVec,
     size_t dimension
   );
 

@@ -50,6 +50,16 @@ class DBServer {
       vectordb::Json& result,
       const std::string& filter,
       bool with_distance);
+  Status SearchByContent(
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& index_name,
+      std::vector<std::string>& query_fields,
+      std::string& query,
+      const int64_t limit,
+      vectordb::Json& result,
+      const std::string& filter,
+      bool with_distance);
 
   Status Project(
       const std::string& db_name,

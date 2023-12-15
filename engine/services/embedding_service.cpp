@@ -50,7 +50,7 @@ Status EmbeddingService::denseEmbedDocuments(
   size_t dimension
 ) {
   int attempt = 0;
-  while (attempt < EmbeddingRetry) {
+  while (attempt < EmbeddingDocsRetry) {
     try {
       auto requestBody = EmbeddingRequestBody::createShared();
       requestBody->model = model_name;
@@ -79,7 +79,7 @@ Status EmbeddingService::denseEmbedDocuments(
       std::cerr << "Exception in embedDocuments: " << e.what() << std::endl;
     }
     attempt++;
-    if (attempt >= EmbeddingRetry) {
+    if (attempt >= EmbeddingDocsRetry) {
       break;
     }
     // Exponential backoff logic
@@ -88,6 +88,50 @@ Status EmbeddingService::denseEmbedDocuments(
     std::cout << "Retry embedding documents." << std::endl;
   }
   return Status(INFRA_UNEXPECTED_ERROR, "Failed to embbed the documents.");
+}
+
+Status EmbeddingService::denseEmbedQuery(
+  const std::string& model_name,
+  const std::string &query,
+  std::vector<engine::DenseVectorElement> &denseQueryVec,
+  size_t dimension
+) {
+  int attempt = 0;
+  while (attempt < EmbeddingQueryRetry) {
+    try {
+      auto requestBody = EmbeddingRequestBody::createShared();
+      requestBody->model = model_name;
+      // Constructing documents list from attr_column_container
+      requestBody->documents = oatpp::List<oatpp::String>({});
+      requestBody->documents->push_back(oatpp::String(query.c_str()));
+
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", requestBody);
+      auto responseBody = response->readBodyToString();
+      // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
+      vectordb::Json json;
+      json.LoadFromString(responseBody->c_str());
+      if (json.GetInt("statusCode") == 200) {
+        auto embeddings = json.GetArray("result");
+        auto embedding = embeddings.GetArrayElement(0);
+        denseQueryVec.resize(dimension);
+        for (size_t i = 0; i < dimension; i++) {
+          denseQueryVec[i] = static_cast<engine::DenseVectorElement>(embedding.GetArrayElement(i).GetDouble());
+        }
+        return Status::OK();
+      }
+    } catch (const std::exception& e) {
+      std::cerr << "Exception in denseEmbedQuery: " << e.what() << std::endl;
+    }
+    attempt++;
+    if (attempt >= EmbeddingQueryRetry) {
+      break;
+    }
+    // Exponential backoff logic
+    int delaySec = EmbeddingBackoffInitialDelaySec * std::pow(EmbeddingBackoffExpBase, attempt);
+    std::this_thread::sleep_for(std::chrono::seconds(delaySec));
+    std::cout << "Retry embedding the query." << std::endl;
+  }
+  return Status(INFRA_UNEXPECTED_ERROR, "Failed to embbed the query.");
 }
 
 }  // namespace engine
