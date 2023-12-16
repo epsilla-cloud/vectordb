@@ -9,7 +9,7 @@
 
 #include "db/catalog/meta_types.hpp"
 #include "utils/status.hpp"
-
+#include "services/embedding_service.hpp"
 namespace vectordb {
 namespace engine {
 namespace meta {
@@ -40,6 +40,7 @@ class Meta {
 
   virtual void SetLeader(bool is_leader) = 0;
 
+  virtual void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) = 0;
 };  // MetaData
 
 FieldType GetFieldType(std::string& type);

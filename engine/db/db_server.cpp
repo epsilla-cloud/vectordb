@@ -25,7 +25,8 @@ DBServer::~DBServer() {
 
 Status DBServer::LoadDB(const std::string& db_name,
                         const std::string& db_catalog_path, int64_t init_table_scale,
-                        bool wal_enabled) {
+                        bool wal_enabled,
+                        std::unordered_map<std::string, std::string> &headers) {
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
@@ -39,7 +40,7 @@ Status DBServer::LoadDB(const std::string& db_name,
       return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
     }
 
-    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_);
+    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_, embedding_service_, headers);
     db->SetWALEnabled(wal_enabled);
     dbs_.push_back(db);
     db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
@@ -201,7 +202,8 @@ Status DBServer::ListTables(const std::string& db_name, std::vector<std::string>
 
 Status DBServer::Insert(const std::string& db_name,
                         const std::string& table_name,
-                        vectordb::Json& records) {
+                        vectordb::Json& records,
+                        std::unordered_map<std::string, std::string> &headers) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -210,7 +212,7 @@ Status DBServer::Insert(const std::string& db_name,
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  return table->Insert(records);
+  return table->Insert(records, headers);
 }
 
 Status DBServer::InsertPrepare(const std::string& db_name,
@@ -312,6 +314,21 @@ Status DBServer::Search(const std::string& db_name,
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
 
+  // Check if field_name is empty, must contain only 1 vector field/index.
+  if (field_name.empty()) {
+    for (auto& field: table->table_schema_.fields_) {
+      if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        if (!field_name.empty()) {
+          return Status(INVALID_PAYLOAD, "Must specify queryField if there are more than 1 vector fields.");
+        }
+        field_name = field.name_;
+      }
+    }
+  }
+
   // Filter validation
   std::vector<query::expr::ExprNodePtr> expr_nodes;
   Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
@@ -321,6 +338,86 @@ Status DBServer::Search(const std::string& db_name,
 
   return table->Search(field_name, query_fields, query_dimension, query_data, limit,
                        result, expr_nodes, with_distance);
+}
+
+Status DBServer::SearchByContent(
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& index_name,
+      std::vector<std::string>& query_fields,
+      std::string& query,
+      const int64_t limit,
+      vectordb::Json& result,
+      const std::string& filter,
+      bool with_distance,
+      std::unordered_map<std::string, std::string> &headers) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+
+  // Check if field_name is empty, must contain only 1 vector field/index.
+  if (index_name.empty()) {
+    for (auto& field: table->table_schema_.fields_) {
+      if (!field.is_index_field_) {
+        continue;
+      }
+      if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        if (!index_name.empty()) {
+          return Status(INVALID_PAYLOAD, "Must specify queryIndex if there are more than 1 vector indices.");
+        }
+        index_name = field.name_;
+      }
+    }
+  }
+  if (index_name.empty()) {
+    return Status(INVALID_PAYLOAD, "There is no index in the table. Cannot search by query content.");
+  }
+
+  // Filter validation
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
+  if (!expr_parse_status.ok()) {
+    return expr_parse_status;
+  }
+
+  // Embed the query content.
+  // Assume the embedding service already normalize the vectors for dense vectors.
+  for (auto& index: table->table_schema_.indices_) {
+    if (index.name_ != index_name) {
+      continue;
+    }
+    auto& field = table->table_schema_.fields_[index.tgt_field_id_];
+
+    engine::VectorPtr query_vec;
+    size_t query_dimension = field.vector_dimension_;
+    std::vector<engine::DenseVectorElement> denseQueryVec;
+    auto status = embedding_service_->denseEmbedQuery(
+      index.embedding_model_name_,
+      query,
+      denseQueryVec,
+      query_dimension,
+      headers
+    );
+
+    if (!status.ok()) {
+      std::cerr << "embedding service error: " << status.message() << std::endl;
+      return status;
+    }
+    query_vec = denseQueryVec.data();
+
+    return table->Search(index_name, query_fields, query_dimension, query_vec, limit,
+                         result, expr_nodes, with_distance);
+  }
+
+  return Status(INVALID_PAYLOAD, "Index not found: " + index_name);
 }
 
 Status DBServer::Project(const std::string& db_name,

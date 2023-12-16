@@ -24,9 +24,12 @@ constexpr const char* SRC_FIELD_ID = "src_field_id";
 constexpr const char* TGT_FIELD_ID = "tgt_field_id";
 constexpr const char* MODEL_NAME = "model_name";
 constexpr const char* IS_PRIMARY_KEY = "is_primary_key";
+constexpr const char* IS_INDEX_FIELD = "is_index_field";
 constexpr const char* FIELD_TYPE = "field_type";
 constexpr const char* VECTOR_DIMENSION = "vector_dimension";
 constexpr const char* METRIC_TYPE = "metric_type";
+constexpr const char* INDICES = "indices";
+constexpr const char* MODEL = "model";
 
 constexpr const char* DB_CATALOG_FILE_NAME = "catalog";
 
@@ -35,6 +38,7 @@ Status LoadFieldSchemaFromJson(const vectordb::Json& json, meta::FieldSchema& fi
   field_schema.id_ = json.GetInt(ID);
   field_schema.name_ = json.GetString(NAME);
   field_schema.is_primary_key_ = json.GetBool(IS_PRIMARY_KEY);
+  field_schema.is_index_field_ = json.GetBool(IS_INDEX_FIELD);
   field_schema.field_type_ = static_cast<meta::FieldType>(json.GetInt(FIELD_TYPE));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
@@ -74,6 +78,20 @@ Status LoadTableSchemaFromJson(const vectordb::Json& json, meta::TableSchema& ta
     }
   }
 
+  // Load indices
+  if (json.HasMember(INDICES)) {
+    size_t indices_size = json.GetArraySize(INDICES);
+    for (size_t i = 0; i < indices_size; ++i) {
+      vectordb::Json index_json = json.GetArrayElement(INDICES, i);
+      meta::Index index;
+      index.name_ = index_json.GetString(NAME);
+      index.embedding_model_name_ = index_json.GetString(MODEL);
+      index.src_field_id_ = index_json.GetInt(SRC_FIELD_ID);
+      index.tgt_field_id_ = index_json.GetInt(TGT_FIELD_ID);
+      table_schema.indices_.emplace_back(index);
+    }
+  }
+
   return Status::OK();
 }
 
@@ -83,6 +101,7 @@ void DumpFieldSchemaToJson(const meta::FieldSchema& field_schema, vectordb::Json
   json.SetInt(ID, field_schema.id_);
   json.SetString(NAME, field_schema.name_);
   json.SetBool(IS_PRIMARY_KEY, field_schema.is_primary_key_);
+  json.SetBool(IS_INDEX_FIELD, field_schema.is_index_field_);
   json.SetInt(FIELD_TYPE, static_cast<int>(field_schema.field_type_));
   // Only vector fields have vector_dimension_ and metric_type_.
   if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
@@ -120,6 +139,21 @@ void DumpTableSchemaToJson(const meta::TableSchema& table_schema, vectordb::Json
       auto_embedding_json.SetInt(TGT_FIELD_ID, auto_embedding.tgt_field_id_);
       auto_embedding_json.SetString(MODEL_NAME, auto_embedding.model_name_);
       json.AddObjectToArray(AUTO_EMBEDDINGS, auto_embedding_json);
+    }
+  }
+
+  // Dump indices
+  if (!table_schema.indices_.empty()) {
+    std::vector<vectordb::Json> empty_array;
+    json.SetArray(INDICES, empty_array);
+    for (const auto& index : table_schema.indices_) {
+      vectordb::Json index_json;
+      index_json.LoadFromString("{}");
+      index_json.SetString(NAME, index.name_);
+      index_json.SetString(MODEL, index.embedding_model_name_);
+      index_json.SetInt(SRC_FIELD_ID, index.src_field_id_);
+      index_json.SetInt(TGT_FIELD_ID, index.tgt_field_id_);
+      json.AddObjectToArray(INDICES, index_json);
     }
   }
 }
@@ -273,7 +307,7 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
   return Status::OK();
 }
 
-Status ValidateSchema(TableSchema& table_schema) {
+Status ValidateSchema(TableSchema& table_schema, std::vector<EmbeddingModel> &embedding_models) {
   // 1. Check table name
   if (!server::CommonUtil::IsValidName(table_schema.name_)) {
     return Status(DB_UNEXPECTED_ERROR, "Table name should start with a letter or '_' and can contain only letters, digits, and underscores.");
@@ -345,6 +379,64 @@ Status ValidateSchema(TableSchema& table_schema) {
     return Status(DB_UNEXPECTED_ERROR, "Field names can not be duplicated.");
   }
 
+  // Check the indices.
+  for (auto& index : table_schema.indices_) {
+    // Check the index name.
+    if (!server::CommonUtil::IsValidName(index.name_)) {
+      return Status(DB_UNEXPECTED_ERROR, "Index name should start with a letter or '_' and can contain only letters, digits, and underscores.");
+    }
+
+    // Check the indexed field.
+    bool found = false;
+    for (size_t i = 0; i < size; i++) {
+      auto field = table_schema.fields_[i];
+      auto name = field.name_;
+      if (name == index.field_name_) {
+        if (field.field_type_ != FieldType::STRING) {
+          return Status(DB_UNEXPECTED_ERROR, "Only string fields can be indexed.");
+        }
+        index.src_field_id_ = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + index.field_name_);
+    }
+
+    if (seen_fields.find(index.name_) != seen_fields.end()) {
+      return Status(DB_UNEXPECTED_ERROR, "Index name cannot be the same as a field name.");
+    } else {
+      seen_fields.insert(index.name_);
+    }
+
+    // Check if the embedding model is supported.
+    found = false;
+    for (const auto& embedding_model : embedding_models) {
+      if (embedding_model.model == index.embedding_model_name_) {
+        found = true;
+        // Rewrite the table schema and add the embedding index field.
+        FieldSchema field_schema;
+        field_schema.id_ = table_schema.fields_.size();
+        index.tgt_field_id_ = field_schema.id_; // Update the index field id.
+        field_schema.name_ = index.name_;
+        field_schema.is_primary_key_ = false;
+        field_schema.is_index_field_ = true;
+        field_schema.field_type_ = embedding_model.dense ? FieldType::VECTOR_FLOAT : FieldType::SPARSE_VECTOR_FLOAT;
+        field_schema.vector_dimension_ = embedding_model.dim;
+        field_schema.metric_type_ = MetricType::COSINE;
+        table_schema.fields_.emplace_back(field_schema);
+        break;
+      }
+    }
+    if (!found) {
+      return Status(DB_UNEXPECTED_ERROR, "Embedding model is not supported: " + index.embedding_model_name_);
+    }
+
+    // Index is converted to a vector field.
+    has_vector_field = true;
+  }
+
   if (!has_vector_field) {
     return Status(DB_UNEXPECTED_ERROR, "At lease one vector field is required.");
   }
@@ -363,8 +455,16 @@ Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table
     return Status(TABLE_ALREADY_EXISTS, "Table already exists: " + table_schema.name_);
   }
 
-  // TODO: Validate the table schema.
-  status = ValidateSchema(table_schema);
+  // Validate the table schema.
+  std::vector<EmbeddingModel> embedding_models;
+  if (table_schema.indices_.size() > 0) {
+    // Get all embedding models.
+    auto status = embedding_service_->getSupportedModels(embedding_models);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+  status = ValidateSchema(table_schema, embedding_models);
   if (!status.ok()) {
     return status;
   }
@@ -441,6 +541,10 @@ Status BasicMetaImpl::DropTable(const std::string& db_name, const std::string& t
 
 void BasicMetaImpl::SetLeader(bool is_leader) {
   is_leader_ = is_leader;
+}
+
+void BasicMetaImpl::InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+  embedding_service_ = embedding_service;
 }
 
 }  // namespace meta

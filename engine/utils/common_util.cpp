@@ -311,5 +311,13 @@ bool CommonUtil::IsValidName(const std::string& name) {
   return std::regex_match(name, pattern);
 }
 
+bool CommonUtil::StartsWith(const std::string& fullString, const std::string& starting) {
+  if (fullString.length() >= starting.length()) {
+    return (0 == fullString.compare(0, starting.length(), starting));
+  } else {
+    return false;
+  }
+}
+
 }  // namespace server
 }  // namespace vectordb

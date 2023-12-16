@@ -12,6 +12,7 @@
 #include "db/vector.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -24,14 +25,14 @@ class DBServer {
 
   ~DBServer();
 
-  Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled);
+  Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled, std::unordered_map<std::string, std::string> &headers);
   Status UnloadDB(const std::string& db_name);
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema, size_t& table_id);
   Status CreateTable(const std::string& db_name, const std::string& table_schema_json, size_t& table_id);
   Status DropTable(const std::string& db_name, const std::string& table_name);
   std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
   Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
-  Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records);
+  Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records, std::unordered_map<std::string, std::string> &headers);
   Status InsertPrepare(const std::string& db_name, const std::string& table_name, vectordb::Json& pks, vectordb::Json& result);
   Status Delete(
       const std::string& db_name,
@@ -49,6 +50,17 @@ class DBServer {
       vectordb::Json& result,
       const std::string& filter,
       bool with_distance);
+  Status SearchByContent(
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& index_name,
+      std::vector<std::string>& query_fields,
+      std::string& query,
+      const int64_t limit,
+      vectordb::Json& result,
+      const std::string& filter,
+      bool with_distance,
+      std::unordered_map<std::string, std::string> &headers);
 
   Status Project(
       const std::string& db_name,
@@ -89,6 +101,11 @@ class DBServer {
 
   Status Rebuild();
 
+  void InjectEmbeddingService(std::string& embedding_service_url) {
+    embedding_service_ = std::make_shared<vectordb::engine::EmbeddingService>(embedding_service_url);
+    meta_->InjectEmbeddingService(embedding_service_);
+  }
+
  private:
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
@@ -97,6 +114,7 @@ class DBServer {
   std::thread rebuild_thread_;
   bool stop_rebuild_thread_ = false;
   bool rebuild_started_ = false;
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 
   // periodically in a separate thread
   void RebuildPeriodically() {

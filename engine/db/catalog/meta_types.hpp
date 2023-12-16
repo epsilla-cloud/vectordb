@@ -11,7 +11,7 @@ namespace engine {
 namespace meta {
 
 constexpr size_t DEFAULT_VECTOR_DIMENSION = 0;
-constexpr const char* DEFAULT_MODEL_NAME = "sentence-transformers/paraphrase-albert-small-v2";
+constexpr const char* DEFAULT_MODEL_NAME = "BAAI/bge-small-en-v1.5";
 
 using DateT = int;
 const DateT EmptyDate = -1;
@@ -51,6 +51,7 @@ struct FieldSchema {
   int64_t id_ = 0;
   std::string name_;
   bool is_primary_key_ = false;
+  bool is_index_field_ = false;
   FieldType field_type_ = FieldType::INT4;
   size_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
   MetricType metric_type_ = MetricType::EUCLIDEAN;
@@ -62,10 +63,19 @@ struct AutoEmbedding {
   std::string model_name_ = DEFAULT_MODEL_NAME;
 };
 
+struct Index {
+  std::string name_;
+  std::string field_name_;
+  std::string embedding_model_name_;
+  int64_t src_field_id_ = 0;
+  int64_t tgt_field_id_ = 0;
+};
+
 struct TableSchema {
   int64_t id_ = 0;
   std::string name_;
   std::vector<FieldSchema> fields_;
+  std::vector<Index> indices_;
   std::vector<AutoEmbedding> auto_embeddings_;
 };
 
