@@ -86,7 +86,7 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     // Collect request headers
     std::unordered_map<std::string, std::string> headers;
-    auto headerValue = request->getHeader(OPENAI_KEY_HEADER); // Replace 'Your-Header-Name' with the actual header name
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER);
     if (headerValue != nullptr) {
       headers[OPENAI_KEY_HEADER] = headerValue->c_str();
     }
@@ -403,7 +403,7 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     // Collect request headers
     std::unordered_map<std::string, std::string> headers;
-    auto headerValue = request->getHeader(OPENAI_KEY_HEADER); // Replace 'Your-Header-Name' with the actual header name
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER);
     if (headerValue != nullptr) {
       headers[OPENAI_KEY_HEADER] = headerValue->c_str();
     }
@@ -603,7 +603,7 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     // Collect request headers
     std::unordered_map<std::string, std::string> headers;
-    auto headerValue = request->getHeader(OPENAI_KEY_HEADER); // Replace 'Your-Header-Name' with the actual header name
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER);
     if (headerValue != nullptr) {
       headers[OPENAI_KEY_HEADER] = headerValue->c_str();
     }
