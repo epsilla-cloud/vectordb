@@ -15,6 +15,7 @@
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
+#include "services/embedding_service.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -33,16 +34,15 @@ struct AttributeTable {
 class TableSegmentMVP {
  public:
   // Default constructor just for table level init.
-  explicit TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale);
+  explicit TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
   // Load segment from disk.
-  explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale);
+  explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
 
   Status Init(meta::TableSchema& table_schema, int64_t size_limit);
 
   Status DoubleSize();
 
-  Status Insert(meta::TableSchema& table_schema, Json& records);
-  Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id);
+  Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers);
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
 
   Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id);
@@ -104,6 +104,8 @@ class TableSegmentMVP {
   // we can keep the raw pointer here. In addition, the table_segment_mvp's lifecycle is always longer
   // than the owner, so so don't need to worry about invalid pointer here.
   meta::TableSchema schema;
+
+  std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 
   Status DeleteByStringPK(const std::string& pk, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index);
 

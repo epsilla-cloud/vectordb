@@ -15,13 +15,15 @@
 #include <string>
 #include <thread>  // std::this_thread::sleep_for
 #include <vector>
+#include <unordered_map>
 
 TEST(DbServer, CreateTable) {
   std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_create_table");
   vectordb::engine::DBServer database;
   std::filesystem::remove_all(tempDir);
   const auto dbName = "MyDb";
-  auto loadDbStatus = database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  auto loadDbStatus = database.LoadDB(dbName, tempDir, 150000, true, headers);
   EXPECT_TRUE(loadDbStatus.ok()) << "message:" << loadDbStatus.message();
 
   size_t tableId = 0;
@@ -94,7 +96,8 @@ TEST(DbServer, DenseVector) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -273,7 +276,7 @@ TEST(DbServer, DenseVector) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   vectordb::engine::DenseVectorElement queryData[] = {0.35, 0.55, 0.47, 0.94};
   auto badQueryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
@@ -319,7 +322,8 @@ TEST(DbServer, SparseVector) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -462,7 +466,7 @@ TEST(DbServer, SparseVector) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
       vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
@@ -508,7 +512,8 @@ TEST(DbServer, DeleteByPK) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -687,7 +692,7 @@ TEST(DbServer, DeleteByPK) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   vectordb::engine::DenseVectorElement queryData[] = {0.35, 0.55, 0.47, 0.94};
   struct TestCase {
@@ -751,8 +756,8 @@ TEST(DbServer, RebuildDenseVector) {
                 std::istreambuf_iterator<char>());
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
-
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
 
   std::ifstream recordStream("engine/db/testdata/dense_data_1.json");
   std::string records;
@@ -769,7 +774,7 @@ TEST(DbServer, RebuildDenseVector) {
   vectordb::Json recordsJson = dataObj.Get("data");
   EXPECT_GT(recordsJson.GetSize(), 0) << recordsJson.DumpToString();
   for (int i = 0; i < 20; i++) {
-    auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+    auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
@@ -828,8 +833,8 @@ TEST(DbServer, InsertAndQueryDenseVectorDuringRebuild) {
   )_";
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
-
-  database.LoadDB(dbName, tempDir, numRecords, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, numRecords, true, headers);
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
@@ -872,7 +877,8 @@ TEST(DbServer, InsertAndQueryDenseVectorDuringRebuild) {
       vectordb::Json list;
       list.LoadFromString("[]");
       list.AddObjectToArray(r);
-      status = database.Insert(dbName, tableName, list);
+      std::unordered_map<std::string, std::string> headers;
+      status = database.Insert(dbName, tableName, list, headers);
       if (!status.ok()) {
         return status;
       }
@@ -960,8 +966,8 @@ TEST(DbServer, InsertAndQuerySparseVectorDuringRebuild) {
   )_";
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
-
-  database.LoadDB(dbName, tempDir, numRecords, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, numRecords, true, headers);
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
@@ -1008,7 +1014,8 @@ TEST(DbServer, InsertAndQuerySparseVectorDuringRebuild) {
       vectordb::Json list;
       list.LoadFromString("[]");
       list.AddObjectToArray(r);
-      status = database.Insert(dbName, tableName, list);
+      std::unordered_map<std::string, std::string> headers;
+      status = database.Insert(dbName, tableName, list, headers);
       if (!status.ok()) {
         return status;
       }
@@ -1099,8 +1106,8 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   )_";
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
-
-  database.LoadDB(dbName, tempDir, numRecords, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, numRecords, true, headers);
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
@@ -1131,10 +1138,9 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   std::sort(itemsSecondHalf.begin(), itemsSecondHalf.end(), [](vectordb::Json a, vectordb::Json b) {
     return a.GetInt("ID") < b.GetInt("ID");
   });
-
   // insert first half of records and query top 500 in fully rebuilt 5000 records
   {
-    auto insertStatus = database.Insert(dbName, tableName, itemFirstHalfJson);
+    auto insertStatus = database.Insert(dbName, tableName, itemFirstHalfJson, headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
     auto rebuildStatus = database.Rebuild();
@@ -1155,7 +1161,7 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
 
   // insert the remaining half of records and query top 500 in 5000 prebuilt records + 5000 non-rebuilt records
   {
-    auto insertStatus = database.Insert(dbName, tableName, itemSecondHalfJson);
+    auto insertStatus = database.Insert(dbName, tableName, itemSecondHalfJson, headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
     // verify query result before rebuild
@@ -1215,7 +1221,8 @@ TEST(DbServer, RebuildSparseVector) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -1357,9 +1364,8 @@ TEST(DbServer, RebuildSparseVector) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-
   for (int i = 0; i < 20; i++) {
-    auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+    auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
@@ -1375,7 +1381,8 @@ TEST(DbServer, DenseVectorFilter) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -1554,7 +1561,7 @@ TEST(DbServer, DenseVectorFilter) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   vectordb::engine::DenseVectorElement queryData[] = {0.35, 0.55, 0.47, 0.94};
   struct TestCase {
@@ -1596,7 +1603,8 @@ TEST(DbServer, SparseVectorFilter) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -1739,7 +1747,7 @@ TEST(DbServer, SparseVectorFilter) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
       vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));
@@ -1818,8 +1826,8 @@ TEST(DbServer, InsertDenseVectorLargeBatch) {
   )_";
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
-
-  database.LoadDB(dbName, tempDir, numRecords, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, numRecords, true, headers);
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
@@ -1845,7 +1853,7 @@ TEST(DbServer, InsertDenseVectorLargeBatch) {
 
   // continuously insert 2 rebuild results
   for (int i = 0; i < numBatches / 2; i++) {
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i], headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
@@ -1856,14 +1864,14 @@ TEST(DbServer, InsertDenseVectorLargeBatch) {
 
   // insert during rebuild
   for (int i = numBatches / 2; i < numBatches - 1; i++) {
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i], headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
   // insert after rebuild is done
   {
     rebuildStatusFuture.wait();
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[numBatches - 1]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[numBatches - 1], headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
@@ -1921,8 +1929,8 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
   )_";
   schemaObj.LoadFromString(schema);
   auto tableName = schemaObj.GetString("name");
-
-  database.LoadDB(dbName, tempDir, numRecords, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, numRecords, true, headers);
   auto createTableStatus = database.CreateTable(dbName, schema, tableId);
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
 
@@ -1952,7 +1960,7 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
 
   // continuously insert 2 rebuild results
   for (int i = 0; i < numBatches / 2; i++) {
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i], headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
@@ -1963,14 +1971,14 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
 
   // insert during rebuild
   for (int i = numBatches / 2; i < numBatches - 1; i++) {
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[i], headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
   // insert after rebuild is done
   {
     rebuildStatusFuture.wait();
-    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[numBatches - 1]);
+    auto insertStatus = database.Insert(dbName, tableName, recordBatchJson[numBatches - 1], headers);
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   }
 
@@ -1993,7 +2001,8 @@ TEST(DbServer, InvalidSparseVector) {
   const auto dbName = "MyDb";
   const auto tableName = "MyTable";
   size_t queryDimension = 4;
-  database.LoadDB(dbName, tempDir, 150000, true);
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
   size_t tableId = 0;
 
   const std::string schema = R"_(
@@ -2068,7 +2077,7 @@ TEST(DbServer, InvalidSparseVector) {
   EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
   vectordb::Json recordsJson;
   EXPECT_TRUE(recordsJson.LoadFromString(records));
-  auto insertStatus = database.Insert(dbName, tableName, recordsJson);
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
   auto queryDataPtr = std::make_shared<vectordb::engine::SparseVector>(
       vectordb::engine::SparseVector({{0, 0.35}, {1, 0.55}, {2, 0.47}, {3, 0.94}}));

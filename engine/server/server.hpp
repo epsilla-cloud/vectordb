@@ -12,7 +12,7 @@ class Server {
 
   void Init(const std::string& config_filename);
 
-  Status Start(uint16_t port, bool rebuild, bool is_leader);
+  Status Start(uint16_t port, bool rebuild, bool is_leader, std::string &embedding_service_url);
   void Stop();
 
  private:

@@ -8,6 +8,7 @@
 #include <oatpp/web/server/api/ApiController.hpp>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/catalog/meta.hpp"
@@ -22,6 +23,7 @@
 #include "utils/error.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
+#include "utils/constants.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -35,6 +37,7 @@ class WebController : public oatpp::web::server::api::ApiController {
  public:
   WebController(const std::shared_ptr<ObjectMapper>& objectMapper)
       : oatpp::web::server::api::ApiController(objectMapper) {
+    db_server = std::make_shared<vectordb::engine::DBServer>();
   }
 
  public:
@@ -43,8 +46,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     return std::make_shared<WebController>(objectMapper);
   }
 
-  std::shared_ptr<vectordb::engine::DBServer> db_server = std::make_shared<vectordb::engine::DBServer>();
-  // vectordb::engine::meta::MetaPtr meta = std::make_shared<vectordb::engine::meta::BasicMetaImpl>();
+  std::shared_ptr<vectordb::engine::DBServer> db_server;
 
 /**
  *  Begin ENDPOINTs generation ('ApiController' codegen)
@@ -70,7 +72,9 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ADD_CORS(LoadDB)
 
-  ENDPOINT("POST", "/api/load", LoadDB, BODY_STRING(String, body)) {
+  ENDPOINT("POST", "/api/load", LoadDB,
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     vectordb::Json parsedBody;
     auto dto = StatusDto::createShared();
     auto valid = parsedBody.LoadFromString(body);
@@ -78,6 +82,13 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->statusCode = Status::CODE_400.code;
       dto->message = "Invalid payload.";
       return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    // Collect request headers
+    std::unordered_map<std::string, std::string> headers;
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER);
+    if (headerValue != nullptr) {
+      headers[OPENAI_KEY_HEADER] = headerValue->c_str();
     }
 
     std::string db_path = parsedBody.GetString("path");
@@ -90,7 +101,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     if (parsedBody.HasMember("walEnabled")) {
       wal_enabled = parsedBody.GetBool("walEnabled");
     }
-    vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale, wal_enabled);
+    vectordb::Status status = db_server->LoadDB(db_name, db_path, init_table_scale, wal_enabled, headers);
 
     if (status.code() == DB_ALREADY_EXIST) {
       // DB already exists error.
@@ -235,6 +246,22 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
+    if (parsedBody.HasMember("indices")) {
+      size_t indices_size = parsedBody.GetArraySize("indices");
+      for (size_t i = 0; i < indices_size; i++) {
+        auto body_index = parsedBody.GetArrayElement("indices", i);
+        vectordb::engine::meta::Index index;
+        index.name_ = body_index.GetString("name");
+        index.field_name_ = body_index.GetString("field");
+        if (body_index.HasMember("model")) {
+          index.embedding_model_name_ = body_index.GetString("model");
+        } else {
+          index.embedding_model_name_ = vectordb::engine::meta::DEFAULT_MODEL_NAME;
+        }
+        table_schema.indices_.push_back(index);
+      }
+    }
+
     size_t table_id;
     vectordb::Status status = db_server->CreateTable(db_name, table_schema, table_id);
 
@@ -329,9 +356,9 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ENDPOINT("POST", "/api/{db_name}/data/insert", InsertRecords,
            PATH(String, db_name, "db_name"),
-           BODY_STRING(String, body)) {
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     auto status_dto = StatusDto::createShared();
-
     vectordb::Json parsedBody;
     auto valid = parsedBody.LoadFromString(body);
     if (!valid) {
@@ -374,8 +401,15 @@ class WebController : public oatpp::web::server::api::ApiController {
     // auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
     // auto table = db->GetTable(table_name);
 
+    // Collect request headers
+    std::unordered_map<std::string, std::string> headers;
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER);
+    if (headerValue != nullptr) {
+      headers[OPENAI_KEY_HEADER] = headerValue->c_str();
+    }
+
     auto data = parsedBody.GetArray("data");
-    vectordb::Status insert_status = db_server->Insert(db_name, table_name, data);
+    vectordb::Status insert_status = db_server->Insert(db_name, table_name, data, headers);
     if (!insert_status.ok()) {
       status_dto->statusCode = Status::CODE_500.code;
       status_dto->message = insert_status.message();
@@ -505,7 +539,8 @@ class WebController : public oatpp::web::server::api::ApiController {
 
   ENDPOINT("POST", "/api/{db_name}/data/query", Query,
            PATH(String, db_name, "db_name"),
-           BODY_STRING(String, body)) {
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
     auto status_dto = StatusDto::createShared();
 
     vectordb::Json parsedBody;
@@ -516,22 +551,27 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, status_dto);
     }
 
+    std::string table_name;
     if (!parsedBody.HasMember("table")) {
       status_dto->statusCode = Status::CODE_400.code;
       status_dto->message = "table is missing in your payload.";
       return createDtoResponse(Status::CODE_400, status_dto);
+    } else {
+      table_name = parsedBody.GetString("table");
     }
 
-    if (!parsedBody.HasMember("queryField")) {
-      status_dto->statusCode = Status::CODE_400.code;
-      status_dto->message = "queryField is missing in your payload.";
-      return createDtoResponse(Status::CODE_400, status_dto);
+    // If field_name is empty, in query there must only have 1 vector field / index.
+    std::string field_name = "";
+    if (parsedBody.HasMember("queryField")) {
+      field_name = parsedBody.GetString("queryField");
+      if (parsedBody.HasMember("queryIndex")) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "Can only specify either queryField or queryIndex, but not both.";
+        return createDtoResponse(Status::CODE_400, status_dto);
+      }
     }
-
-    if (!parsedBody.HasMember("queryVector")) {
-      status_dto->statusCode = Status::CODE_400.code;
-      status_dto->message = "queryVector is missing in your payload.";
-      return createDtoResponse(Status::CODE_400, status_dto);
+    if (parsedBody.HasMember("queryIndex")) {
+      field_name = parsedBody.GetString("queryIndex");
     }
 
     if (!parsedBody.HasMember("limit")) {
@@ -540,10 +580,6 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, status_dto);
     }
 
-    std::string table_name = parsedBody.GetString("table");
-
-    std::string field_name = parsedBody.GetString("queryField");
-
     std::vector<std::string> query_fields;
     if (parsedBody.HasMember("response")) {
       size_t field_size = parsedBody.GetArraySize("response");
@@ -551,47 +587,6 @@ class WebController : public oatpp::web::server::api::ApiController {
         auto field = parsedBody.GetArrayElement("response", i);
         query_fields.push_back(field.GetString());
       }
-    }
-
-    engine::VectorPtr query;
-    size_t dense_vector_size = 0;  // used by dense vector only
-    std::vector<engine::DenseVectorElement> denseQueryVec;
-    auto querySparseVecPtr = std::make_shared<engine::SparseVector>();
-    auto queryVecJson = parsedBody.Get("queryVector");
-    if (queryVecJson.IsArray()) {
-      dense_vector_size = queryVecJson.GetSize();
-      denseQueryVec.resize(dense_vector_size);
-      for (size_t i = 0; i < dense_vector_size; i++) {
-        auto elem = queryVecJson.GetArrayElement(i);
-        denseQueryVec[i] = static_cast<engine::DenseVectorElement>(elem.GetDouble());
-      }
-      query = denseQueryVec.data();
-    } else if (queryVecJson.IsObject()) {
-      if (!queryVecJson.HasMember("indices")) {
-        status_dto->statusCode = Status::CODE_400.code;
-        status_dto->message = "missing indices field for sparse vector";
-        return createDtoResponse(Status::CODE_400, status_dto);
-      }
-      if (!queryVecJson.HasMember("values")) {
-        status_dto->statusCode = Status::CODE_400.code;
-        status_dto->message = "missing values field for sparse vector";
-        return createDtoResponse(Status::CODE_400, status_dto);
-      }
-      auto numIdxElem = queryVecJson.GetArray("indices").GetSize();
-      auto numValElem = queryVecJson.GetArray("values").GetSize();
-      if (numIdxElem != numValElem) {
-        status_dto->statusCode = Status::CODE_400.code;
-        status_dto->message = "sparse vector indices and values array are of different sizes.";
-        return createDtoResponse(Status::CODE_400, status_dto);
-      }
-      querySparseVecPtr->resize(numIdxElem);
-      for (size_t i = 0; i < numIdxElem; i++) {
-        auto idx = queryVecJson.GetArrayElement("indices", i);
-        querySparseVecPtr->at(i).index = idx.GetInt();
-        auto val = queryVecJson.GetArrayElement("values", i);
-        querySparseVecPtr->at(i).value = static_cast<float>(val.GetDouble());
-      }
-      query = querySparseVecPtr;
     }
 
     int64_t limit = parsedBody.GetInt("limit");
@@ -606,8 +601,60 @@ class WebController : public oatpp::web::server::api::ApiController {
       with_distance = parsedBody.GetBool("withDistance");
     }
 
+    // Collect request headers
+    std::unordered_map<std::string, std::string> headers;
+    auto headerValue = request->getHeader(OPENAI_KEY_HEADER);
+    if (headerValue != nullptr) {
+      headers[OPENAI_KEY_HEADER] = headerValue->c_str();
+    }
+
     vectordb::Json result;
-    vectordb::Status search_status = db_server->Search(
+    vectordb::Status search_status;
+    if (parsedBody.HasMember("queryVector")) {
+      // Query by provided vector.
+      engine::VectorPtr query;
+      size_t dense_vector_size = 0;  // used by dense vector only
+      std::vector<engine::DenseVectorElement> denseQueryVec;
+      auto querySparseVecPtr = std::make_shared<engine::SparseVector>();
+      auto queryVecJson = parsedBody.Get("queryVector");
+      if (queryVecJson.IsArray()) {
+        dense_vector_size = queryVecJson.GetSize();
+        denseQueryVec.resize(dense_vector_size);
+        for (size_t i = 0; i < dense_vector_size; i++) {
+          auto elem = queryVecJson.GetArrayElement(i);
+          denseQueryVec[i] = static_cast<engine::DenseVectorElement>(elem.GetDouble());
+        }
+        query = denseQueryVec.data();
+      } else if (queryVecJson.IsObject()) {
+        if (!queryVecJson.HasMember("indices")) {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "missing indices field for sparse vector";
+          return createDtoResponse(Status::CODE_400, status_dto);
+        }
+        if (!queryVecJson.HasMember("values")) {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "missing values field for sparse vector";
+          return createDtoResponse(Status::CODE_400, status_dto);
+        }
+        auto numIdxElem = queryVecJson.GetArray("indices").GetSize();
+        auto numValElem = queryVecJson.GetArray("values").GetSize();
+        if (numIdxElem != numValElem) {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "sparse vector indices and values array are of different sizes.";
+          return createDtoResponse(Status::CODE_400, status_dto);
+        }
+        querySparseVecPtr->resize(numIdxElem);
+        for (size_t i = 0; i < numIdxElem; i++) {
+          auto idx = queryVecJson.GetArrayElement("indices", i);
+          querySparseVecPtr->at(i).index = idx.GetInt();
+          auto val = queryVecJson.GetArrayElement("values", i);
+          querySparseVecPtr->at(i).value = static_cast<float>(val.GetDouble());
+        }
+        query = querySparseVecPtr;
+      }
+
+      // Search by vector.
+      search_status = db_server->Search(
         db_name,
         table_name,
         field_name,
@@ -618,11 +665,31 @@ class WebController : public oatpp::web::server::api::ApiController {
         result,
         filter,
         with_distance);
+    } else if (parsedBody.HasMember("query")) {
+      // Query by provided content.
+      std::string query_content = parsedBody.GetString("query");
+      search_status = db_server->SearchByContent(
+        db_name,
+        table_name,
+        field_name,
+        query_fields,
+        query_content,
+        limit,
+        result,
+        filter,
+        with_distance,
+        headers);
+    } else {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "query or queryVector must be provided.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
 
     if (!search_status.ok()) {
       oatpp::web::protocol::http::Status status;
       switch (search_status.code()) {
         case INVALID_EXPR:
+        case INVALID_PAYLOAD:
           status = Status::CODE_400;
           break;
         case NOT_IMPLEMENTED_ERROR:

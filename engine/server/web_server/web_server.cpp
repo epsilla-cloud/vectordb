@@ -6,6 +6,8 @@
 #include "request_interceptor.hpp"
 #include "web_controller.hpp"
 
+#include "services/embedding_service.hpp"
+
 namespace vectordb {
 namespace server {
 namespace web {
@@ -33,6 +35,10 @@ Status WebServer::StartService() {
 
     /* create ApiControllers and add endpoints to router */
     auto user_controller = WebController::createShared();
+
+    // Inject dependency services.
+    user_controller->db_server->InjectEmbeddingService(embedding_service_url_);
+
     // Start rebuild thread
     if (rebuild_) {
       user_controller->db_server->StartRebuild();

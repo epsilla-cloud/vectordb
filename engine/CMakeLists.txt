@@ -32,6 +32,10 @@ list(APPEND LIB_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "server/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
 
+# Add source files in the services directory
+file(GLOB UTILS_FILES "services/*.cpp")
+list(APPEND LIB_FILES ${UTILS_FILES})
+
 # Add source files in the db directory
 file(GLOB UTILS_FILES "db/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
@@ -71,28 +75,52 @@ set_target_properties(oatpp PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/build/dependencies/include/oatpp-1.3.0/oatpp/"
 )
 
+add_library(oatpp_curl STATIC IMPORTED)
+set_target_properties(oatpp_curl PROPERTIES
+  IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/build/dependencies/lib/oatpp-1.3.0/liboatpp-curl.a"
+  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/build/dependencies/include/oatpp-1.3.0/oatpp-curl/"
+)
+
+# Add this line right here
+set_property(TARGET oatpp_curl APPEND PROPERTY INTERFACE_LINK_LIBRARIES oatpp)
+
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
 find_package(Boost REQUIRED COMPONENTS filesystem)
 target_include_directories(vectordb_lib PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(vectordb_lib PUBLIC oatpp)
+target_link_libraries(vectordb_lib PUBLIC oatpp_curl)
 target_link_libraries(vectordb_lib PUBLIC ${Boost_LIBRARIES})
 target_include_directories(vectordb_dylib PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(vectordb_dylib PUBLIC ${Boost_LIBRARIES})
 target_link_libraries(vectordb_dylib PUBLIC oatpp)
+target_link_libraries(vectordb_dylib PUBLIC oatpp_curl)
 
 add_executable(vectordb cmd/server/main.cpp)
 target_link_libraries(vectordb PUBLIC vectordb_lib)
 target_link_libraries(vectordb PUBLIC oatpp)
+target_link_libraries(vectordb PUBLIC oatpp_curl)
+
+find_package(CURL REQUIRED)
+if(CURL_FOUND)
+  target_include_directories(vectordb_lib PUBLIC ${CURL_INCLUDE_DIRS})
+  target_link_libraries(vectordb_lib PUBLIC ${CURL_LIBRARIES})
+
+  target_include_directories(vectordb_dylib PUBLIC ${CURL_INCLUDE_DIRS})
+  target_link_libraries(vectordb_dylib PUBLIC ${CURL_LIBRARIES})
+
+  target_include_directories(vectordb PUBLIC ${CURL_INCLUDE_DIRS})
+  target_link_libraries(vectordb PUBLIC ${CURL_LIBRARIES})
+endif()
 
 add_library(pybinding SHARED bindings/python/interface.cpp)
 
 target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
 # the binding library name must match the module name
 set_target_properties(pybinding PROPERTIES
-    PREFIX ""
-    SUFFIX ".so"
-    OUTPUT_NAME "epsilla"
+   PREFIX ""
+   SUFFIX ".so"
+   OUTPUT_NAME "epsilla"
 )
 target_link_libraries(pybinding PUBLIC vectordb_dylib)
 target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "db/db_server.hpp"
 #include "server/web_server/web_controller.hpp"
@@ -50,12 +51,14 @@ static PyObject *load_db(PyObject *self, PyObject *args, PyObject *kwargs) {
     return NULL;
   }
 
+  std::unordered_map<std::string, std::string> headers;
   auto status = db->LoadDB(
       name,
       path,
       vectordb::server::web::InitTableScale,
       // TODO: make it variable
-      true);
+      true,
+      headers);
   return PyLong_FromLong(status.code());
 }
 
@@ -186,7 +189,9 @@ static PyObject *insert(PyObject *self, PyObject *args, PyObject *kwargs) {
   records.LoadFromString(std::string(utf8_str));
   Py_DECREF(json_str);
 
-  auto status = db->Insert(db_name, tableName, records);
+  std::unordered_map<std::string, std::string> headers;
+
+  auto status = db->Insert(db_name, tableName, records, headers);
   return PyLong_FromLong(int(status.code()));
 }
 

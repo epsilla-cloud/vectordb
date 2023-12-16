@@ -33,6 +33,8 @@ class CommonUtil {
   static void ConvertTime(tm time_struct, time_t& time_integer);
 
   static bool IsValidName(const std::string& name);
+
+  static bool StartsWith(const std::string& fullString, const std::string& starting);
 };
 
 }  // namespace server

@@ -18,6 +18,7 @@ class WebServer {
   std::shared_ptr<std::thread> thread_ptr_;
   uint16_t port_;
   bool rebuild_;
+  std::string embedding_service_url_;
   std::atomic<bool> is_leader_;
 
  private:
@@ -50,6 +51,10 @@ class WebServer {
 
   void SetLeader(bool is_leader) {
     is_leader_ = is_leader;
+  }
+
+  void SetEmbeddingServiceUrl(const std::string& url) {
+    embedding_service_url_ = url;
   }
 };
 }  // namespace web
