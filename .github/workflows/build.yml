@@ -3,7 +3,7 @@ name: Build Vectordb Docker Image for linux/amd64 and linux/arm64
 on:
   push:
     branches: [ "main", "dev" ]
-    paths: ['VERSION']
+    paths: ['engine/Dockerfile.embed', 'VERSION']
 
 jobs:
   build:
