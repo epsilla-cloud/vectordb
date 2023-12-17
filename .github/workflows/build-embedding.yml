@@ -3,7 +3,7 @@ name: Build Embedding Docker Image
 on:
   push:
     branches: [ "auto-embedding", "dev" ]
-    paths: ['engine/Dockerfile.embed', 'VERSION']
+    paths: ['VERSION']
 
 jobs:
   build:
