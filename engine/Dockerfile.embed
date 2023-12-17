@@ -19,8 +19,8 @@ COPY --from=models /root/models /root/models
 COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 
-COPY ./embed /root/
-COPY ./embed/launch.conf /etc/supervisor/conf.d/launch.conf
+COPY ./epsilla-embed             /root/
+COPY ./epsilla-embed/launch.conf /etc/supervisor/conf.d/launch.conf
 
 RUN apt-get update && \
     apt-get install -y procps supervisor && \
