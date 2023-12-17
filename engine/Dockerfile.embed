@@ -1,11 +1,13 @@
-FROM epsilla/embedding:models as models
+FROM epsilla/embedding:models AS models
 
-FROM epsilla/base as builder
+
+FROM epsilla/base AS builder
 ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
 RUN scripts/install_oatpp_modules.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod +x vectordb
+
 
 FROM epsilla/base
 WORKDIR /root
