@@ -3,6 +3,7 @@ name: Build Embedding Docker Image
 on:
   push:
     branches: [ "auto-embedding" ]
+    paths: ['VERSION']
 
 jobs:
   build:
@@ -19,7 +20,7 @@ jobs:
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
-
+    
     - name: Get Current Date 
       id: date
       run: echo "::set-output name=date::$(date +'%Y%m%d%H%M%S')"
@@ -38,15 +39,18 @@ jobs:
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
         docker buildx create --use
 
+
+
         cd ./engine
-        
-        docker buildx build --platform linux/amd64 \
+
+        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
+
+        docker buildx build -f Dockerfile.embed \
+                            --platform linux/amd64 \
                             --pull \
                             --push \
                             --label "org.opencontainers.image.version"=${BUILD_TIMESTAMP} \
                             -t ${DOCKER_HUB_REPOSITORY}:embedding .
-
-
 
 
 
