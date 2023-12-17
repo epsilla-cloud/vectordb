@@ -46,23 +46,28 @@ jobs:
         docker buildx create --use
 
 
-        mkdir embed
-        cd embed
-        # ssh-add - <<< "${SSH_PRIVATE_KEY}"
-        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git .
-        #git clone git@github.com:epsilla-cloud/epsilla-embed.git .
-        cd ..
+
 
         cd ./engine
         
-        # docker buildx build --platform linux/amd64 \
-        #                     --pull \
-        #                     --push \
-        #                     --label "org.opencontainers.image.version"=${BUILD_TIMESTAMP} \
-        #                     -t ${DOCKER_HUB_REPOSITORY}:embedding .
+        docker buildx build --platform linux/amd64 \
+                            --pull \
+                            # --push \
+                            --label "org.opencontainers.image.version"=${BUILD_TIMESTAMP} \
+                            -t ${DOCKER_HUB_REPOSITORY}:internal .
 
+        cd ..
+        
+        mkdir embed
+        cd embed
+        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git .
 
-
+        docker buildx build --platform linux/amd64 \
+                            --push \
+                            --label "org.opencontainers.image.version"=${BUILD_TIMESTAMP} \
+                            -t ${DOCKER_HUB_REPOSITORY}:embedding .
+        
+        cd ..
 
 
 
