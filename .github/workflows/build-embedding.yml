@@ -49,10 +49,7 @@ jobs:
 
         cd ./engine
 
-        mkdir embed
-        cd embed
-        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git .
-
+        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
 
         docker buildx build -f Dockerfile.embed \
                             --platform linux/amd64 \
