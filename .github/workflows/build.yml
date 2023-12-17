@@ -2,7 +2,7 @@ name: Build Vectordb Docker Image for linux/amd64 and linux/arm64
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main" ]
     paths: ['engine/Dockerfile.embed', 'VERSION']
 
 jobs:
@@ -75,6 +75,7 @@ jobs:
                             --label "org.opencontainers.image.vendor"="Epsilla" \
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
+                            --push \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG}-lite .
 
                             
@@ -91,6 +92,7 @@ jobs:
                             --label "org.opencontainers.image.vendor"="Epsilla" \
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
+                            --push \
                             -f Dockerfile.embed \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST} .
