@@ -39,8 +39,9 @@ jobs:
         export RELEASE_TAG=`cat VERSION`;
         echo "RELEASE_TAG: ${RELEASE_TAG}";
 
+
+
         cd engine;
-        
         
         # echo "========Build docker image for amd64 firstly========";
         # docker build --pull --build-arg="RELEASE_VERSION=${IMAGE_TAG}" \
@@ -54,7 +55,6 @@ jobs:
         #              -f Dockerfile -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64 .;
         # docker push ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG}-amd64;
 
-
         echo "========Build allinone docker image both for amd64 and arm64========"
         wget https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
         chmod +x buildx-v0.11.2.linux-amd64
@@ -63,6 +63,24 @@ jobs:
         docker buildx create --use
         docker buildx ls
 
+
+        ## lite
+        docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
+                            --platform linux/amd64,linux/arm64 \
+                            --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
+                            --label "org.opencontainers.image.documentation"="https://epsilla-inc.gitbook.io/epsilladb" \
+                            --label "org.opencontainers.image.source"="https://github.com/epsilla-cloud/vectordb" \
+                            --label "org.opencontainers.image.title"="Epsilla Vector Database" \
+                            --label "org.opencontainers.image.url"="https://epsilla.com" \
+                            --label "org.opencontainers.image.vendor"="Epsilla" \
+                            --label "org.opencontainers.image.version"=${RELEASE_TAG} \
+                            --pull \
+                            --push \
+                            -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG}-lite .
+
+                            
+        ## embed
+        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
 
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
@@ -74,14 +92,9 @@ jobs:
                             --label "org.opencontainers.image.vendor"="Epsilla" \
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
+                            --push \
+                            -f Dockerfile.embed \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST} .
-
-                            
-        
-
-        
-        
-
 
         
