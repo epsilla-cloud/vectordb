@@ -1,0 +1,37 @@
+FROM epsilla/embedding:models as models
+
+FROM epsilla/base as builder
+ADD ./ /vectordb
+WORKDIR /vectordb
+ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
+RUN scripts/install_oatpp_modules.sh
+RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod +x vectordb
+
+FROM epsilla/base
+WORKDIR /root
+
+ARG TARGETARCH
+ARG RELEASE_VERSION=latest
+ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
+ENV PYTHONUNBUFFERED=True
+
+COPY --from=models /root/models /root/models
+COPY --from=builder /vectordb/build/vectordb /vectordb
+COPY ./scripts/heartbeat.sh /heartbeat.sh
+
+COPY ./embed /root/
+COPY ./embed/launch.conf /etc/supervisor/conf.d/launch.conf
+
+RUN apt-get update && \
+    apt-get install -y procps supervisor && \
+    pip install --no-cache-dir boto3 poetry --break-system-packages && \
+    poetry update && \
+    poetry install --only main && \
+    rm -rf /var/lib/apt/lists/*
+
+
+EXPOSE 8888 8889
+
+HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
+
+ENTRYPOINT ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
