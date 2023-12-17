@@ -75,7 +75,6 @@ jobs:
                             --label "org.opencontainers.image.vendor"="Epsilla" \
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
-                            --push \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG}-lite .
 
                             
@@ -92,7 +91,6 @@ jobs:
                             --label "org.opencontainers.image.vendor"="Epsilla" \
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
-                            --push \
                             -f Dockerfile.embed \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG} \
                             -t ${DOCKER_HUB_REPOSITORY}:${IMAGE_TAG_LATEST} .
