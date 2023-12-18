@@ -57,31 +57,47 @@ client.load_db(db_name="MyDB", db_path="/tmp/epsilla")
 client.use_db(db_name="MyDB")
 
 client.create_table(
-  table_name="MyTable",
-  table_fields=[
-    {"name": "ID", "dataType": "INT"},
-    {"name": "Doc", "dataType": "STRING"},
-    {"name": "Embedding", "dataType": "VECTOR_FLOAT", "dimensions": 4}
-  ]
+    table_name="MyTable",
+    table_fields=[
+        {"name": "ID", "dataType": "INT", "primaryKey": True},
+        {"name": "Doc", "dataType": "STRING"},
+    ],
+    indices=[
+      {"name": "Index", "field": "Doc"},
+    ]
 )
 
 client.insert(
-  table_name="MyTable",
-  records=[
-    {"ID": 1, "Doc": "Berlin", "Embedding": [0.05, 0.61, 0.76, 0.74]},
-    {"ID": 2, "Doc": "London", "Embedding": [0.19, 0.81, 0.75, 0.11]},
-    {"ID": 3, "Doc": "Moscow", "Embedding": [0.36, 0.55, 0.47, 0.94]},
-    {"ID": 4, "Doc": "San Francisco", "Embedding": [0.18, 0.01, 0.85, 0.80]},
-    {"ID": 5, "Doc": "Shanghai", "Embedding": [0.24, 0.18, 0.22, 0.44]}
-  ]
+    table_name="MyTable",
+    records=[
+        {"ID": 1, "Doc": "The garden was blooming with vibrant flowers, attracting butterflies and bees with their sweet nectar."},
+        {"ID": 2, "Doc": "In the busy city streets, people rushed to and fro, hardly noticing the beauty of the day."},
+        {"ID": 3, "Doc": "The library was a quiet haven, filled with the scent of old books and the soft rustling of pages."},
+        {"ID": 4, "Doc": "High in the mountains, the air was crisp and clear, revealing breathtaking views of the valley below."},
+        {"ID": 5, "Doc": "At the beach, children played joyfully in the sand, building castles and chasing the waves."},
+        {"ID": 6, "Doc": "Deep in the forest, a deer cautiously stepped out, its ears alert for any signs of danger."},
+        {"ID": 7, "Doc": "The old town's historical architecture spoke volumes about its rich cultural past."},
+        {"ID": 8, "Doc": "Night fell, and the sky was a canvas of stars, shining brightly in the moon's soft glow."},
+        {"ID": 9, "Doc": "A cozy cafe on the corner served the best hot chocolate, warming the hands and hearts of its visitors."},
+        {"ID": 10, "Doc": "The artist's studio was cluttered but inspiring, filled with unfinished canvases and vibrant paints."},
+    ],
 )
 
-status_code, response = client.query(
-  table_name="MyTable",
-  query_field="Embedding",
-  query_vector=[0.35, 0.55, 0.47, 0.94],
-  limit=2
+client.query(
+    table_name="MyTable",
+    query_text="Where can I find a serene environment, ideal for relaxation and introspection?",
+    limit=2
 )
+
+# Result
+# {
+#     'message': 'Query search successfully.',
+#     'result': [
+#         {'Doc': 'The library was a quiet haven, filled with the scent of old books and the soft rustling of pages.', 'ID': 3},
+#         {'Doc': 'High in the mountains, the air was crisp and clear, revealing breathtaking views of the valley below.', 'ID': 4}
+#     ],
+#     'statusCode': 200
+# }
 ```
 
 ## Epsilla Cloud
