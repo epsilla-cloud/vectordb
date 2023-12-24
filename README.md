@@ -18,7 +18,7 @@
 
 Epsilla is an open-source vector database. Our focus is on ensuring scalability, high performance, and cost-effectiveness of vector search. EpsillaDB bridges the gap between information retrieval and memory retention in Large Language Models.
 
-## Quick Start with Epsilla Vector Database in Docker
+## Quick Start using Docker
 
 **1. Run Backend in Docker**
 ```shell
@@ -35,7 +35,7 @@ pip install pyepsilla
 from pyepsilla import vectordb
 
 client = vectordb.Client(host='localhost', port='8888')
-client.load_db(db_name="MyDB", db_path="/tmp/epsilla")
+client.load_db(db_name="MyDB", db_path="/data/epsilla")
 client.use_db(db_name="MyDB")
 
 client.create_table(
@@ -120,4 +120,39 @@ export PYTHONPATH=./build/
 export DB_PATH=/tmp/db33
 python3 test/bindings/python/test.py
 ```
+
+Here are some sample code:
+```python
+import epsilla
+
+epsilla.load_db(db_name="db", db_path="/data/epsilla")
+epsilla.use_db(db_name="db")
+epsilla.create_table(
+    table_name="MyTable",
+    table_fields=[
+        {"name": "ID", "dataType": "INT", "primaryKey": True},
+        {"name": "Doc", "dataType": "STRING"},
+        {"name": "EmbeddingEuclidean", "dataType": "VECTOR_FLOAT", "dimensions": 4, "metricType": "EUCLIDEAN"}
+    ]
+)
+epsilla.insert(
+    table_name="MyTable",
+    records=[
+        {"ID": 1, "Doc": "Berlin", "EmbeddingEuclidean": [0.05, 0.61, 0.76, 0.74]},
+        {"ID": 2, "Doc": "London", "EmbeddingEuclidean": [0.19, 0.81, 0.75, 0.11]},
+        {"ID": 3, "Doc": "Moscow", "EmbeddingEuclidean": [0.36, 0.55, 0.47, 0.94]}
+    ]
+)
+(code, response) = epsilla.query(
+    table_name="MyTable",
+    query_field="EmbeddingEuclidean",
+    response_fields=["ID", "Doc", "EmbeddingEuclidean"],
+    query_vector=[0.35, 0.55, 0.47, 0.94],
+    filter="ID < 6",
+    limit=10,
+    with_distance=True
+)
+print(code, response)
+```
+
 
