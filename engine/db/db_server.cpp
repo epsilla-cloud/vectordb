@@ -68,6 +68,22 @@ Status DBServer::UnloadDB(const std::string& db_name) {
   return Status::OK();
 }
 
+Status DBServer::GetStatistics(const std::string& db_name,
+                               vectordb::Json& response) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  for (auto& table: db->tables_) {
+    vectordb::Json table_result;
+    table_result.LoadFromString("{}");
+    table_result.SetString("tableName", table->table_schema_.name_);
+    table_result.SetInt("totalRecords", table->GetRecordCount());
+    response.AddObjectToArray("result", table_result);
+  }
+  return Status::OK();
+}
+
 std::shared_ptr<DBMVP> DBServer::GetDB(const std::string& db_name) {
   auto it = db_name_to_id_map_.find(db_name);
   if (it == db_name_to_id_map_.end()) {

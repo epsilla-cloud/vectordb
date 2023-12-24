@@ -467,6 +467,10 @@ Status TableMVP::Project(
   return Status::OK();
 }
 
+size_t TableMVP::GetRecordCount() {
+  return table_segment_->GetRecordCount();
+}
+
 void TableMVP::SetLeader(bool is_leader) {
   wal_->SetLeader(is_leader);
   is_leader_ = is_leader;

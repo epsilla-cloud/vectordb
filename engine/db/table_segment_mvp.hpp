@@ -53,6 +53,8 @@ class TableSegmentMVP {
   // Save the table segment to disk.
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
 
+  size_t GetRecordCount();
+
   void Debug(meta::TableSchema& table_schema);
 
   ~TableSegmentMVP();
