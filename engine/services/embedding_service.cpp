@@ -59,12 +59,18 @@ Status EmbeddingService::denseEmbedDocuments(
       requestBody->model = model_name;
 
       std::string openai_key = "";
+      std::string jinaai_key = "";
       // Inject 3rd party service key based on their model name.
       if (server::CommonUtil::StartsWith(model_name, "openai/")) {
         if (headers.find(OPENAI_KEY_HEADER) == headers.end()) {
           return Status(INVALID_PAYLOAD, "Missing OpenAI API key.");
         }
         openai_key = headers[OPENAI_KEY_HEADER];
+      } else if (server::CommonUtil::StartsWith(model_name, "jinaai/")) {
+        if (headers.find(JINAAI_KEY_HEADER) == headers.end()) {
+          return Status(INVALID_PAYLOAD, "Missing JinaAI API key.");
+        }
+        jinaai_key = headers[JINAAI_KEY_HEADER];
       }
 
       // Constructing documents list from attr_column_container
@@ -73,7 +79,7 @@ Status EmbeddingService::denseEmbedDocuments(
         // Assuming attr_column_container[idx] returns a string or can be converted to string
         requestBody->documents->push_back(oatpp::String(std::get<std::string>(attr_column_container[idx]).c_str()));
       }
-      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, requestBody);
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       vectordb::Json json;
@@ -120,15 +126,21 @@ Status EmbeddingService::denseEmbedQuery(
       requestBody->documents->push_back(oatpp::String(query.c_str()));
 
       std::string openai_key = "";
+      std::string jinaai_key = "";
       // Inject 3rd party service key based on their model name.
       if (server::CommonUtil::StartsWith(model_name, "openai/")) {
         if (headers.find(OPENAI_KEY_HEADER) == headers.end()) {
           return Status(INVALID_PAYLOAD, "Missing OpenAI API key.");
         }
         openai_key = headers[OPENAI_KEY_HEADER];
+      } else if (server::CommonUtil::StartsWith(model_name, "jinaai/")) {
+        if (headers.find(JINAAI_KEY_HEADER) == headers.end()) {
+          return Status(INVALID_PAYLOAD, "Missing JinaAI API key.");
+        }
+        jinaai_key = headers[JINAAI_KEY_HEADER];
       }
 
-      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, requestBody);
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       vectordb::Json json;
