@@ -877,6 +877,10 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   return Status::OK();
 }
 
+size_t TableSegmentMVP::GetRecordCount() {
+  return record_number_ - deleted_->count(record_number_);
+}
+
 void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
   std::cout << "skip_sync_disk_: " << skip_sync_disk_ << "\n";
   std::cout << "size_limit_: " << size_limit_ << "\n";
