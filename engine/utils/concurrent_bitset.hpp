@@ -15,6 +15,7 @@ class ConcurrentBitset {
   bool test(id_type_t id) const;
   void set(id_type_t id);
   void clear(id_type_t id);
+  size_t count(size_t record_number);
 
   size_t capacity();
   size_t size();

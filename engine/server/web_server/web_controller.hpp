@@ -535,6 +535,26 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
+  ADD_CORS(GetStatistics)
+
+  ENDPOINT("GET", "/api/{db_name}/statistics", GetStatistics,
+           PATH(String, db_name, "db_name")) {
+    vectordb::Json response;
+    response.LoadFromString("{\"result\": []}");
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "");
+    vectordb::Status statistics_status = db_server->GetStatistics(db_name, response);
+
+    if (!statistics_status.ok()) {
+      auto status_dto = StatusDto::createShared();
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = statistics_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    return createResponse(Status::CODE_200, response.DumpToString());
+  }
+
   ADD_CORS(Query)
 
   ENDPOINT("POST", "/api/{db_name}/data/query", Query,

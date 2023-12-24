@@ -18,6 +18,19 @@ void ConcurrentBitset::clear(id_type_t id) {
   bitset_[id >> 3].fetch_and(~(0x1 << (id & 0x7)));
 }
 
+size_t ConcurrentBitset::count(size_t record_number) {
+  size_t count = 0;
+  size_t size = ((record_number + 8 - 1) >> 3);
+  size_t idx = 0;
+  for (auto& byte : bitset_) {
+    count += __builtin_popcount(byte.load());
+    if (++idx >= size) {
+      break;
+    }
+  }
+  return count;
+}
+
 size_t ConcurrentBitset::capacity() {
   return capacity_;
 }

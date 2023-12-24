@@ -82,6 +82,8 @@ class TableMVP {
       bool with_distance,
       std::vector<double> &distances);
 
+  size_t GetRecordCount();
+
   void SetWALEnabled(bool enabled) {
     wal_->SetEnabled(enabled);
   }
