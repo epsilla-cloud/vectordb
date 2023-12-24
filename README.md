@@ -104,7 +104,7 @@ Epsilla's core is written in C++ and leverages the advanced academic parallel gr
 
 Try our fully managed vector DBaaS at <a href="https://cloud.epsilla.com/">Epsilla Cloud</a>
 
-## Quick Start with Epsilla Python Bindings Lib, without launching epsilla vector database
+## (Experimental) Use Epsilla as a python library without starting a docker image
 
 **1. Build Epsilla Python Bindings lib package**
 ```shell
