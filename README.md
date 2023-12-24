@@ -23,7 +23,7 @@ Epsilla is an open-source vector database. Our focus is on ensuring scalability,
 **1. Run Backend in Docker**
 ```shell
 docker pull epsilla/vectordb
-docker run --pull=always -d -p 8888:8888 -v /tmp:/tmp epsilla/vectordb
+docker run --pull=always -d -p 8888:8888 -v /data:/data epsilla/vectordb
 ```
 
 **2. Interact with Python Client**
