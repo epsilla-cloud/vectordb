@@ -18,24 +18,6 @@
 
 Epsilla is an open-source vector database. Our focus is on ensuring scalability, high performance, and cost-effectiveness of vector search. EpsillaDB bridges the gap between information retrieval and memory retention in Large Language Models.
 
-The key features of Epsilla include:
-
-* High performance and production-scale similarity search for embedding vectors.
-
-* Full fledged database management system with familiar database, table, and field concepts. Vector is just another field type.
-
-* Metadata filtering.
-
-* Hybrid search with a fusion of dense and sparse vectors.
-
-* Cloud native architecture with compute storage separation, serverless, and multi-tenancy.
-
-* Rich ecosystem integrations including LangChain and LlamaIndex.
-
-* Python/JavaScript/Ruby clients, and REST API interface.
-
-Epsilla's core is written in C++ and leverages the advanced academic parallel graph traversal techniques for vector indexing, achieving 10 times faster vector search than HNSW while maintaining precision levels of over 99.9%.
-
 ## Quick Start with Epsilla Vector Database in Docker
 
 **1. Run Backend in Docker**
@@ -94,6 +76,29 @@ client.query(
 #     'statusCode': 200
 # }
 ```
+
+
+## Features:
+
+* High performance and production-scale similarity search for embedding vectors.
+
+* Full fledged database management system with familiar database, table, and field concepts. Vector is just another field type.
+
+* Metadata filtering.
+
+* Hybrid search with a fusion of dense and sparse vectors.
+
+* Built-in embedding support, with natural language in natural language out search experience.
+
+* Cloud native architecture with compute storage separation, serverless, and multi-tenancy.
+
+* Rich ecosystem integrations including LangChain and LlamaIndex.
+
+* Python/JavaScript/Ruby clients, and REST API interface.
+
+Epsilla's core is written in C++ and leverages the advanced academic parallel graph traversal techniques for vector indexing, achieving 10 times faster vector search than HNSW while maintaining precision levels of over 99.9%.
+
+
 
 ## Epsilla Cloud
 
