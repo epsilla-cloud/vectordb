@@ -339,21 +339,32 @@ Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr:
     for (auto id = 0; id < record_number_; ++id) {
       if (isIntPK()) {
         auto offset = field_id_mem_offset_map_[pkFieldIdx()] + id * primitive_offset_;
-        auto pk = &attribute_table_[offset];
         auto fieldType = pkType();
         switch (pkType()) {
-          case meta::FieldType::INT1:
-            deleted_record += DeleteByIntPK(static_cast<int8_t>(*pk), expr_evaluator, filter_root_index).ok();
+          case meta::FieldType::INT1: {
+            int8_t pk;
+            std::memcpy(&pk, &(attribute_table_[offset]), sizeof(int8_t));
+            deleted_record += DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
-          case meta::FieldType::INT2:
-            deleted_record += DeleteByIntPK(static_cast<int16_t>(*pk), expr_evaluator, filter_root_index).ok();
+          }
+          case meta::FieldType::INT2: {
+            int16_t pk;
+            std::memcpy(&pk, &(attribute_table_[offset]), sizeof(int16_t));
+            deleted_record += DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
-          case meta::FieldType::INT4:
-            deleted_record += DeleteByIntPK(static_cast<int32_t>(*pk), expr_evaluator, filter_root_index).ok();
+          }
+          case meta::FieldType::INT4: {
+            int32_t pk;
+            std::memcpy(&pk, &(attribute_table_[offset]), sizeof(int32_t));
+            deleted_record += DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
-          case meta::FieldType::INT8:
-            deleted_record += DeleteByIntPK(static_cast<int64_t>(*pk), expr_evaluator, filter_root_index).ok();
+          }
+          case meta::FieldType::INT8: {
+            int64_t pk;
+            std::memcpy(&pk, &(attribute_table_[offset]), sizeof(int64_t));
+            deleted_record += DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
+          }
         }
       } else if (isStringPK()) {
         auto pk = std::get<std::string>(var_len_attr_table_[field_id_mem_offset_map_[pkFieldIdx()]][id]);
@@ -363,6 +374,8 @@ Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr:
       }
     }
   }
+  // Segment is modified.
+  skip_sync_disk_.store(false);
   return Status(DB_SUCCESS, "{\"deleted\": " + std::to_string(deleted_record) + "}");
 }
 
@@ -407,7 +420,7 @@ Status TableSegmentMVP::DeleteByID(
     vectordb::query::expr::ExprEvaluator& evaluator,
     int filter_root_index) {
   // Caller needs to guarantee the id is within record range.
-  if (evaluator.LogicalEvaluate(filter_root_index, id)) {
+  if (!deleted_->test(id) && evaluator.LogicalEvaluate(filter_root_index, id)) {
     deleted_->set(id);
     return Status::OK();
   }
@@ -441,8 +454,6 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     // DoubleSize();
   }
 
-  // Segment is modified.
-  skip_sync_disk_.store(false);
   size_t skipped_entry = 0;
 
   // Process the insert.
@@ -664,6 +675,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     }
   }
 
+  // Segment is modified.
+  skip_sync_disk_.store(false);
   // update the vector size
   record_number_.store(cursor);
 
