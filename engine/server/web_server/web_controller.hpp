@@ -415,10 +415,11 @@ class WebController : public oatpp::web::server::api::ApiController {
       status_dto->message = insert_status.message();
       return createDtoResponse(Status::CODE_500, status_dto);
     }
-
-    status_dto->statusCode = Status::CODE_200.code;
-    status_dto->message = "Insert data to " + table_name + " successfully. " + insert_status.message();
-    return createDtoResponse(Status::CODE_200, status_dto);
+    vectordb::Json response;
+    response.LoadFromString("{\"result\": " + insert_status.message() + "}");
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Insert data to " + table_name + " successfully.");
+    return createResponse(Status::CODE_200, response.DumpToString());
   }
 
   ADD_CORS(InsertRecordsPrepare)
@@ -511,16 +512,17 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     auto table = requestBody.GetString("table");
     auto status = db_server->Delete(db_name, table, pks, filter);
-    auto responseCode = Status::CODE_200;
     if (status.ok()) {
-      dto->statusCode = Status::CODE_200.code;
-      dto->message = status.message();
+      vectordb::Json response;
+      response.LoadFromString("{\"result\": " + status.message() + "}");
+      response.SetInt("statusCode", Status::CODE_200.code);
+      response.SetString("message", "Delete data from " + table + " successfully.");
+      return createResponse(Status::CODE_200, response.DumpToString());
     } else {
-      responseCode = Status::CODE_400;
       dto->statusCode = Status::CODE_400.code;
       dto->message = status.message();
+      return createDtoResponse(Status::CODE_400, dto);
     }
-    return createDtoResponse(responseCode, dto);
   }
 
   // TODO: implement with corresponding function later.

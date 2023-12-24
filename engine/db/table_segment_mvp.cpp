@@ -363,7 +363,7 @@ Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr:
       }
     }
   }
-  return Status(DB_SUCCESS, "successfully deleted " + std::to_string(deleted_record) + " records.");
+  return Status(DB_SUCCESS, "{\"deleted\": " + std::to_string(deleted_record) + "}");
 }
 
 // Convert a primary key to an internal id
@@ -667,19 +667,20 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   // update the vector size
   record_number_.store(cursor);
 
-  auto msg = std::string("successfully inserted " +
-                         std::to_string(new_record_size - skipped_entry) +
-                         " records. ");
+  auto msg = "{\"inserted\": " + std::to_string(new_record_size - skipped_entry) + ", \"skipped\": " + std::to_string(skipped_entry) + "}";
   auto statusCode = DB_SUCCESS;
-  if (skipped_entry > 0) {
-    msg += "skipped " +
-           std::to_string(skipped_entry) + " records with primary key values that already exist, or invalid fields.";
-    std::cerr << msg << std::endl;
-  }
-  if (skipped_entry == new_record_size) {
-    statusCode = INVALID_RECORD;
-  }
   return Status(statusCode, msg);
+  // auto msg = std::string("successfully inserted " +
+  //                       std::to_string(new_record_size - skipped_entry) +
+  //                       " records. ");
+  // if (skipped_entry > 0) {
+  //   msg += "skipped " +
+  //          std::to_string(skipped_entry) + " records with primary key values that already exist, or invalid fields.";
+  //   std::cerr << msg << std::endl;
+  // }
+  // if (skipped_entry == new_record_size) {
+  //   statusCode = INVALID_RECORD;
+  // }
 }
 
 Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result) {
