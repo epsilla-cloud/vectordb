@@ -854,8 +854,10 @@ Status VecSearchExecutor::Search(
         result_size++;
       }
     }
-    search_result_.resize(result_size);
-    distance_.resize(result_size);
+    if (result_size > L_master_) {
+      search_result_.resize(result_size);
+      distance_.resize(result_size);
+    }
   }
   return Status::OK();
 }
