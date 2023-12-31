@@ -74,8 +74,8 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
     } else if (field_schema.field_type_ == meta::FieldType::VECTOR_FLOAT ||
                field_schema.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
       vector_dims_.push_back(field_schema.vector_dimension_);
-      field_id_mem_offset_map_[field_schema.id_] = current_total_vec_num;
-      field_name_mem_offset_map_[field_schema.name_] = current_total_vec_num;
+      field_id_mem_offset_map_[field_schema.id_] = dense_vector_num_;
+      field_name_mem_offset_map_[field_schema.name_] = dense_vector_num_;
       vec_field_name_executor_pool_idx_map_[field_schema.name_] = current_total_vec_num;
       dense_vector_num_++;
     } else {
