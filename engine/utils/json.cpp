@@ -31,8 +31,13 @@ std::string Json::GetString(const std::string& key) const {
 }
 
 int64_t Json::GetInt(const std::string& key) const {
-  if (doc_.contains(key) && doc_[key].is_number_integer()) {
-    return doc_[key].get<int64_t>();
+  if (doc_.contains(key)) {
+    if (doc_[key].is_number_integer()) {
+      return doc_[key].get<int64_t>();
+    } else if (doc_[key].is_number_float()) {
+      return (int64_t)(doc_[key].get<double>());
+    }
+    return 0;
   }
   return 0;
 }
@@ -56,7 +61,12 @@ std::string Json::GetString() const {
 }
 
 int64_t Json::GetInt() const {
-  return doc_.get<int64_t>();
+  if (doc_.is_number_integer()) {
+    return doc_.get<int64_t>();
+  } else if (doc_.is_number_float()) {
+    return (int64_t)(doc_.get<double>());
+  }
+  return 0;
 }
 
 bool Json::IsNumber() const {
