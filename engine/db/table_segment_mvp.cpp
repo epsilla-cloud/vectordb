@@ -296,6 +296,8 @@ bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
 }
 
 Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id) {
+  std::unique_lock<std::mutex> lock(data_update_mutex_);
+
   wal_global_id_ = wal_id;
   size_t deleted_record = 0;
   size_t pk_list_size = records.GetSize();
@@ -428,6 +430,8 @@ Status TableSegmentMVP::DeleteByID(
 }
 
 Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers, bool upsert) {
+  std::unique_lock<std::mutex> lock(data_update_mutex_);
+
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
