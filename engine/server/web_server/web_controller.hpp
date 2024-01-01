@@ -384,26 +384,11 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     std::string table_name = parsedBody.GetString("table");
-    // vectordb::engine::meta::DatabaseSchema db_schema;
-    // vectordb::Status db_status = meta->GetDatabase(db_name, db_schema);
-    // if (!db_status.ok()) {
-    //     status_dto->statusCode = Status::CODE_500.code;
-    //     status_dto->message = db_status.message();
-    //     return createDtoResponse(Status::CODE_500, status_dto);
-    // }
 
-    // vectordb::engine::meta::TableSchema table_schema;
-    // vectordb::Status table_status = meta->GetTable(db_name, table_name, table_schema);
-    // if (!table_status.ok()) {
-    //     status_dto->statusCode = Status::CODE_500.code;
-    //     status_dto->message = table_status.message();
-    //     return createDtoResponse(Status::CODE_500, status_dto);
-    // }
-
-    // std::shared_ptr<vectordb::engine::TableMVP> table =
-    //     std::make_shared<vectordb::engine::TableMVP>(table_schema, db_schema.path_);
-    // auto db = std::make_shared<vectordb::engine::DBMVP>(db_schema);
-    // auto table = db->GetTable(table_name);
+    bool upsert = false;
+    if (parsedBody.HasMember("upsert")) {
+      upsert = parsedBody.GetBool("upsert");
+    }
 
     // Collect request headers
     std::unordered_map<std::string, std::string> headers;
@@ -417,7 +402,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     auto data = parsedBody.GetArray("data");
-    vectordb::Status insert_status = db_server->Insert(db_name, table_name, data, headers);
+    vectordb::Status insert_status = db_server->Insert(db_name, table_name, data, headers, upsert);
     if (!insert_status.ok()) {
       status_dto->statusCode = Status::CODE_500.code;
       status_dto->message = insert_status.message();

@@ -219,7 +219,8 @@ Status DBServer::ListTables(const std::string& db_name, std::vector<std::string>
 Status DBServer::Insert(const std::string& db_name,
                         const std::string& table_name,
                         vectordb::Json& records,
-                        std::unordered_map<std::string, std::string> &headers) {
+                        std::unordered_map<std::string, std::string> &headers,
+                        bool upsert) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -228,7 +229,7 @@ Status DBServer::Insert(const std::string& db_name,
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  return table->Insert(records, headers);
+  return table->Insert(records, headers, upsert);
 }
 
 Status DBServer::InsertPrepare(const std::string& db_name,

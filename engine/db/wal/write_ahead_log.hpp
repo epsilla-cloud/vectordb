@@ -28,7 +28,8 @@ const std::chrono::seconds LOG_RETENTION(3600 * 24 * 7);
 
 enum LogEntryType {
   INSERT = 1,
-  DELETE = 2
+  DELETE = 2,
+  UPSERT = 3,
 };
 
 class WriteAheadLog {
@@ -195,6 +196,13 @@ class WriteAheadLog {
     switch (type) {
       case LogEntryType::INSERT: {
         auto status = segment->Insert(table_schema, record, global_id, headers);
+        if (!status.ok()) {
+          std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
+        }
+        break;
+      }
+      case LogEntryType::UPSERT: {
+        auto status = segment->Insert(table_schema, record, global_id, headers, true);
         if (!status.ok()) {
           std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
         }
