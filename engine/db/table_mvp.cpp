@@ -199,10 +199,10 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   return Status::OK();
 }
 
-Status TableMVP::Insert(vectordb::Json &record, std::unordered_map<std::string, std::string> &headers) {
+Status TableMVP::Insert(vectordb::Json &record, std::unordered_map<std::string, std::string> &headers, bool upsert) {
   int64_t wal_id =
-      wal_->WriteEntry(LogEntryType::INSERT, record.DumpToString());
-  return table_segment_->Insert(table_schema_, record, wal_id, headers);
+      wal_->WriteEntry(upsert ? LogEntryType::UPSERT : LogEntryType::INSERT, record.DumpToString());
+  return table_segment_->Insert(table_schema_, record, wal_id, headers, upsert);
 }
 
 Status TableMVP::InsertPrepare(vectordb::Json &pks, vectordb::Json &result) {

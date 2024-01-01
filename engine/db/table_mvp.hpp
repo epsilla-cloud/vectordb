@@ -47,7 +47,7 @@ class TableMVP {
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
 
-  Status Insert(vectordb::Json &records, std::unordered_map<std::string, std::string> &headers);
+  Status Insert(vectordb::Json &records, std::unordered_map<std::string, std::string> &headers, bool upsert = false);
 
   Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
 

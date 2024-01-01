@@ -23,6 +23,11 @@ class UniqueKey {
     return int8_map_.emplace(std::pair<int8_t, size_t>(k, offset)).second;
   }
 
+  void updateKey(int8_t k, size_t offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    int8_map_[k] = offset;
+  }
+
   bool getKey(int8_t k, size_t &offset_result) {
     auto it = int8_map_.find(k);
     auto found = it != int8_map_.end();
@@ -30,6 +35,11 @@ class UniqueKey {
       offset_result = it->second;
     }
     return found;
+  }
+
+  bool getKeyWithLock(int8_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
+    return getKey(k, offset_result);
   }
 
   bool removeKey(int8_t k) {
@@ -47,6 +57,11 @@ class UniqueKey {
     return int16_map_.emplace(std::pair<int16_t, size_t>(k, offset)).second;
   }
 
+  void updateKey(int16_t k, size_t offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    int16_map_[k] = offset;
+  }
+
   bool getKey(int16_t k, size_t &offset_result) {
     auto it = int16_map_.find(k);
     auto found = it != int16_map_.end();
@@ -54,6 +69,11 @@ class UniqueKey {
       offset_result = it->second;
     }
     return found;
+  }
+
+  bool getKeyWithLock(int16_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
+    return getKey(k, offset_result);
   }
 
   bool removeKey(int16_t k) {
@@ -71,6 +91,11 @@ class UniqueKey {
     return int32_map_.insert(std::pair<int32_t, size_t>(k, offset)).second;
   }
 
+  void updateKey(int32_t k, size_t offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    int32_map_[k] = offset;
+  }
+
   bool getKey(int32_t k, size_t &offset_result) {
     auto it = int32_map_.find(k);
     auto found = it != int32_map_.end();
@@ -78,6 +103,11 @@ class UniqueKey {
       offset_result = it->second;
     }
     return found;
+  }
+
+  bool getKeyWithLock(int32_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
+    return getKey(k, offset_result);
   }
 
   bool removeKey(int32_t k) {
@@ -95,6 +125,11 @@ class UniqueKey {
     return int64_map_.insert(std::pair<int64_t, size_t>(k, offset)).second;
   }
 
+  void updateKey(int64_t k, size_t offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    int64_map_[k] = offset;
+  }
+
   bool getKey(int64_t k, size_t &offset_result) {
     auto it = int64_map_.find(k);
     auto found = it != int64_map_.end();
@@ -102,6 +137,11 @@ class UniqueKey {
       offset_result = it->second;
     }
     return found;
+  }
+
+  bool getKeyWithLock(int64_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
+    return getKey(k, offset_result);
   }
 
   bool removeKey(int64_t k) {
@@ -119,6 +159,11 @@ class UniqueKey {
     return string_map_.emplace(std::pair<std::string, size_t>(k, offset)).second;
   }
 
+  void updateKey(const std::string &k, size_t offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    string_map_[k] = offset;
+  }
+
   bool getKey(const std::string &k, size_t &offset_result) {
     auto it = string_map_.find(k);
     auto found = it != string_map_.end();
@@ -126,6 +171,11 @@ class UniqueKey {
       offset_result = it->second;
     }
     return found;
+  }
+
+  bool getKeyWithLock(const std::string &k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
+    return getKey(k, offset_result);
   }
 
   bool removeKey(const std::string &k) {

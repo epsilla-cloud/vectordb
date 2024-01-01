@@ -386,17 +386,17 @@ bool TableSegmentMVP::PK2ID(Json& record, size_t& id) {
     auto pk = record.GetInt();
     switch (pkType()) {
       case meta::FieldType::INT1:
-        return primary_key_.getKey(static_cast<int8_t>(pk), id);
+        return primary_key_.getKeyWithLock(static_cast<int8_t>(pk), id);
       case meta::FieldType::INT2:
-        return primary_key_.getKey(static_cast<int16_t>(pk), id);
+        return primary_key_.getKeyWithLock(static_cast<int16_t>(pk), id);
       case meta::FieldType::INT4:
-        return primary_key_.getKey(static_cast<int32_t>(pk), id);
+        return primary_key_.getKeyWithLock(static_cast<int32_t>(pk), id);
       case meta::FieldType::INT8:
-        return primary_key_.getKey(static_cast<int64_t>(pk), id);
+        return primary_key_.getKeyWithLock(static_cast<int64_t>(pk), id);
     }
   } else if (isStringPK()) {
     auto pk = record.GetString();
-    return primary_key_.getKey(pk, id);
+    return primary_key_.getKeyWithLock(pk, id);
   }
   return false;
 }
@@ -427,7 +427,7 @@ Status TableSegmentMVP::DeleteByID(
   return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + id);
 }
 
-Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers) {
+Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers, bool upsert) {
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
@@ -458,6 +458,13 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
   // Process the insert.
   size_t cursor = record_number_;
+
+  // Hold for the record id.
+  size_t upsert_size = 0;
+  std::vector<int64_t> updated_int_ids(new_record_size);
+  std::vector<std::string> updated_string_ids(new_record_size);
+  std::vector<size_t> updated_ids_old_idx(new_record_size);
+  std::vector<size_t> updated_ids_new_idx(new_record_size);
 
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
@@ -601,9 +608,15 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
         auto value = record.GetString(field.name_);
         auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
         if (exist) {
-          // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-          skipped_entry++;
-          goto LOOP_END;
+          if (upsert) {
+            updated_string_ids[upsert_size] = value;
+            primary_key_.getKey(value, updated_ids_old_idx[upsert_size]);
+            updated_ids_new_idx[upsert_size++] = cursor;
+          } else {
+            // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+            skipped_entry++;
+            goto LOOP_END; 
+          }
         }
       } else {
         switch (field.field_type_) {
@@ -611,9 +624,15 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             int8_t value = static_cast<int8_t>((int8_t)(record.GetInt(field.name_)));
             auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
-              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-              skipped_entry++;
-              goto LOOP_END;
+              if (upsert) {
+                updated_int_ids[upsert_size] = value;
+                primary_key_.getKey(static_cast<int8_t>(value), updated_ids_old_idx[upsert_size]);
+                updated_ids_new_idx[upsert_size++] = cursor;
+              } else {
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                skipped_entry++;
+                goto LOOP_END; 
+              }
             }
             break;
           }
@@ -621,9 +640,15 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             int16_t value = static_cast<int16_t>((int16_t)(record.GetInt(field.name_)));
             auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
-              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-              skipped_entry++;
-              goto LOOP_END;
+              if (upsert) {
+                updated_int_ids[upsert_size] = value;
+                primary_key_.getKey(static_cast<int16_t>(value), updated_ids_old_idx[upsert_size]);
+                updated_ids_new_idx[upsert_size++] = cursor;
+              } else {
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                skipped_entry++;
+                goto LOOP_END; 
+              }
             }
             break;
           }
@@ -631,9 +656,15 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
             auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
-              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-              skipped_entry++;
-              goto LOOP_END;
+              if (upsert) {
+                updated_int_ids[upsert_size] = value;
+                primary_key_.getKey(static_cast<int32_t>(value), updated_ids_old_idx[upsert_size]);
+                updated_ids_new_idx[upsert_size++] = cursor;
+              } else {
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                skipped_entry++;
+                goto LOOP_END; 
+              }
             }
             break;
           }
@@ -641,9 +672,15 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             int64_t value = static_cast<int64_t>((int64_t)(record.GetInt(field.name_)));
             auto exist = !primary_key_.addKeyIfNotExist(value, cursor);
             if (exist) {
-              // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
-              skipped_entry++;
-              goto LOOP_END;
+              if (upsert) {
+                updated_int_ids[upsert_size] = value;
+                primary_key_.getKey(static_cast<int64_t>(value), updated_ids_old_idx[upsert_size]);
+                updated_ids_new_idx[upsert_size++] = cursor;
+              } else {
+                // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
+                skipped_entry++;
+                goto LOOP_END; 
+              }
             }
             break;
           }
@@ -675,10 +712,41 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     }
   }
 
-  // Segment is modified.
-  skip_sync_disk_.store(false);
+  size_t old_record_number = record_number_;
+
   // update the vector size
   record_number_.store(cursor);
+
+  // For upsert, need to update the pk map, and delete the older version of the records.
+  if (upsert) {
+    for (auto idx = 0; idx < upsert_size; ++idx) {
+      // Update the pk map.
+      if (isIntPK()) {
+        auto fieldType = pkType();
+        switch (pkType()) {
+          case meta::FieldType::INT1:
+            primary_key_.updateKey(static_cast<int8_t>(updated_int_ids[idx]), updated_ids_new_idx[idx]);
+            break;
+          case meta::FieldType::INT2:
+            primary_key_.updateKey(static_cast<int16_t>(updated_int_ids[idx]), updated_ids_new_idx[idx]);
+            break;
+          case meta::FieldType::INT4:
+            primary_key_.updateKey(static_cast<int32_t>(updated_int_ids[idx]), updated_ids_new_idx[idx]);
+            break;
+          case meta::FieldType::INT8:
+            primary_key_.updateKey(static_cast<int64_t>(updated_int_ids[idx]), updated_ids_new_idx[idx]);
+            break;
+        }
+      } else if (isStringPK()) {
+        primary_key_.updateKey(updated_string_ids[idx], updated_ids_new_idx[idx]);
+      }
+      // Delete the old version record.
+      deleted_->set(updated_ids_old_idx[idx]);
+    }
+  }
+
+  // Segment is modified.
+  skip_sync_disk_.store(false);
 
   auto msg = "{\"inserted\": " + std::to_string(new_record_size - skipped_entry) + ", \"skipped\": " + std::to_string(skipped_entry) + "}";
   auto statusCode = DB_SUCCESS;

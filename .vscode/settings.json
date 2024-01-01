@@ -103,7 +103,8 @@
     "semaphore": "cpp",
     "cfenv": "cpp",
     "typeindex": "cpp",
-    "*.ipp": "cpp"
+    "*.ipp": "cpp",
+    "charconv": "cpp"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, IndentWidth: 2, ColumnLimit: 0}"
