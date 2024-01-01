@@ -93,6 +93,8 @@ class TableSegmentMVP {
   bool isEntryDeleted(int64_t id) const;
 
  private:
+  std::mutex data_update_mutex_;
+
   // used to store primary key set for duplication check
   UniqueKey primary_key_;
   // The index of primary key in schema fields
