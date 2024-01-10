@@ -99,6 +99,8 @@ Status EmbeddingService::denseEmbedDocuments(
           }
         }
         return Status::OK();
+      } else {
+        std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       }
     } catch (const std::exception& e) {
       std::cerr << "Exception in embedDocuments: " << e.what() << std::endl;
