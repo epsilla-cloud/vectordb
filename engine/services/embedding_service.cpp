@@ -146,7 +146,7 @@ Status EmbeddingService::denseEmbedQuery(
         }
         jinaai_key = headers[JINAAI_KEY_HEADER];
       } else if (server::CommonUtil::StartsWith(model_name, "voyageai/")) {
-        if (headers.find(JINAAI_KEY_HEADER) == headers.end()) {
+        if (headers.find(VOYAGEAI_KEY_HEADER) == headers.end()) {
           return Status(INVALID_PAYLOAD, "Missing VoyageAI API key.");
         }
         voyageai_key = headers[VOYAGEAI_KEY_HEADER];
