@@ -64,6 +64,11 @@ jobs:
         docker buildx ls
 
 
+        ## embed
+        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
+        rm -rf epsilla-embed/.git* epsilla-embed/.cache 
+        
+
         ## lite
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64 \
@@ -79,11 +84,7 @@ jobs:
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG}-lite .
 
                             
-        ## embed
-        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
-        rm -rf epsilla-embed/.git* epsilla-embed/.cache 
         
-
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
                             --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
