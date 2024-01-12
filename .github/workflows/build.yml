@@ -81,6 +81,8 @@ jobs:
                             
         ## embed
         git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
+        rm -rf epsilla-embed/.git* epsilla-embed/.cache 
+        
 
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
