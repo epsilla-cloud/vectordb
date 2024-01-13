@@ -28,8 +28,9 @@ jobs:
 
     - name: Download & Install Buildx
       run: |
-        wget https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
+        wget --quiet https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
         chmod +x buildx-v0.11.2.linux-amd64
+        ls -lh buildx-v0.11.2.linux-amd64
         mkdir -p $HOME/.docker/cli-plugins
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
         docker buildx create --use
