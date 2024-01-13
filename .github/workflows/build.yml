@@ -26,8 +26,9 @@ jobs:
       run: echo "::set-output name=date::$(date +'%Y%m%d%H%M%S')"
 
 
-    - name: Download & Install Buildx
+    - name: Setup Dependency
       run: |
+        ## buildx
         wget --quiet https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v0.11.2.linux-amd64
         chmod +x buildx-v0.11.2.linux-amd64
         ls -lh buildx-v0.11.2.linux-amd64
@@ -35,9 +36,13 @@ jobs:
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
         docker buildx create --use
         docker buildx ls
-        pwd
-        ls -l
         
+        ## embed
+        cd engine;
+        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
+        rm -rf epsilla-embed/.git* epsilla-embed/.cache 
+
+
       
     - name: Build lite
       env:
@@ -53,6 +58,7 @@ jobs:
         echo "RELEASE_TAG: ${RELEASE_TAG}";
 
 
+        echo "========Build epsilladb lite docker image ========"
         cd engine;
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64 \
@@ -66,6 +72,7 @@ jobs:
                             --pull \
                             --push \
                             -t ${DOCKER_HUB_REPOSITORY}:${RELEASE_TAG}-lite .
+
 
 
     - name: Build allinone
@@ -82,15 +89,8 @@ jobs:
         echo "RELEASE_TAG: ${RELEASE_TAG}";
 
 
-        cd engine;
-        
-        ## embed
-        git clone https://eric-epsilla:${{ secrets.ACCESS_TOKEN }}@github.com/epsilla-cloud/epsilla-embed.git
-        rm -rf epsilla-embed/.git* epsilla-embed/.cache 
-        
-
         echo "========Build allinone docker image both for amd64 and arm64========"
-
+        cd engine;
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/amd64,linux/arm64 \
                             --label "org.opencontainers.image.description"="Official Epsilla Vector Database Image" \
