@@ -35,6 +35,8 @@ jobs:
         mv buildx-v0.11.2.linux-amd64 $HOME/.docker/cli-plugins/docker-buildx
         docker buildx create --use
         docker buildx ls
+        pwd
+        ls -l
         
       
     - name: Build lite
