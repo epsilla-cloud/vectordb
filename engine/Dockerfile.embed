@@ -38,4 +38,3 @@ HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh 
 
 ENTRYPOINT ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
 
-
