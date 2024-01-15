@@ -4,7 +4,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <unordered_set>
-
+#include <mutex>
 #include "db/catalog/meta.hpp"
 #include "services/embedding_service.hpp"
 
@@ -42,6 +42,7 @@ class BasicMetaImpl : public Meta {
   void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) override;
 
  private:
+  std::unordered_map<std::string, std::mutex> db_mutexes_; // Map to hold a mutex for each database
   std::unordered_map<std::string, DatabaseSchema> databases_;
   std::unordered_set<std::string> loaded_databases_paths_;  // We cannot allow loading the same database twice
   // If the segment is leader (handle sync to storage) or follower (passively sync from storage)
