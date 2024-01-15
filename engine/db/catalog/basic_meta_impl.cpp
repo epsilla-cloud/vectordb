@@ -263,6 +263,7 @@ Status BasicMetaImpl::LoadDatabase(const std::string& db_catalog_path, const std
   }
 
   databases_[db_name] = db_schema;
+  db_mutexes_[db_name]; // Initializes a mutex for the new database
   loaded_databases_paths_.insert(db_catalog_path);
 
   return Status::OK();
@@ -304,6 +305,7 @@ Status BasicMetaImpl::DropDatabase(const std::string& db_name) {
   }
   loaded_databases_paths_.erase(path);
   databases_.erase(db_name);
+  db_mutexes_.erase(db_name); // Remove mutex for the dropped database
   return Status::OK();
 }
 
@@ -445,6 +447,7 @@ Status ValidateSchema(TableSchema& table_schema, std::vector<EmbeddingModel> &em
 }
 
 Status BasicMetaImpl::CreateTable(const std::string& db_name, TableSchema& table_schema, size_t& table_id) {
+  std::lock_guard<std::mutex> lock(db_mutexes_[db_name]); // Acquire lock for this database
   // Table name cannot be duplicated.
   bool has_table = false;
   auto status = HasTable(db_name, table_schema.name_, has_table);
@@ -519,6 +522,7 @@ Status BasicMetaImpl::GetTable(const std::string& db_name, const std::string& ta
 }
 
 Status BasicMetaImpl::DropTable(const std::string& db_name, const std::string& table_name) {
+  std::lock_guard<std::mutex> lock(db_mutexes_[db_name]); // Acquire lock for this database
   auto it = databases_.find(db_name);
   if (it == databases_.end()) {
     return Status(DB_NOT_FOUND, "Database not found: " + db_name);
