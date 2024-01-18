@@ -26,8 +26,7 @@ COPY ./epsilla-embed/launch.conf /etc/supervisor/conf.d/launch.conf
 
 RUN apt-get update && \
     apt-get install -y procps supervisor && \
-    pip install --upgrade pip && \
-    pip install --no-cache-dir boto3 poetry --break-system-packages && \
+    pip install --upgrade --no-cache-dir pip boto3 poetry --break-system-packages && \
     poetry update && \
     poetry install --only main && \
     rm -rf /var/lib/apt/lists/*
