@@ -44,7 +44,7 @@ class MyApiClient : public oatpp::web::client::ApiClient {
   API_CLIENT_INIT(MyApiClient)
 
   API_CALL("GET", "{path}", getEmbeddings, PATH(String, path))
-  API_CALL("POST", "{path}", denseEmbedDocuments, PATH(String, path), HEADER(String, openaiHeader, OPENAI_KEY_HEADER), HEADER(String, jinaaiHeader, JINAAI_KEY_HEADER), HEADER(String, voyageaiHeader, VOYAGEAI_KEY_HEADER), BODY_DTO(Object<EmbeddingRequestBody>, body))
+  API_CALL("POST", "{path}", denseEmbedDocuments, PATH(String, path), HEADER(String, openaiHeader, OPENAI_KEY_HEADER), HEADER(String, jinaaiHeader, JINAAI_KEY_HEADER), HEADER(String, voyageaiHeader, VOYAGEAI_KEY_HEADER), HEADER(String, mixedbreadaiHeader, MIXEDBREADAI_KEY_HEADER), BODY_DTO(Object<EmbeddingRequestBody>, body))
 
 
  #include OATPP_CODEGEN_END(ApiClient) //<- End codegen
