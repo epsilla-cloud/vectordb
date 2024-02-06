@@ -62,6 +62,7 @@ Status EmbeddingService::denseEmbedDocuments(
       std::string jinaai_key = "";
       std::string voyageai_key = "";
       std::string mixedbreadai_key = "";
+      std::string nomic_key = "";
       // Inject 3rd party service key based on their model name.
       if (server::CommonUtil::StartsWith(model_name, "openai/")) {
         if (headers.find(OPENAI_KEY_HEADER) == headers.end()) {
@@ -82,7 +83,12 @@ Status EmbeddingService::denseEmbedDocuments(
         if (headers.find(MIXEDBREADAI_KEY_HEADER) == headers.end()) {
           return Status(INVALID_PAYLOAD, "Missing mixedbread ai API key.");
         }
-        mixedbreadai_key = headers[MIXEDBREADAI_KEY_HEADER];
+        mixedbreadai_key = headers[NOMIC_KEY_HEADER];
+      } else if (server::CommonUtil::StartsWith(model_name, "nomic/")) {
+        if (headers.find(NOMIC_KEY_HEADER) == headers.end()) {
+          return Status(INVALID_PAYLOAD, "Missing Nomic API key.");
+        }
+        nomic_key = headers[NOMIC_KEY_HEADER];
       }
 
       // Constructing documents list from attr_column_container
@@ -91,7 +97,7 @@ Status EmbeddingService::denseEmbedDocuments(
         // Assuming attr_column_container[idx] returns a string or can be converted to string
         requestBody->documents->push_back(oatpp::String(std::get<std::string>(attr_column_container[idx]).c_str()));
       }
-      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, voyageai_key, mixedbreadai_key, requestBody);
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, voyageai_key, mixedbreadai_key, nomic_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       vectordb::Json json;
@@ -164,9 +170,15 @@ Status EmbeddingService::denseEmbedQuery(
           return Status(INVALID_PAYLOAD, "Missing mixedbread ai API key.");
         }
         mixedbreadai_key = headers[MIXEDBREADAI_KEY_HEADER];
+      } else if (server::CommonUtil::StartsWith(model_name, "nomic/")) {
+        if (headers.find(NOMIC_KEY_HEADER) == headers.end()) {
+          return Status(INVALID_PAYLOAD, "Missing Nomic API key.");
+        }
+        nomic_key = headers[NOMIC_KEY_HEADER];
       }
 
-      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, voyageai_key, mixedbreadai_key, requestBody);
+
+      auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, voyageai_key, mixedbreadai_key, nomic_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
       vectordb::Json json;
@@ -192,7 +204,7 @@ Status EmbeddingService::denseEmbedQuery(
     std::this_thread::sleep_for(std::chrono::seconds(delaySec));
     std::cout << "Retry embedding the query." << std::endl;
   }
-  return Status(INFRA_UNEXPECTED_ERROR, "Failed to embbed the query.");
+  return Status(INFRA_UNEXPECTED_ERROR, "Failed to embed the query.");
 }
 
 }  // namespace engine
