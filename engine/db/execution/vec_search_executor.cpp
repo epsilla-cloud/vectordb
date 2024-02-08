@@ -751,7 +751,7 @@ bool VecSearchExecutor::BruteForceSearch(
           num_result = 0;
   // remove the invalid entries
   for (; iter < end - start; ++iter) {
-    if (!deleted.test(iter + start) && expr_evaluator.LogicalEvaluate(root_node_index, iter + start)) {
+    if (!deleted.test(iter + start) && expr_evaluator.LogicalEvaluate(root_node_index, iter + start, brute_force_queue_[iter].distance_)) {
       if (iter != num_result) {
         brute_force_queue_[num_result] = brute_force_queue_[iter];
       }
@@ -833,7 +833,7 @@ Status VecSearchExecutor::Search(
       result_size = 0;
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
         auto id = set_L_[k_i + master_queue_start].id_;
-        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id, set_L_[k_i + master_queue_start].distance_)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;
@@ -846,7 +846,7 @@ Status VecSearchExecutor::Search(
       const int64_t master_queue_start = local_queues_starts_[num_threads_ - 1];
       for (int64_t k_i = 0; k_i < candidateNum && result_size < searchLimit; ++k_i) {
         auto id = set_L_[k_i + master_queue_start].id_;
-        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id, set_L_[k_i + master_queue_start].distance_)) {
           continue;
         }
         search_result_[result_size] = set_L_[k_i + master_queue_start].id_;

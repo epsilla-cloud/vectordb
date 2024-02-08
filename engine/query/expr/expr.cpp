@@ -18,7 +18,7 @@ enum class State {
   Number,
   String,
   Attribute,
-  Operator,
+  Operator
 };
 
 bool isArithChar(char c) {
@@ -111,6 +111,14 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
           state = State::String;
         } else if (c == '&' || c == '|' || c == '^') {
           return Status(NOT_IMPLEMENTED_ERROR, "Epsilla does not support bitwise operators yet.");
+        } else if (c == '@') {
+          if (i + 9 <= last_index && expression.substr(i, 9) == "@distance") {
+            state = State::Attribute;
+            cur_token = "@distance";
+            i += 9;
+          } else {
+            return Status(INVALID_EXPR, "Filter expression is not valid.");
+          }
         } else {
           return Status(INVALID_EXPR, "Filter expression is not valid.");
         }
@@ -245,6 +253,10 @@ bool isIntConstant(const std::string& str) {
   std::regex integerPattern("^[-+]?\\d+$");
 
   return std::regex_match(str, integerPattern);
+};
+
+bool isDistance(const std::string& str) {
+  return str == "@distance";
 };
 
 bool isDoubleConstant(const std::string& str) {
@@ -414,6 +426,10 @@ Status GenerateNodes(
         node->node_type = NodeType::DoubleConst;
         node->value_type = ValueType::DOUBLE;
         node->double_value = std::stod(token);
+      } else if (isDistance(token)) {
+        node->field_name = token;
+        node->node_type = NodeType::DoubleAttr;
+        node->value_type = ValueType::DOUBLE;
       } else {
         if (field_map.find(token) == field_map.end()) {
           return Status(INVALID_EXPR, "Invalid filter expression: field name '" + token + "' not found.");
