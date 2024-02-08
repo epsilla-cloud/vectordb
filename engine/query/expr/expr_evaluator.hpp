@@ -24,6 +24,7 @@ class ExprEvaluator {
   ~ExprEvaluator();
 
   bool LogicalEvaluate(const int& node_index, const int64_t& cand_ind);
+  bool LogicalEvaluate(const int& node_index, const int64_t& cand_ind, const double distance);
 
  private:
   std::string GetStrFieldValue(const std::string& field_name, const int64_t& cand_ind);
@@ -31,7 +32,7 @@ class ExprEvaluator {
   int64_t GetIntFieldValue(const std::string& field_name, const int64_t& cand_ind, NodeType& node_type);
   double GetRealNumberFieldValue(const std::string& field_name, const int64_t& cand_ind, NodeType& node_type);
   std::string StrEvaluate(const int& node_index, const int64_t& cand_ind);
-  double NumEvaluate(const int& node_index, const int64_t& cand_ind);
+  double NumEvaluate(const int& node_index, const int64_t& cand_ind, const double distance);
 
  public:
   std::vector<ExprNodePtr>& nodes_;
