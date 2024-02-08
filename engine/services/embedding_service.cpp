@@ -84,7 +84,7 @@ Status EmbeddingService::denseEmbedDocuments(
           return Status(INVALID_PAYLOAD, "Missing mixedbread ai API key.");
         }
         mixedbreadai_key = headers[MIXEDBREADAI_KEY_HEADER];
-      } else if (server::CommonUtil::StartsWith(model_name, "nomic/")) {
+      } else if (server::CommonUtil::StartsWith(model_name, "nomicai/")) {
         if (headers.find(NOMIC_KEY_HEADER) == headers.end()) {
           return Status(INVALID_PAYLOAD, "Missing Nomic API key.");
         }
@@ -171,7 +171,7 @@ Status EmbeddingService::denseEmbedQuery(
           return Status(INVALID_PAYLOAD, "Missing mixedbread ai API key.");
         }
         mixedbreadai_key = headers[MIXEDBREADAI_KEY_HEADER];
-      } else if (server::CommonUtil::StartsWith(model_name, "nomic/")) {
+      } else if (server::CommonUtil::StartsWith(model_name, "nomicai/")) {
         if (headers.find(NOMIC_KEY_HEADER) == headers.end()) {
           return Status(INVALID_PAYLOAD, "Missing Nomic API key.");
         }
