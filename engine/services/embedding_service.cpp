@@ -149,6 +149,7 @@ Status EmbeddingService::denseEmbedQuery(
       std::string jinaai_key = "";
       std::string voyageai_key = "";
       std::string mixedbreadai_key = "";
+      std::string nomic_key = "";
       // Inject 3rd party service key based on their model name.
       if (server::CommonUtil::StartsWith(model_name, "openai/")) {
         if (headers.find(OPENAI_KEY_HEADER) == headers.end()) {
