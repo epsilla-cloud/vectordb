@@ -91,7 +91,7 @@ std::string ExprEvaluator::StrEvaluate(const int& node_index, const int64_t& can
   return "";
 }
 
-double ExprEvaluator::NumEvaluate(const int& node_index, const int64_t& cand_ind) {
+double ExprEvaluator::NumEvaluate(const int& node_index, const int64_t& cand_ind, const double distance) {
   ExprNodePtr root = nodes_[node_index];
   auto node_type = root->node_type;
   if (node_type == NodeType::IntConst) {
@@ -107,10 +107,13 @@ double ExprEvaluator::NumEvaluate(const int& node_index, const int64_t& cand_ind
     return GetIntFieldValue(name, cand_ind, node_type);
   } else if (node_type == NodeType::DoubleAttr || node_type == NodeType::FloatAttr) {
     auto name = root->field_name;
+    if (name == "@distance") {
+      return distance;
+    }
     return GetRealNumberFieldValue(name, cand_ind, node_type);
   } else if (root->left != -1 && root->right != -1) {
-    auto left = NumEvaluate(root->left, cand_ind);
-    auto right = NumEvaluate(root->right, cand_ind);
+    auto left = NumEvaluate(root->left, cand_ind, distance);
+    auto right = NumEvaluate(root->right, cand_ind, distance);
     switch (node_type) {
       case NodeType::Add:
         return left + right;
@@ -128,6 +131,10 @@ double ExprEvaluator::NumEvaluate(const int& node_index, const int64_t& cand_ind
 }
 
 bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_ind) {
+  return LogicalEvaluate(node_index, cand_ind, 0);
+}
+
+bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_ind, const double distance) {
   if (node_index < 0) {
     return true;
   }
@@ -159,8 +166,8 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
         auto right = LogicalEvaluate(right_index, cand_ind);
         return node_type == NodeType::EQ ? left == right : left != right;
       } else {
-        auto left = NumEvaluate(left_index, cand_ind);
-        auto right = NumEvaluate(right_index, cand_ind);
+        auto left = NumEvaluate(left_index, cand_ind, distance);
+        auto right = NumEvaluate(right_index, cand_ind, distance);
         return node_type == NodeType::EQ ? left == right : left != right;
       }
     } else if (node_type == NodeType::AND || node_type == NodeType::OR) {
@@ -168,8 +175,8 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
       auto right = LogicalEvaluate(right_index, cand_ind);
       return node_type == NodeType::AND ? (left && right) : (left || right);
     } else {
-      auto left = NumEvaluate(left_index, cand_ind);
-      auto right = NumEvaluate(right_index, cand_ind);
+      auto left = NumEvaluate(left_index, cand_ind, distance);
+      auto right = NumEvaluate(right_index, cand_ind, distance);
       switch (node_type) {
         case NodeType::GT:
           return left > right;
