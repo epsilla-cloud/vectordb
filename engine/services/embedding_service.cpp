@@ -32,6 +32,7 @@ Status EmbeddingService::getSupportedModels(std::vector<EmbeddingModel> &models)
       model.model = model_json.GetString("model");
       model.dim = model_json.GetInt("dim");
       model.dense = model_json.GetBool("dense");
+      model.dimensionReduction = model_json.GetBool("dimensionReduction");
       // model.description = model_json.GetString("description");
       // model.size_in_GB = model_json.GetDouble("size_in_GB");
       models.emplace_back(model);
@@ -50,7 +51,8 @@ Status EmbeddingService::denseEmbedDocuments(
   size_t start_record,
   size_t end_record,
   size_t dimension,
-  std::unordered_map<std::string, std::string> &headers
+  std::unordered_map<std::string, std::string> &headers,
+  bool isReducingDimension
 ) {
   int attempt = 0;
   while (attempt < EmbeddingDocsRetry) {
@@ -103,6 +105,11 @@ Status EmbeddingService::denseEmbedDocuments(
         // Assuming attr_column_container[idx] returns a string or can be converted to string
         requestBody->documents->push_back(oatpp::String(std::get<std::string>(attr_column_container[idx]).c_str()));
       }
+      if (isReducingDimension) {
+        requestBody->dimensions = dimension;
+      } else {
+        requestBody->dimensions = 0;
+      }
       auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, voyageai_key, mixedbreadai_key, nomic_key, mistralai_key, requestBody);
       auto responseBody = response->readBodyToString();
       // std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
@@ -140,7 +147,8 @@ Status EmbeddingService::denseEmbedQuery(
   const std::string &query,
   std::vector<engine::DenseVectorElement> &denseQueryVec,
   size_t dimension,
-  std::unordered_map<std::string, std::string> &headers
+  std::unordered_map<std::string, std::string> &headers,
+  bool isReducingDimension
 ) {
   int attempt = 0;
   while (attempt < EmbeddingQueryRetry) {
@@ -150,6 +158,11 @@ Status EmbeddingService::denseEmbedQuery(
       // Constructing documents list from attr_column_container
       requestBody->documents = oatpp::List<oatpp::String>({});
       requestBody->documents->push_back(oatpp::String(query.c_str()));
+      if (isReducingDimension) {
+        requestBody->dimensions = dimension;
+      } else {
+        requestBody->dimensions = 0;
+      }
 
       std::string openai_key = "";
       std::string jinaai_key = "";
@@ -189,7 +202,6 @@ Status EmbeddingService::denseEmbedQuery(
         }
         mistralai_key = headers[MISTRALAI_KEY_HEADER];
       }
-
 
       auto response = m_client->denseEmbedDocuments("/v1/embeddings", openai_key, jinaai_key, voyageai_key, mixedbreadai_key, nomic_key, mistralai_key, requestBody);
       auto responseBody = response->readBodyToString();

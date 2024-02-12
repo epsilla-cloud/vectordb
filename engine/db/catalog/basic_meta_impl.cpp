@@ -30,6 +30,7 @@ constexpr const char* VECTOR_DIMENSION = "vector_dimension";
 constexpr const char* METRIC_TYPE = "metric_type";
 constexpr const char* INDICES = "indices";
 constexpr const char* MODEL = "model";
+constexpr const char* DIMENSIONS = "dimensions";
 
 constexpr const char* DB_CATALOG_FILE_NAME = "catalog";
 
@@ -88,6 +89,7 @@ Status LoadTableSchemaFromJson(const vectordb::Json& json, meta::TableSchema& ta
       index.embedding_model_name_ = index_json.GetString(MODEL);
       index.src_field_id_ = index_json.GetInt(SRC_FIELD_ID);
       index.tgt_field_id_ = index_json.GetInt(TGT_FIELD_ID);
+      index.dimensions = index_json.GetInt(DIMENSIONS);
       table_schema.indices_.emplace_back(index);
     }
   }
@@ -153,6 +155,7 @@ void DumpTableSchemaToJson(const meta::TableSchema& table_schema, vectordb::Json
       index_json.SetString(MODEL, index.embedding_model_name_);
       index_json.SetInt(SRC_FIELD_ID, index.src_field_id_);
       index_json.SetInt(TGT_FIELD_ID, index.tgt_field_id_);
+      index_json.SetInt("dimensions", index.dimensions);
       json.AddObjectToArray(INDICES, index_json);
     }
   }
@@ -427,6 +430,16 @@ Status ValidateSchema(TableSchema& table_schema, std::vector<EmbeddingModel> &em
         field_schema.field_type_ = embedding_model.dense ? FieldType::VECTOR_FLOAT : FieldType::SPARSE_VECTOR_FLOAT;
         field_schema.vector_dimension_ = embedding_model.dim;
         field_schema.metric_type_ = MetricType::COSINE;
+        // Setup dimension reduction.
+        if (index.dimensions > 0) {
+          if (embedding_model.dimensionReduction == false) {
+            return Status(DB_UNEXPECTED_ERROR, "Embedding model does not support dimension reduction: " + index.embedding_model_name_);
+          }
+          if (index.dimensions > embedding_model.dim) {
+            return Status(DB_UNEXPECTED_ERROR, "The specified dimension is larger than the embedding model's original dimension: " + index.embedding_model_name_);
+          }
+          field_schema.vector_dimension_ = index.dimensions;
+        }
         table_schema.fields_.emplace_back(field_schema);
         break;
       }

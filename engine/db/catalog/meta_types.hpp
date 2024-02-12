@@ -69,6 +69,7 @@ struct Index {
   std::string embedding_model_name_;
   int64_t src_field_id_ = 0;
   int64_t tgt_field_id_ = 0;
+  int64_t dimensions = 0;
 };
 
 struct TableSchema {
