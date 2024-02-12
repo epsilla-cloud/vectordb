@@ -34,6 +34,7 @@ class EmbeddingRequestBody: public oatpp::DTO {
 
   DTO_FIELD(String, model);
   DTO_FIELD(List<String>, documents);
+  DTO_FIELD(Int32, dimensions);
 };
 
 #include OATPP_CODEGEN_END(DTO) ///< End DTO codegen section
@@ -54,6 +55,7 @@ struct EmbeddingModel {
   std::string model;
   size_t dim;
   bool dense;
+  bool dimensionReduction;
   // std::string description;
   // double size_in_GB;
 };
@@ -70,14 +72,16 @@ public:
     size_t start_record,
     size_t end_record,
     size_t dimension,
-    std::unordered_map<std::string, std::string> &headers
+    std::unordered_map<std::string, std::string> &headers,
+    bool isReducingDimension
   );
   Status denseEmbedQuery(
     const std::string& model_name,
     const std::string &query,
     std::vector<engine::DenseVectorElement> &denseQueryVec,
     size_t dimension,
-    std::unordered_map<std::string, std::string> &headers
+    std::unordered_map<std::string, std::string> &headers,
+    bool isReducingDimension
   );
 
 private:

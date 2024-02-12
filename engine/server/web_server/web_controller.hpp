@@ -278,6 +278,9 @@ class WebController : public oatpp::web::server::api::ApiController {
         } else {
           index.embedding_model_name_ = vectordb::engine::meta::DEFAULT_MODEL_NAME;
         }
+        if (body_index.HasMember("dimensions")) {
+          index.dimensions = body_index.GetInt("dimensions");
+        }
         table_schema.indices_.push_back(index);
       }
     }
