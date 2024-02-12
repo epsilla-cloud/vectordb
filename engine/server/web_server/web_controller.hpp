@@ -106,6 +106,10 @@ class WebController : public oatpp::web::server::api::ApiController {
     if (headerValue != nullptr) {
       headers[NOMIC_KEY_HEADER] = headerValue->c_str();
     }
+    headerValue = request->getHeader(MISTRALAI_KEY_HEADER);
+    if (headerValue != nullptr) {
+      headers[MISTRALAI_KEY_HEADER] = headerValue->c_str();
+    }
 
     std::string db_path = parsedBody.GetString("path");
     std::string db_name = parsedBody.GetString("name");
@@ -424,6 +428,10 @@ class WebController : public oatpp::web::server::api::ApiController {
     if (headerValue != nullptr) {
       headers[NOMIC_KEY_HEADER] = headerValue->c_str();
     }
+    headerValue = request->getHeader(MISTRALAI_KEY_HEADER);
+    if (headerValue != nullptr) {
+      headers[MISTRALAI_KEY_HEADER] = headerValue->c_str();
+    }
 
     auto data = parsedBody.GetArray("data");
     vectordb::Status insert_status = db_server->Insert(db_name, table_name, data, headers, upsert);
@@ -661,6 +669,10 @@ class WebController : public oatpp::web::server::api::ApiController {
     headerValue = request->getHeader(NOMIC_KEY_HEADER);
     if (headerValue != nullptr) {
       headers[NOMIC_KEY_HEADER] = headerValue->c_str();
+    }
+    headerValue = request->getHeader(MISTRALAI_KEY_HEADER);
+    if (headerValue != nullptr) {
+      headers[MISTRALAI_KEY_HEADER] = headerValue->c_str();
     }
 
     vectordb::Json result;

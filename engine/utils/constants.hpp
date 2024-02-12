@@ -6,4 +6,5 @@ namespace vectordb {
   constexpr const char* VOYAGEAI_KEY_HEADER = "X-VoyageAI-API-Key";
   constexpr const char* MIXEDBREADAI_KEY_HEADER = "X-MixedbreadAI-API-Key";
   constexpr const char* NOMIC_KEY_HEADER = "X-NOMIC-API-Key";
+  constexpr const char* MISTRALAI_KEY_HEADER = "X-MistralAI-API-Key";
 }  // namespace vectordb
