@@ -708,7 +708,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
       record_number_,
       cursor,
       table_schema.fields_[index.tgt_field_id_].vector_dimension_,
-      headers
+      headers,
+      index.dimensions > 0
     );
     if (!status.ok()) {
       std::cerr << "embedding service error: " << status.message() << std::endl;

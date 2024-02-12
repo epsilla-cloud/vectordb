@@ -421,7 +421,8 @@ Status DBServer::SearchByContent(
       query,
       denseQueryVec,
       query_dimension,
-      headers
+      headers,
+      index.dimensions > 0
     );
 
     if (!status.ok()) {
