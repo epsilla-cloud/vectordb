@@ -168,7 +168,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
     // Read the attribute table
     file.read(attribute_table_, record_number_ * primitive_offset_);
 
-    // add pk into set
+    // add int pk into set
     if (isIntPK()) {
       auto field = table_schema.fields_[*pk_field_idx_];
       for (auto rIdx = 0; rIdx < record_number_; rIdx++) {
@@ -222,7 +222,7 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
           case meta::FieldType::STRING: {
             std::string str(dataLen, '\0');
             file.read(&str[0], dataLen);
-            var_len_attr_table_[attrIdx][recordIdx] = std::move(str);
+            var_len_attr_table_[attrIdx][recordIdx] = str;
             // add pk into set
             if (!deleted_->test(recordIdx) && string_pk_offset_ && *string_pk_offset_ == attrIdx) {
               // do not check existance to avoid additional overhead
