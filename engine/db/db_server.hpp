@@ -102,6 +102,8 @@ class DBServer {
 
   Status Rebuild();
 
+  Status SwapExecutors();
+
   void InjectEmbeddingService(std::string& embedding_service_url) {
     embedding_service_ = std::make_shared<vectordb::engine::EmbeddingService>(embedding_service_url);
     meta_->InjectEmbeddingService(embedding_service_);
