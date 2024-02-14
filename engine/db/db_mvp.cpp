@@ -91,5 +91,19 @@ Status DBMVP::Rebuild() {
   return Status::OK();
 }
 
+Status DBMVP::SwapExecutors() {
+  // Loop through all tables and swap executors
+  for (int64_t i = 0; i < tables_.size(); ++i) {
+    std::shared_ptr<TableMVP> table = tables_[i];
+    if (table != nullptr) {
+      auto status = table->SwapExecutors();
+      if (!status.ok()) {
+        std::cout << "Swap executors for table " << table->table_schema_.name_ << " failed." << std::endl;
+      }
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace engine
 }  // namespace vectordb

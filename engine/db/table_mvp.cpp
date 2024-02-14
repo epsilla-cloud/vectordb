@@ -6,7 +6,12 @@
 
 #include "db/catalog/meta_types.hpp"
 
+#include "config/config.hpp"
+
 namespace vectordb {
+
+extern Config globalConfig;
+
 namespace engine {
 
 TableMVP::TableMVP(meta::TableSchema &table_schema,
@@ -65,7 +70,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
       auto distFunc = GetDistFunc(fType, mType);
 
       auto pool = std::make_shared<execution::ExecutorPool>();
-      for (int executorIdx = 0; executorIdx < NumExecutorPerField;
+      for (int executorIdx = 0; executorIdx < globalConfig.NumExecutorPerField;
            executorIdx++) {
         pool->release(std::make_shared<execution::VecSearchExecutor>(
             table_schema_.fields_[i].vector_dimension_,
@@ -75,10 +80,10 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
             columnData,
             distFunc,
             &table_schema_.fields_[i].vector_dimension_,
-            IntraQueryThreads,
-            MasterQueueSize,
-            LocalQueueSize,
-            GlobalSyncInterval));
+            globalConfig.IntraQueryThreads,
+            globalConfig.MasterQueueSize,
+            globalConfig.LocalQueueSize,
+            globalConfig.GlobalSyncInterval));
       }
       executor_pool_.push_back(pool);
     }
@@ -87,7 +92,8 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
 
 Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   // Limit how many threads rebuild takes.
-  omp_set_num_threads(RebuildThreads);
+  omp_set_num_threads(globalConfig.RebuildThreads);
+  std::cout << "Rebuild table segment with threads: " << globalConfig.RebuildThreads << std::endl;
 
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
@@ -112,7 +118,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
         fType == meta::FieldType::SPARSE_VECTOR_FLOAT ||
         fType == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
       if (ann_graph_segment_[index]->record_number_ == record_number ||
-          record_number < MinimalGraphSize) {
+          record_number < globalConfig.MinimalGraphSize) {
         // No need to rebuild the ann graph.
         std::cout << "Skip rebuild ANN graph for attribute: "
                   << table_schema_.fields_[i].name_ << std::endl;
@@ -171,7 +177,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       auto pool = std::make_shared<execution::ExecutorPool>();
       auto distFunc = GetDistFunc(fType, mType);
 
-      for (int executorIdx = 0; executorIdx < NumExecutorPerField;
+      for (int executorIdx = 0; executorIdx < globalConfig.NumExecutorPerField;
            executorIdx++) {
         pool->release(std::make_shared<execution::VecSearchExecutor>(
             table_schema_.fields_[i].vector_dimension_,
@@ -182,10 +188,10 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             columnData,
             distFunc,
             &table_schema_.fields_[i].vector_dimension_,
-            IntraQueryThreads,
-            MasterQueueSize,
-            LocalQueueSize,
-            GlobalSyncInterval));
+            globalConfig.IntraQueryThreads,
+            globalConfig.MasterQueueSize,
+            globalConfig.LocalQueueSize,
+            globalConfig.GlobalSyncInterval));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);
@@ -196,6 +202,68 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   }
 
   std::cout << "Rebuild done." << std::endl;
+  return Status::OK();
+}
+
+Status TableMVP::SwapExecutors() {
+  // Get the current record number.
+  int64_t record_number = table_segment_->record_number_;
+
+  int64_t index = 0;
+  for (int i = 0; i < table_schema_.fields_.size(); ++i) {
+    auto fType = table_schema_.fields_[i].field_type_;
+    auto mType = table_schema_.fields_[i].metric_type_;
+
+    if (fType == meta::FieldType::VECTOR_FLOAT ||
+        fType == meta::FieldType::VECTOR_DOUBLE ||
+        fType == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+        fType == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+
+      VectorColumnData columnData;
+      if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
+        columnData = table_segment_
+                         ->vector_tables_[table_segment_->field_name_mem_offset_map_
+                                              [table_schema_.fields_[i].name_]];
+      } else {
+        // sparse vector
+        columnData = &table_segment_
+                          ->var_len_attr_table_[table_segment_->field_name_mem_offset_map_
+                                                    [table_schema_.fields_[i].name_]];
+      }
+
+      // Rebuild the ann graph.
+      std::cout << "Swap executors for attribute: "
+                << table_schema_.fields_[i].name_ << std::endl;
+
+      // Replace the executors.
+      auto pool = std::make_shared<execution::ExecutorPool>();
+      auto distFunc = GetDistFunc(fType, mType);
+
+      for (int executorIdx = 0; executorIdx < globalConfig.NumExecutorPerField;
+           executorIdx++) {
+        pool->release(std::make_shared<execution::VecSearchExecutor>(
+            table_schema_.fields_[i].vector_dimension_,
+            ann_graph_segment_[index]->navigation_point_,
+            ann_graph_segment_[index],
+            ann_graph_segment_[index]->offset_table_,
+            ann_graph_segment_[index]->neighbor_list_,
+            columnData,
+            distFunc,
+            &table_schema_.fields_[i].vector_dimension_,
+            globalConfig.IntraQueryThreads,
+            globalConfig.MasterQueueSize,
+            globalConfig.LocalQueueSize,
+            globalConfig.GlobalSyncInterval));
+      }
+      std::unique_lock<std::mutex> lock(executor_pool_mutex_);
+      executor_pool_.set(index, pool);
+      lock.unlock();
+
+      ++index;
+    }
+  }
+
+  std::cout << "Swap executors done." << std::endl;
   return Status::OK();
 }
 
