@@ -25,15 +25,6 @@
 namespace vectordb {
 namespace engine {
 
-constexpr const int IntraQueryThreads = 4;
-constexpr const int MasterQueueSize = 500;
-constexpr const int LocalQueueSize = 500;
-constexpr const int GlobalSyncInterval = 15;
-constexpr const int MinimalGraphSize = 100;
-constexpr const int NumExecutorPerField = 16;
-
-constexpr const int RebuildThreads = 4;
-
 class TableMVP {
  public:
   explicit TableMVP(
@@ -46,6 +37,9 @@ class TableMVP {
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
+
+  // Swap executors during config change.
+  Status SwapExecutors();
 
   Status Insert(vectordb::Json &records, std::unordered_map<std::string, std::string> &headers, bool upsert = false);
 
