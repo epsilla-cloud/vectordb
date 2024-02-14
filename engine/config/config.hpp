@@ -21,7 +21,7 @@ struct Config {
   std::atomic<int> GlobalSyncInterval{15};
   std::atomic<int> MinimalGraphSize{100};
   std::atomic<int> NumExecutorPerField{16};
-  std::atomic<int> RebuildThreads{4};
+  std::atomic<int> RebuildThreads{1};
 
   // Setter method for IntraQueryThreads
   void setIntraQueryThreads(int value) {
