@@ -207,6 +207,21 @@ Status DBServer::Rebuild() {
   return Status::OK();
 }
 
+Status DBServer::SwapExecutors() {
+  // Loop through all dbs and swap executors
+  for (int64_t i = 0; i < dbs_.size(); ++i) {
+    std::shared_ptr<DBMVP> db = dbs_[i];
+    if (db != nullptr) {
+      auto status = db->SwapExecutors();
+      if (!status.ok()) {
+        std::cout << "Swap executors for db of " << db->db_catalog_path_ << " failed."
+                  << std::endl;
+      }
+    }
+  }
+  return Status::OK();
+}
+
 Status DBServer::ListTables(const std::string& db_name, std::vector<std::string>& table_names) {
   auto db = GetDB(db_name);
   if (db == nullptr) {

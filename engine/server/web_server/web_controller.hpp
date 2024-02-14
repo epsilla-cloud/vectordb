@@ -24,10 +24,14 @@
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 #include "utils/constants.hpp"
+#include "config/config.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
 namespace vectordb {
+
+extern Config globalConfig;
+
 namespace server {
 namespace web {
 
@@ -892,6 +896,36 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     dto->statusCode = Status::CODE_200.code;
     dto->message = std::string("Set leader as ") + (is_leader ? "true" : "false") + " successfully.";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(UpdateConfig)
+
+  ENDPOINT("POST", "api/config", UpdateConfig, BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    try {
+      bool needSwapExecutors = false;
+      globalConfig.updateConfig(parsedBody, needSwapExecutors);
+      if (needSwapExecutors) {
+        // Swap executors if necessary.
+        db_server->SwapExecutors();
+      }
+    } catch (std::exception& ex) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = std::string(ex.what());
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = std::string("Config updated successfully.");
     return createDtoResponse(Status::CODE_200, dto);
   }
 
