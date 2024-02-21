@@ -2,7 +2,7 @@ name: Build Vectordb for debug
 
 on:
   push:
-    branches: [ "debug", "distritubed-*" ]
+    branches: [ "debug", "debug-*" ]
 
 jobs:
   build:
