@@ -41,6 +41,8 @@ class TableMVP {
   // Swap executors during config change.
   Status SwapExecutors();
 
+  Status Release();
+
   Status Insert(vectordb::Json &records, std::unordered_map<std::string, std::string> &headers, bool upsert = false);
 
   Status InsertPrepare(vectordb::Json &pks, vectordb::Json &result);
