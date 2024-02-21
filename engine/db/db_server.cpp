@@ -68,6 +68,16 @@ Status DBServer::UnloadDB(const std::string& db_name) {
   return Status::OK();
 }
 
+Status DBServer::ReleaseDB(const std::string& db_name) {
+  // Release database from memory.
+  auto it = db_name_to_id_map_.find(db_name);
+  if (it == db_name_to_id_map_.end()) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  dbs_[it->second]->Release();
+  return Status::OK();
+}
+
 Status DBServer::GetStatistics(const std::string& db_name,
                                vectordb::Json& response) {
   auto db = GetDB(db_name);
