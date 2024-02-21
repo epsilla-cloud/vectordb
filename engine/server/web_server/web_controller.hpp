@@ -160,6 +160,24 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
+  // Release DB memory for dbfactory.
+  ADD_CORS(ReleaseDB)
+
+  ENDPOINT("POST", "api/{db_name}/release", ReleaseDB, PATH(String, db_name, "db_name")) {
+    vectordb::Status status = db_server->ReleaseDB(db_name);
+
+    auto dto = StatusDto::createShared();
+    if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = "Release " + db_name + " successfully.";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
   ADD_CORS(DropDB)
 
   ENDPOINT("DELETE", "api/{db_name}/drop", DropDB, PATH(String, db_name, "db_name")) {
