@@ -27,6 +27,7 @@ class DBServer {
 
   Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled, std::unordered_map<std::string, std::string> &headers);
   Status UnloadDB(const std::string& db_name);
+  Status ReleaseDB(const std::string& db_name);
   Status GetStatistics(const std::string& db_name, vectordb::Json& response);
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema, size_t& table_id);
   Status CreateTable(const std::string& db_name, const std::string& table_schema_json, size_t& table_id);
