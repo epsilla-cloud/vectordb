@@ -105,5 +105,19 @@ Status DBMVP::SwapExecutors() {
   return Status::OK();
 }
 
+Status DBMVP::Release() {
+  // Loop through all tables and release
+  for (int64_t i = 0; i < tables_.size(); ++i) {
+    std::shared_ptr<TableMVP> table = tables_[i];
+    if (table != nullptr) {
+      auto status = table->Release();
+      if (!status.ok()) {
+        std::cout << "Release table " << table->table_schema_.name_ << " failed." << std::endl;
+      }
+    }
+  }
+  return Status::OK();
+}
+
 }  // namespace engine
 }  // namespace vectordb

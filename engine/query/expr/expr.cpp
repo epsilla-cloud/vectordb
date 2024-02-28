@@ -125,12 +125,19 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         break;
       case State::String:
         if (c == '\'') {
-          i++;
-          cur_token += c;
-          if (cur_token.size() >= 2) {
-            token_list.push_back(cur_token);
-            cur_token.clear();
-            state = State::Start;
+          // check if last character of cur_token is '\', pop the '\' and add the '\'' to cur_token
+          if (i != last_index && cur_token.size() > 0 && cur_token[cur_token.size() - 1] == '\\') {
+            cur_token.pop_back();
+            cur_token += c;
+            i++;
+          } else {
+            i++;
+            cur_token += c;
+            if (cur_token.size() >= 2) {
+              token_list.push_back(cur_token);
+              cur_token.clear();
+              state = State::Start;
+            }
           }
         } else {
           if (i == last_index) {

@@ -267,6 +267,11 @@ Status TableMVP::SwapExecutors() {
   return Status::OK();
 }
 
+Status TableMVP::Release() {
+  // Release the table segment.
+  return table_segment_->Release();
+}
+
 Status TableMVP::Insert(vectordb::Json &record, std::unordered_map<std::string, std::string> &headers, bool upsert) {
   int64_t wal_id =
       wal_->WriteEntry(upsert ? LogEntryType::UPSERT : LogEntryType::INSERT, record.DumpToString());
