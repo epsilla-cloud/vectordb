@@ -57,6 +57,7 @@ class TableSegmentMVP {
 
   void Debug(meta::TableSchema& table_schema);
 
+  Status Release();
   ~TableSegmentMVP();
 
   std::atomic<bool> skip_sync_disk_;                                              // For default DB, skip sync to disk.

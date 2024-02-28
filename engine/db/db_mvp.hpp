@@ -30,6 +30,7 @@ class DBMVP {
   std::shared_ptr<TableMVP> GetTable(const std::string& table_name);
   Status Rebuild();
   Status SwapExecutors();
+  Status Release();
 
   void SetWALEnabled(bool enabled) {
     for (auto table : tables_) {

@@ -1113,18 +1113,26 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
 }
 
 TableSegmentMVP::~TableSegmentMVP() {
+  Release();
+}
+
+Status TableSegmentMVP::Release() {
   if (attribute_table_ != nullptr) {
     delete[] attribute_table_;
+    attribute_table_ = nullptr;
   }
   if (vector_tables_ != nullptr) {
     for (auto i = 0; i < dense_vector_num_; ++i) {
       delete[] vector_tables_[i];
     }
     delete[] vector_tables_;
+    vector_tables_ = nullptr;
   }
   if (deleted_ != nullptr) {
     delete deleted_;
+    deleted_ = nullptr;
   }
+  return Status::OK();
 }
 
 }  // namespace engine
