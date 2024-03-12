@@ -32,6 +32,7 @@ class DBMVP {
   Status Rebuild();
   Status SwapExecutors();
   Status Release();
+  Status Dump(const std::string& db_catalog_path);
 
   void SetWALEnabled(bool enabled) {
     for (auto table : tables_) {

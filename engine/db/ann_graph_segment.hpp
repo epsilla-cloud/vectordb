@@ -34,7 +34,7 @@ class ANNGraphSegment {
   void Debug();
 
   // Save the ANN graph index to disk.
-  Status SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id);
+  Status SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id, bool force = false);
 
   ~ANNGraphSegment();
 

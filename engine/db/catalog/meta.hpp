@@ -38,6 +38,8 @@ class Meta {
 
   virtual Status DropTable(const std::string& db_name, const std::string& table_name) = 0;
 
+  virtual Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) = 0;
+
   virtual void SetLeader(bool is_leader) = 0;
 
   virtual void InjectEmbeddingService(std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) = 0;

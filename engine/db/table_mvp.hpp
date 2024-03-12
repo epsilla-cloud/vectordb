@@ -79,6 +79,8 @@ class TableMVP {
       bool with_distance,
       std::vector<double> &distances);
 
+  Status Dump(const std::string &db_catalog_path);
+
   size_t GetRecordCount();
 
   void SetWALEnabled(bool enabled) {
