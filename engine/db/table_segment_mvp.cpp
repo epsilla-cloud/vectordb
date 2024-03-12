@@ -892,8 +892,8 @@ Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks
 //   return Status::OK();
 // }
 
-Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
-  if (skip_sync_disk_) {
+Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path, bool force) {
+  if (skip_sync_disk_ && !force) {
     return Status::OK();
   }
 
@@ -905,9 +905,10 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   if (!file) {
     return Status(DB_UNEXPECTED_ERROR, "Cannot open file: " + path);
   }
-
   // Write the number of records and the first record id
-  fwrite(&record_number_, sizeof(record_number_), 1, file);
+  int64_t current_wal_global_id = wal_global_id_.load();
+  size_t current_record_number = record_number_.load();
+  fwrite(&current_record_number, sizeof(current_record_number), 1, file);
   fwrite(&first_record_id_, sizeof(first_record_id_), 1, file);
 
   // Write the bitset
@@ -917,10 +918,10 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   fwrite(bitset_data, bitset_size, 1, file);
 
   // Write the attribute table.
-  fwrite(attribute_table_, record_number_ * primitive_offset_, 1, file);
+  fwrite(attribute_table_, current_record_number * primitive_offset_, 1, file);
 
   // Write the variable length table.
-  for (auto recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
+  for (auto recordIdx = 0; recordIdx < current_record_number; ++recordIdx) {
     for (auto attrIdx = 0; attrIdx < var_len_attr_num_; ++attrIdx) {
       auto& entry = var_len_attr_table_[attrIdx][recordIdx];
       if (std::holds_alternative<std::string>(entry)) {
@@ -940,11 +941,11 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
 
   // Write the vector table.
   for (auto i = 0; i < dense_vector_num_; ++i) {
-    fwrite(vector_tables_[i], sizeof(float) * record_number_ * vector_dims_[i], 1, file);
+    fwrite(vector_tables_[i], sizeof(float) * current_record_number * vector_dims_[i], 1, file);
   }
 
   // Last, write the global wal id.
-  fwrite(&wal_global_id_, sizeof(wal_global_id_), 1, file);
+  fwrite(&current_wal_global_id, sizeof(current_wal_global_id), 1, file);
 
   // Flush changes to disk
   fflush(file);
