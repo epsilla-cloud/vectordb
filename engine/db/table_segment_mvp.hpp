@@ -52,7 +52,7 @@ class TableSegmentMVP {
   bool PK2ID(Json& record, size_t& id);
 
   // Save the table segment to disk.
-  Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
+  Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path, bool force = false);
 
   size_t GetRecordCount();
 

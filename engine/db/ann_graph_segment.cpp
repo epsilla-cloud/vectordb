@@ -153,8 +153,8 @@ ANNGraphSegment::ANNGraphSegment(int64_t size_limit)
 //   return Status::OK();
 // }
 
-Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id) {
-  if (skip_sync_disk_) {
+Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id, bool force) {
+  if (skip_sync_disk_ && !force) {
     return Status::OK();
   }
 
