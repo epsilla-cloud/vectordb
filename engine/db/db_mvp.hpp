@@ -9,6 +9,7 @@
 #include "db/table_mvp.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -46,6 +47,7 @@ class DBMVP {
   }
 
  public:
+  vectordb::engine::Logger logger_;
   std::string db_catalog_path_;                                   // The path to the db catalog.
   // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> table_name_to_id_map_;  // The table name to table id map.

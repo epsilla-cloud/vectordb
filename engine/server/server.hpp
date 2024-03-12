@@ -2,6 +2,7 @@
 
 #include <string>
 #include "utils/status.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace server {
@@ -16,6 +17,8 @@ class Server {
   void Stop();
 
  private:
+  vectordb::engine::Logger logger_;
+
   Server() = default;
   ~Server() = default;
 

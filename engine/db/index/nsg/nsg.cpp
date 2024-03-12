@@ -43,7 +43,7 @@ NsgIndex::~NsgIndex() {
 }
 
 size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, const BuildParams& parameters) {
-  std::cout << "Start build" << std::endl;
+  logger_.Debug("NSG start build");
   ntotal = nb;
   // ori_data_ = new float[ntotal * dimension];
   ids_ = new int64_t[ntotal];
@@ -62,17 +62,17 @@ size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, con
   out_degree = parameters.out_degree;
   candidate_pool_size = parameters.candidate_pool_size;
 
-  std::cout << "Init navigation" << std::endl;
+  logger_.Debug("NSG init navigation");
 
   // TimeRecorder rc("NSG", 1);
   InitNavigationPoint();
   // rc.RecordSection("init");
 
-  std::cout << "Link" << std::endl;
+  logger_.Debug("NSG link");
   Link();
   // rc.RecordSection("Link");
 
-  std::cout << "Check connectivity" << std::endl;
+  logger_.Debug("NSG check connectivity");
   CheckConnectivity();
   // rc.RecordSection("Connect");
   // rc.ElapseFromBegin("finish");
