@@ -119,5 +119,24 @@ Status DBMVP::Release() {
   return Status::OK();
 }
 
+Status DBMVP::Dump(const std::string& db_catalog_path) {
+  // Loop through all tables and dump
+  bool success = true;
+  for (int64_t i = 0; i < tables_.size(); ++i) {
+    std::shared_ptr<TableMVP> table = tables_[i];
+    if (table != nullptr) {
+      auto status = table->Dump(db_catalog_path);
+      if (!status.ok()) {
+        logger_.Error("Dump table " + table->table_schema_.name_ + " failed.");
+        success = false;
+      }
+    }
+  }
+  if (!success) {
+    return Status(DB_UNEXPECTED_ERROR, "Dump database failed.");
+  }
+  return Status::OK();
+}
+
 }  // namespace engine
 }  // namespace vectordb

@@ -78,6 +78,29 @@ Status DBServer::ReleaseDB(const std::string& db_name) {
   return Status::OK();
 }
 
+Status DBServer::DumpDB(const std::string& db_name,
+                        const std::string& db_catalog_path) {
+  // Check that DB exists.
+  auto it = db_name_to_id_map_.find(db_name);
+  if (it == db_name_to_id_map_.end()) {
+    return Status(DB_NOT_FOUND, "DB not found: " + db_name);
+  }
+  // Create the folder if not exist.
+  if (!server::CommonUtil::CreateDirectory(db_catalog_path).ok()) {
+    return Status(DB_UNEXPECTED_ERROR, "Failed to create directory: " + db_catalog_path);
+  }
+  // Dump meta to disk.
+  meta::DatabaseSchema db_schema;
+  meta_->GetDatabase(db_name, db_schema);
+  auto status = meta_->SaveDBToFile(db_schema, db_catalog_path + "/catalog");
+  if (!status.ok()) {
+    return status;
+  }
+  // Dump DB to disk.
+  std::shared_ptr<DBMVP> db = dbs_[it->second];
+  return db->Dump(db_catalog_path);
+}
+
 Status DBServer::GetStatistics(const std::string& db_name,
                                vectordb::Json& response) {
   auto db = GetDB(db_name);
