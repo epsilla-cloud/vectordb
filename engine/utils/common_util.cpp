@@ -17,6 +17,8 @@
 #include <vector>
 #include <regex>
 
+#include "logger/logger.hpp"
+
 #if defined(__x86_64__)
 #define THREAD_MULTIPLY_CPU 1
 #elif defined(__powerpc64__)
@@ -110,6 +112,7 @@ bool CommonUtil::IsDirectoryExist(const std::string& path) {
 // }
 
 Status CommonUtil::CreateDirectory(const std::string& path) {
+  vectordb::engine::Logger logger_;
   if (path.empty()) {
     return Status::OK();
   }
@@ -124,7 +127,7 @@ Status CommonUtil::CreateDirectory(const std::string& path) {
 
   // Recursively create the directory and its parent directories if needed
   if (!std::filesystem::create_directories(fs_path, ec)) {
-    std::cout << "failed to create directory " << path << " with response code " << ec << std::endl;
+    logger_.Error("Failed to create directory " + path + " with response code " + ec.message());
     return Status(INFRA_UNEXPECTED_ERROR, "failed to create directory: " + path);
   }
 

@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "server/server.hpp"
+#include "logger/logger.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
@@ -27,6 +28,7 @@ void print_banner() {
 
 int main(int argc, char *argv[]) {
   print_banner();
+  vectordb::engine::Logger logger;
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},
                                          {"help", no_argument, nullptr, 'h'},
@@ -95,10 +97,10 @@ int main(int argc, char *argv[]) {
 
   status = server.Start(port, rebuild, is_leader, embedding_baseurl);
   if (status.ok()) {
-    std::cout << "Epsilla Vector Database server started successfully!" << std::endl;
-    std::cout << "Server running on http://0.0.0.0:" << port << std::endl;
+    logger.Info("Epsilla Vector Database server started successfully!");
+    logger.Info(std::string("Server running on http://0.0.0.0:") + std::to_string(port));
   } else {
-    std::cout << status.message() << std::endl;
+    logger.Error(status.message());
     goto FAIL;
   }
 
@@ -108,6 +110,6 @@ int main(int argc, char *argv[]) {
   return EXIT_SUCCESS;
 
 FAIL:
-  std::cout << "Epsilla Vector Database server exit..." << std::endl;
+  logger.Error("Epsilla Vector Database server exit...");
   return EXIT_FAILURE;
 }

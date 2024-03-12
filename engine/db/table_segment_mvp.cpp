@@ -435,7 +435,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
-    std::cout << "No records to insert." << std::endl;
+    logger_.Debug("No records to insert.");
     return Status::OK();
   }
   // Check if the records are valid.
