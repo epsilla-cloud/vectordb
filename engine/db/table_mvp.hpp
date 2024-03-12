@@ -21,6 +21,7 @@
 #include "utils/concurrent_vector.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -89,6 +90,7 @@ class TableMVP {
   ~TableMVP();
 
  public:
+  vectordb::engine::Logger logger_;
   std::string db_catalog_path_;
   // The table schema.
   meta::TableSchema table_schema_;

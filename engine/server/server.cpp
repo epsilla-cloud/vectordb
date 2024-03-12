@@ -31,11 +31,11 @@ Status Server::Start(uint16_t port, bool rebuild, bool is_leader, std::string &e
 }
 
 void Server::Stop() {
-  std::cerr << "Epsilla VectorDB server is going to shutdown ..." << std::endl;
+  logger_.Error("Epsilla VectorDB server is going to shutdown ...");
 
   StopService();
 
-  std::cerr << "Epsilla VectorDB server exit..." << std::endl;
+  logger_.Error("Epsilla VectorDB server exit...");
 }
 
 Status Server::LoadConfig() {

@@ -16,6 +16,7 @@
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -94,6 +95,8 @@ class TableSegmentMVP {
   bool isEntryDeleted(int64_t id) const;
 
  private:
+  vectordb::engine::Logger logger_;
+
   std::mutex data_update_mutex_;
 
   // used to store primary key set for duplication check

@@ -13,6 +13,7 @@
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -111,6 +112,7 @@ class DBServer {
   }
 
  private:
+  vectordb::engine::Logger logger_;
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.
