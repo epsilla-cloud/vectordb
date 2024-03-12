@@ -203,11 +203,10 @@ void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_column, int64
 
   // Build a KNN graph using NN descent.
   const int64_t k = Default_NSG_Config.knng;
-  std::cout << "KNN" << std::endl;
+  logger_.Debug("KNN graph building start");
   vectordb::engine::index::Graph knng(n);
-  std::cout << "KNN graph" << std::endl;
   vectordb::engine::index::KNNGraph graph(n, dim, k, vector_column, knng, metricType);
-  std::cout << "KNN graph finish" << std::endl;
+  logger_.Debug("KNN graph building finish");
 
   vectordb::engine::index::BuildParams b_params;
   b_params.candidate_pool_size = Default_NSG_Config.candidate_pool_size;

@@ -84,7 +84,7 @@ Status DBMVP::Rebuild() {
     if (table != nullptr) {
       auto status = table->Rebuild(db_catalog_path_);
       if (!status.ok()) {
-        std::cout << "Rebuild table " << table->table_schema_.name_ << " failed." << std::endl;
+        logger_.Error("Rebuild table " + table->table_schema_.name_ + " failed.");
       }
     }
   }
@@ -98,7 +98,7 @@ Status DBMVP::SwapExecutors() {
     if (table != nullptr) {
       auto status = table->SwapExecutors();
       if (!status.ok()) {
-        std::cout << "Swap executors for table " << table->table_schema_.name_ << " failed." << std::endl;
+        logger_.Error("Swap executors for table " + table->table_schema_.name_ + " failed.");
       }
     }
   }
@@ -112,7 +112,7 @@ Status DBMVP::Release() {
     if (table != nullptr) {
       auto status = table->Release();
       if (!status.ok()) {
-        std::cout << "Release table " << table->table_schema_.name_ << " failed." << std::endl;
+        logger_.Error("Release table " + table->table_schema_.name_ + " failed.");
       }
     }
   }

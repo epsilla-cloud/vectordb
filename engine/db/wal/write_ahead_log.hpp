@@ -18,6 +18,7 @@
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
 #include "query/expr/expr.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -182,6 +183,7 @@ class WriteAheadLog {
   }
 
  private:
+  vectordb::engine::Logger logger_;
   void ApplyEntry(
     meta::TableSchema &table_schema,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
@@ -197,14 +199,14 @@ class WriteAheadLog {
       case LogEntryType::INSERT: {
         auto status = segment->Insert(table_schema, record, global_id, headers);
         if (!status.ok()) {
-          std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
+          logger_.Error("Fail to apply wal entry: " + status.message());
         }
         break;
       }
       case LogEntryType::UPSERT: {
         auto status = segment->Insert(table_schema, record, global_id, headers, true);
         if (!status.ok()) {
-          std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
+          logger_.Error("Fail to apply wal entry: " + status.message());
         }
         break;
       }
@@ -224,7 +226,7 @@ class WriteAheadLog {
   
         auto status = segment->Delete(pks, expr_nodes, global_id);
         if (!status.ok()) {
-          std::cout << "Fail to apply wal entry: " << status.message() << std::endl;
+          logger_.Error("Fail to apply wal entry: " + status.message());
         }
         break;
       }
@@ -249,7 +251,7 @@ class WriteAheadLog {
   void GetSortedLogFiles(std::vector<std::filesystem::path> &files) {
     // Check if logs_folder_ exists and is a directory.
     if (!std::filesystem::exists(logs_folder_) || !std::filesystem::is_directory(logs_folder_)) {
-      std::cout << "Directory " << logs_folder_ << " does not exist or is not a directory.\n";
+      logger_.Error("Directory " + logs_folder_ + " does not exist or is not a directory.");
       return;
     }
 
@@ -257,14 +259,14 @@ class WriteAheadLog {
       std::filesystem::directory_iterator end_itr;  // Default ctor yields past-the-end
       for (std::filesystem::directory_iterator i(logs_folder_); i != end_itr; ++i) {
         // Print out the path of each file being processed.
-        std::cout << "Processing file: " << i->path().string() << std::endl;
+        logger_.Info("Processing file: " + i->path().string());
 
         if (i->path().extension() == ".log") {
           files.push_back(i->path());
         }
       }
     } catch (const std::filesystem::filesystem_error &ex) {
-      std::cout << "Caught exception: " << ex.what() << '\n';
+      logger_.Error(std::string("Error in getting sorted WAL log files: ") + ex.what());
     }
 
     std::sort(files.begin(), files.end());

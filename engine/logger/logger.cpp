@@ -48,5 +48,9 @@ void Logger::Warning(const std::string& message) {
   Log(LogLevel::WARNING, message);
 }
 
+void Logger::Debug(const std::string& message) {
+  Log(LogLevel::DEBUG, message);
+}
+
 }  // namespace engine
 }  // namespace vectordb
