@@ -47,6 +47,8 @@ file(GLOB UTILS_FILES "db/index/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/index/nsg/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
+file(GLOB UTILS_FILES "db/index/spatial/*.cpp")
+list(APPEND LIB_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/wal/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
 
