@@ -28,6 +28,8 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
       return 8;
     case meta::FieldType::BOOL:
       return 1;
+    case meta::FieldType::GEO_POINT:
+      return 16;
     case meta::FieldType::STRING:
     case meta::FieldType::JSON:
     case meta::FieldType::SPARSE_VECTOR_DOUBLE:
@@ -600,6 +602,13 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(bool));
             break;
           }
+          case meta::FieldType::GEO_POINT: {
+            double lat = record.Get(field.name_).GetDouble("latitude");
+            double lon = record.Get(field.name_).GetDouble("longitude");
+            std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &lat, sizeof(double));
+            std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), &lon, sizeof(double));
+            break;
+          }
           default:
             break;
         }
@@ -1044,6 +1053,14 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             bool value;
             std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(bool));
             std::cout << (value ? "true" : "false") << " ";
+            break;
+          }
+          case meta::FieldType::GEO_POINT: {
+            double value;
+            std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+            std::cout << "Latitude: " << value << " ";
+            std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+            std::cout << "Longitude: " << value << " ";
             break;
           }
           default:

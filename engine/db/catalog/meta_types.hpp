@@ -37,6 +37,8 @@ enum class FieldType {
   SPARSE_VECTOR_FLOAT = 50,
   SPARSE_VECTOR_DOUBLE = 51,
 
+  GEO_POINT = 60,
+
   UNKNOWN = 999,
 };
 
@@ -101,6 +103,7 @@ static const std::unordered_map<std::string, FieldType> fieldTypeMap = {
     {"VECTOR_DOUBLE", FieldType::VECTOR_DOUBLE},
     {"SPARSE_VECTOR_FLOAT", FieldType::SPARSE_VECTOR_FLOAT},
     {"SPARSE_VECTOR_DOUBLE", FieldType::SPARSE_VECTOR_DOUBLE},
+    {"GEO_POINT", FieldType::GEO_POINT},
     {"UNKNOWN", FieldType::UNKNOWN}};
 
 static const std::unordered_map<std::string, MetricType> metricTypeMap = {

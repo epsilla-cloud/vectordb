@@ -520,6 +520,16 @@ Status TableMVP::Project(
             record.SetObject(field, json);
             break;
           }
+          case meta::FieldType::GEO_POINT: {
+            vectordb::Json geoPoint;
+            double *lat = reinterpret_cast<double *>(
+                &table_segment_->attribute_table_[offset]);
+            double *lon = reinterpret_cast<double *>(
+                &table_segment_->attribute_table_[offset + sizeof(double)]);
+            geoPoint.LoadFromString("{\"latitude\": " + std::to_string(*lat) + ", \"longitude\": " + std::to_string(*lon) + "}");
+            record.SetObject(field, geoPoint);
+            break;
+          }
           default:
             return Status(DB_UNEXPECTED_ERROR, "Unknown field type.");
         }
