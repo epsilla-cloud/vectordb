@@ -31,11 +31,12 @@ public:
   void deletePoint(double lat, double lon, int64_t id);
   void searchWithinRadius(double lat, double lon, double radius_km, std::vector<value_t>& results) const;
 
+  static double distance(const point_t& p1, const point_t& p2);
+
 private:
   mutable std::shared_mutex mutex_;
   rtree_t rtree;
   static double degToRad(double deg);
-  static double distance(const point_t& p1, const point_t& p2);
 };
 
 }

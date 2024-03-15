@@ -8,6 +8,7 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/unique_key.hpp"
+#include "db/index/spatial/geoindex.hpp"
 #include "db/vector.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
@@ -107,6 +108,9 @@ class TableSegmentMVP {
   // The index of primary key among string keys
   // string_pk_offset_.get() != nullptr if there's a string pk
   std::unique_ptr<int64_t> string_pk_offset_;
+
+  // Geospatial indices
+  std::unordered_map<std::string, std::shared_ptr<vectordb::engine::index::GeospatialIndex>> geospatial_indices_;
 
   // save a copy of the schema - the lifecycle of the schema is not managed by the segment, so
   // we can keep the raw pointer here. In addition, the table_segment_mvp's lifecycle is always longer
