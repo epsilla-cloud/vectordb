@@ -1,5 +1,5 @@
 #include "expr.hpp"
-
+#include <iostream>
 #include <algorithm>
 #include <queue>
 #include <regex>
@@ -18,7 +18,8 @@ enum class State {
   Number,
   String,
   Attribute,
-  Operator
+  Operator,
+  Function
 };
 
 bool isArithChar(char c) {
@@ -156,6 +157,23 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         } else if (std::isalnum(c) || c == '_') {
           cur_token += c;
           i++;
+        } else if (c == '(') {
+          // Function call
+          // TODO: handle string with '(' and ')'
+          state = State::Function;
+          cur_token += c;
+          i++;
+          int parenCount = 1;
+          while (i < expression.length() && parenCount > 0) {
+            c = expression[i];
+            if (c == '(') parenCount++;
+            if (c == ')') parenCount--;
+            cur_token += c;
+            i++;
+          }
+          token_list.push_back(cur_token);
+          cur_token.clear();
+          state = State::Start;
         } else {
           return Status(INVALID_EXPR, "Invalid name: " + (cur_token += c));
         }
@@ -287,6 +305,13 @@ bool isNotOperator(std::string str) {
   return str == "NOT";
 };
 
+bool isNearbyFunction(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  return str.substr(0, 7) == "NEARBY(";
+};
+
 NodeType GetOperatorNodeType(std::string op) {
   if (isLogicalStr(op)) {
     std::transform(op.begin(), op.end(), op.begin(), [](unsigned char c) {
@@ -412,6 +437,83 @@ Status GenerateNodes(
         node->right = node_list.size() - 1;
 
         node_stack.push(node);
+      }
+    } else if (isNearbyFunction(token)) {
+      // NEARBY(geo_point_attr, latitude, longitude, distance)
+      // Extract the argument string inside the parentheses of "NEARBY(...)"
+      std::string argsStr = token.substr(7, token.length() - 8); // Remove "NEARBY(" and the closing ")"
+
+      // Split the arguments by commas
+      std::vector<std::string> arguments;
+      std::stringstream ss(argsStr);
+      std::string arg;
+      while (std::getline(ss, arg, ',')) {
+        // Trim spaces from the beginning and end of arg
+        arg.erase(0, arg.find_first_not_of(' ')); // Leading spaces
+        arg.erase(arg.find_last_not_of(' ') + 1); // Trailing spaces
+        arguments.push_back(arg);
+      }
+
+      if (arguments.size() == 4) {
+        // Successfully extracted 4 arguments
+        std::string geo_point_attr = arguments[0];
+        std::string latitude = arguments[1];
+        std::string longitude = arguments[2];
+        std::string distance = arguments[3];
+
+        // Validate the arguments
+        if (field_map.find(geo_point_attr) == field_map.end()) {
+          return Status(INVALID_EXPR, "Invalid filter expression: field name '" + geo_point_attr + "' not found.");
+        }
+        engine::meta::FieldType field_type = field_map[geo_point_attr];
+        if (field_type != engine::meta::FieldType::GEO_POINT) {
+          return Status(INVALID_EXPR, "Type of field '" + geo_point_attr + "' is not a GEO_POINT.");
+        }
+        for (int idx = 1; idx < 4; ++idx) {
+          if (!isDoubleConstant(arguments[idx]) && !isIntConstant(arguments[idx])) {
+            return Status(INVALID_EXPR, "Invalid filter expression: argument " + std::to_string(idx + 1) + " is not a valid number.");
+          }
+        }
+
+        // Create a new ExprNode for the NEARBY function
+        ExprNodePtr attr_node = std::make_shared<ExprNode>();
+        attr_node->field_name = geo_point_attr;
+        attr_node->node_type = NodeType::GeoPointAttr;
+        attr_node->value_type = ValueType::GEO_POINT;
+        node_list.push_back(attr_node);
+        ExprNodePtr lat_node = std::make_shared<ExprNode>();
+        lat_node->node_type = NodeType::DoubleConst;
+        lat_node->value_type = ValueType::DOUBLE;
+        lat_node->double_value = std::stod(latitude);
+        if (lat_node->double_value < -90 || lat_node->double_value > 90) {
+          return Status(INVALID_EXPR, "Invalid filter expression: latitude should be in the range of [-90, 90].");
+        }
+        node_list.push_back(lat_node);
+        ExprNodePtr lon_node = std::make_shared<ExprNode>();
+        lon_node->node_type = NodeType::DoubleConst;
+        lon_node->value_type = ValueType::DOUBLE;
+        lon_node->double_value = std::stod(longitude);
+        node_list.push_back(lon_node);
+        if (lon_node->double_value < -180 || lon_node->double_value > 180) {
+          return Status(INVALID_EXPR, "Invalid filter expression: longitude should be in the range of [-180, 180].");
+        }
+        ExprNodePtr dist_node = std::make_shared<ExprNode>();
+        dist_node->node_type = NodeType::DoubleConst;
+        dist_node->value_type = ValueType::DOUBLE;
+        dist_node->double_value = std::stod(distance);
+        node_list.push_back(dist_node);
+        ExprNodePtr node = std::make_shared<ExprNode>();
+        node->node_type = NodeType::FunctionCall;
+        node->function_name = "NEARBY";
+        node->value_type = ValueType::BOOL;
+        node->arguments.push_back(node_list.size() - 4);
+        node->arguments.push_back(node_list.size() - 3);
+        node->arguments.push_back(node_list.size() - 2);
+        node->arguments.push_back(node_list.size() - 1);
+        node_list.push_back(node);
+        node_stack.push(node);
+      } else {
+        return Status(INVALID_EXPR, "Wrong number of arguments in NEARBY function.");
       }
     } else {
       ExprNodePtr node = std::make_shared<ExprNode>();

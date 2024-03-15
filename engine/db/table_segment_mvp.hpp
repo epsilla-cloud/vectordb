@@ -8,6 +8,7 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/unique_key.hpp"
+#include "db/index/spatial/geoindex.hpp"
 #include "db/vector.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
@@ -93,6 +94,9 @@ class TableSegmentMVP {
   meta::FieldSchema pkField() const;
   int64_t pkFieldIdx() const;
   bool isEntryDeleted(int64_t id) const;
+
+  // Geospatial indices
+  std::unordered_map<std::string, std::shared_ptr<vectordb::engine::index::GeospatialIndex>> geospatial_indices_;
 
  private:
   vectordb::engine::Logger logger_;

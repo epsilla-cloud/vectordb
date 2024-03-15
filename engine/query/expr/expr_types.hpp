@@ -22,6 +22,7 @@ enum class NodeType {
   DoubleAttr,
   FloatAttr,
   BoolAttr,
+  GeoPointAttr,
   Add,
   Subtract,
   Multiply,
@@ -35,7 +36,8 @@ enum class NodeType {
   NE,
   AND,
   OR,
-  NOT
+  NOT,
+  FunctionCall,
 };
 
 const std::unordered_map<std::string, NodeType> OperatorNodeTypeMap = {
@@ -58,7 +60,8 @@ enum class ValueType {
   STRING,
   INT,
   DOUBLE,
-  BOOL
+  BOOL,
+  GEO_POINT,
 };
 
 struct ExprNode {
@@ -71,6 +74,8 @@ struct ExprNode {
   int64_t int_value;
   double double_value;
   bool bool_value;
+  std::string function_name;  // Name of the function being called
+  std::vector<size_t> arguments;  // Indices of the nodes representing arguments
 };
 using ExprNodePtr = std::shared_ptr<ExprNode>;
 
