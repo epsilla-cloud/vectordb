@@ -6,6 +6,7 @@
 
 #include "db/vector.hpp"
 #include "expr_types.hpp"
+#include "db/index/spatial/geoindex.hpp"
 
 namespace vectordb {
 namespace query {
@@ -33,6 +34,7 @@ class ExprEvaluator {
   double GetRealNumberFieldValue(const std::string& field_name, const int64_t& cand_ind, NodeType& node_type);
   std::string StrEvaluate(const int& node_index, const int64_t& cand_ind);
   double NumEvaluate(const int& node_index, const int64_t& cand_ind, const double distance);
+  vectordb::engine::index::GeospatialIndex::point_t GeoPointEvaluate(const std::string& field_name, const int64_t& cand_ind);
 
  public:
   std::vector<ExprNodePtr>& nodes_;
