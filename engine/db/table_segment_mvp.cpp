@@ -28,6 +28,8 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
       return 8;
     case meta::FieldType::BOOL:
       return 1;
+    case meta::FieldType::GEO_POINT:
+      return 16;
     case meta::FieldType::STRING:
     case meta::FieldType::JSON:
     case meta::FieldType::SPARSE_VECTOR_DOUBLE:
@@ -83,6 +85,9 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
       primitive_offset_ += FieldTypeSizeMVP(field_schema.field_type_);
       ++primitive_num_;
+      if (field_schema.field_type_ == meta::FieldType::GEO_POINT) {
+        geospatial_indices_[field_schema.name_] = std::make_shared<vectordb::engine::index::GeospatialIndex>();
+      }
     }
 
     if (field_schema.is_primary_key_) {
@@ -208,6 +213,24 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
           default:
             // other types cannot be PK, do nothing
             break;
+        }
+      }
+    }
+
+    // Handle the geospatial indices
+    for (auto& field : table_schema.fields_) {
+      if (field.field_type_ == meta::FieldType::GEO_POINT) {
+        auto index = geospatial_indices_[field.name_];
+        for (auto rIdx = 0; rIdx < record_number_; rIdx++) {
+          // skip deleted entry
+          if (deleted_->test(rIdx)) {
+            continue;
+          }
+          double lat = 0;
+          std::memcpy(&lat, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+          double lon = 0;
+          std::memcpy(&lon, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+          index->insertPoint(lat, lon, rIdx);
         }
       }
     }
@@ -598,6 +621,27 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           case meta::FieldType::BOOL: {
             bool value = record.GetBool(field.name_);
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(bool));
+            break;
+          }
+          case meta::FieldType::GEO_POINT: {
+            double lat = record.Get(field.name_).GetDouble("latitude");
+            if (lat < -90) {
+              lat = -90;
+            }
+            if (lat > 90) {
+              lat = 90;
+            }
+            double lon = record.Get(field.name_).GetDouble("longitude");
+            if (lon < -180) {
+              lon = -180;
+            }
+            if (lon > 180) {
+              lon = 180;
+            }
+            std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &lat, sizeof(double));
+            std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), &lon, sizeof(double));
+            // Insert into the geospatial index.
+            geospatial_indices_[field.name_]->insertPoint(lat, lon, cursor);
             break;
           }
           default:
@@ -1044,6 +1088,14 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             bool value;
             std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(bool));
             std::cout << (value ? "true" : "false") << " ";
+            break;
+          }
+          case meta::FieldType::GEO_POINT: {
+            double value;
+            std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+            std::cout << "Latitude: " << value << " ";
+            std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+            std::cout << "Longitude: " << value << " ";
             break;
           }
           default:

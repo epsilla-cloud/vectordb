@@ -396,6 +396,7 @@ Status TableMVP::SearchByAttribute(
   // Search.
   int64_t result_num = 0;
   executor.exec_->SearchByAttribute(
+      table_schema_,
       table_segment_.get(),
       skip,
       limit,
@@ -518,6 +519,16 @@ Status TableMVP::Project(
             vectordb::Json json;
             json.LoadFromString(std::get<std::string>(table_segment_->var_len_attr_table_[table_segment_->field_name_mem_offset_map_[field]][id]));
             record.SetObject(field, json);
+            break;
+          }
+          case meta::FieldType::GEO_POINT: {
+            vectordb::Json geoPoint;
+            double *lat = reinterpret_cast<double *>(
+                &table_segment_->attribute_table_[offset]);
+            double *lon = reinterpret_cast<double *>(
+                &table_segment_->attribute_table_[offset + sizeof(double)]);
+            geoPoint.LoadFromString("{\"latitude\": " + std::to_string(*lat) + ", \"longitude\": " + std::to_string(*lon) + "}");
+            record.SetObject(field, geoPoint);
             break;
           }
           default:

@@ -75,6 +75,13 @@ double ExprEvaluator::GetRealNumberFieldValue(const std::string& field_name, con
   }
 }
 
+vectordb::engine::index::GeospatialIndex::point_t ExprEvaluator::GeoPointEvaluate(const std::string& field_name,  const int64_t& cand_ind) {
+  auto offset = field_name_mem_offset_map_[field_name] + cand_ind * primitive_offset_;
+  double lat = *(reinterpret_cast<double*>(&attribute_table_[offset]));
+  double lon = *(reinterpret_cast<double*>(&attribute_table_[offset + sizeof(double)]));
+  return vectordb::engine::index::GeospatialIndex::point_t(lat, lon);
+}
+
 std::string ExprEvaluator::StrEvaluate(const int& node_index, const int64_t& cand_ind) {
   ExprNodePtr root = nodes_[node_index];
   auto node_type = root->node_type;
@@ -174,6 +181,15 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
       auto left = LogicalEvaluate(left_index, cand_ind);
       auto right = LogicalEvaluate(right_index, cand_ind);
       return node_type == NodeType::AND ? (left && right) : (left || right);
+    } else if (node_type == NodeType::FunctionCall) {
+      if (root->function_name == "NEARBY") {
+        auto point = GeoPointEvaluate(nodes_[root->arguments[0]]->field_name, cand_ind);
+        auto lat = NumEvaluate(root->arguments[1], cand_ind, distance);
+        auto lon = NumEvaluate(root->arguments[2], cand_ind, distance);
+        auto dist = NumEvaluate(root->arguments[3], cand_ind, distance);
+        return vectordb::engine::index::GeospatialIndex::distance(point, vectordb::engine::index::GeospatialIndex::point_t(lat, lon)) <= dist;
+      }
+      // Support more functions
     } else {
       auto left = NumEvaluate(left_index, cand_ind, distance);
       auto right = NumEvaluate(right_index, cand_ind, distance);
@@ -190,6 +206,30 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
     }
   }
   return false;
+}
+
+int64_t ExprEvaluator::UpliftingGeoIndex(const std::string& field_name, const int& node_index) {
+  auto root = nodes_[node_index];
+  auto node_type = root->node_type;
+  if (node_type == NodeType::FunctionCall) {
+    if (root->function_name == "NEARBY") {
+      if (nodes_[root->arguments[0]]->field_name == field_name) {
+        return node_index;
+      }
+    }
+    return -1;
+  }
+  if (node_type == NodeType::AND) {
+    int64_t left = UpliftingGeoIndex(field_name, root->left);
+    if (left != -1) {
+      return left;
+    }
+    int64_t right = UpliftingGeoIndex(field_name, root->right);
+    if (right != -1) {
+      return right;
+    }
+  }
+  return -1;
 }
 
 ExprEvaluator::~ExprEvaluator() {}
