@@ -208,6 +208,30 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
   return false;
 }
 
+int64_t ExprEvaluator::UpliftingGeoIndex(const std::string& field_name, const int& node_index) {
+  auto root = nodes_[node_index];
+  auto node_type = root->node_type;
+  if (node_type == NodeType::FunctionCall) {
+    if (root->function_name == "NEARBY") {
+      if (nodes_[root->arguments[0]]->field_name == field_name) {
+        return node_index;
+      }
+    }
+    return -1;
+  }
+  if (node_type == NodeType::AND) {
+    int64_t left = UpliftingGeoIndex(field_name, root->left);
+    if (left != -1) {
+      return left;
+    }
+    int64_t right = UpliftingGeoIndex(field_name, root->right);
+    if (right != -1) {
+      return right;
+    }
+  }
+  return -1;
+}
+
 ExprEvaluator::~ExprEvaluator() {}
 
 }  // namespace expr

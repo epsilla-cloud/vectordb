@@ -396,6 +396,7 @@ Status TableMVP::SearchByAttribute(
   // Search.
   int64_t result_num = 0;
   executor.exec_->SearchByAttribute(
+      table_schema_,
       table_segment_.get(),
       skip,
       limit,
