@@ -38,6 +38,13 @@ bool isCompareStr(std::string str) {
   return str == ">" || str == ">=" || str == "=" || str == "<=" || str == "<" || str == "<>";
 };
 
+bool isLike(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  return str == "LIKE";
+};
+
 bool isLogicalStr(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
     return std::toupper(c);
@@ -50,22 +57,25 @@ bool isUnsupportedLogicalOp(std::string str) {
     return std::toupper(c);
   });
   return str == "ALL" || str == "ANY" || str == "BETWEEN" || str == "EXISTS" || str == "IN" ||
-         str == "LIKE" || str == "SOME";
+         str == "SOME";
 }
 
 bool isOperator(std::string str) {
-  return isArithStr(str) || isCompareStr(str) || isLogicalStr(str);
+  return isArithStr(str) || isCompareStr(str) || isLogicalStr(str) || isLike(str);
 };
 
 int getPrecedence(std::string& op) {
-  if (isLogicalStr(op))
+  if (isLogicalStr(op)) {
     return 1;
-  else if (isCompareStr(op))
+  } else if (isCompareStr(op)) {
     return 2;
-  if (op == "+" || op == "-")
+  } else if (isLike(op)) {
     return 3;
-  else if (op == "*" || op == "/" || op == "%")
+  } else if (op == "+" || op == "-") {
     return 4;
+  } else if (op == "*" || op == "/" || op == "%") {
+    return 5;
+  }
   return 0;
 };
 
@@ -151,7 +161,11 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         break;
       case State::Attribute:
         if (std::isspace(c) || c == ')' || isArithChar(c) || isCompareChar(c)) {
-          token_list.push_back(cur_token);
+          if (isLike(cur_token)) {
+            token_list.push_back("LIKE");
+          } else {
+            token_list.push_back(cur_token);
+          }
           cur_token.clear();
           state = State::Start;
         } else if (std::isalnum(c) || c == '_') {
@@ -381,6 +395,12 @@ Status CheckCompatible(std::string& op, ValueType& left, ValueType& right, Value
         }
       }
     }
+  }
+  if (isLike(op)) {
+    if (left != ValueType::STRING || right != ValueType::STRING) {
+      return Status(INVALID_EXPR, "LIKE statement is invalid.");
+    }
+    root = ValueType::BOOL;
   }
 
   return Status::OK();
