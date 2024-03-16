@@ -3,10 +3,36 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <regex>
+#include <string>
 
 namespace vectordb {
 namespace query {
 namespace expr {
+
+
+// Function to escape regex special characters in the input string
+std::string escapeRegexSpecialChars(const std::string& likePattern) {
+  static const std::regex specialChars(R"([\.\+\*\?\^\$\(\)\[\]\{\}\|\\])");
+  std::string regexPattern = std::regex_replace(likePattern, specialChars, R"(\$&)");
+  return regexPattern;
+}
+
+// Function to convert SQL LIKE pattern to regex pattern
+std::string likeToRegexPattern(const std::string& likePattern) {
+  std::string regexPattern = escapeRegexSpecialChars(likePattern);
+  // Replace SQL LIKE wildcard '%' with regex '.*'
+  regexPattern = std::regex_replace(regexPattern, std::regex("%"), ".*");
+  // Replace SQL LIKE wildcard '_' with regex '.'
+  regexPattern = std::regex_replace(regexPattern, std::regex("_"), ".");
+  return regexPattern;
+}
+
+// Function to perform regex match
+bool regexMatch(const std::string& str, const std::string& pattern) {
+  std::regex regexPattern(pattern);
+  return std::regex_match(str, regexPattern);
+}
 
 ExprEvaluator::ExprEvaluator(
     std::vector<ExprNodePtr>& nodes,
@@ -190,6 +216,19 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
         return vectordb::engine::index::GeospatialIndex::distance(point, vectordb::engine::index::GeospatialIndex::point_t(lat, lon)) <= dist;
       }
       // Support more functions
+    } else if (node_type == NodeType::LIKE) {
+      auto left = StrEvaluate(left_index, cand_ind);
+      auto right = StrEvaluate(right_index, cand_ind);
+      // str LIKE '' iff str == ''
+      if (right == "") {
+        return left == "";
+      }
+      // str LIKE '%' always matches
+      if (right == "%") {
+        return true;
+      }
+      std::string regexPattern = likeToRegexPattern(right);
+      return regexMatch(left, regexPattern);
     } else {
       auto left = NumEvaluate(left_index, cand_ind, distance);
       auto right = NumEvaluate(right_index, cand_ind, distance);
