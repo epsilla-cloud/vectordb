@@ -38,6 +38,7 @@ enum class NodeType {
   OR,
   NOT,
   FunctionCall,
+  LIKE,
 };
 
 const std::unordered_map<std::string, NodeType> OperatorNodeTypeMap = {
@@ -54,7 +55,8 @@ const std::unordered_map<std::string, NodeType> OperatorNodeTypeMap = {
     {"<>", NodeType::NE},
     {"AND", NodeType::AND},
     {"OR", NodeType::OR},
-    {"NOT", NodeType::NOT}};
+    {"NOT", NodeType::NOT},
+    {"LIKE", NodeType::LIKE}};
 
 enum class ValueType {
   STRING,
