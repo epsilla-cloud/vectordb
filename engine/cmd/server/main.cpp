@@ -9,6 +9,8 @@
 #include "server/server.hpp"
 #include "logger/logger.hpp"
 
+#include "db/execution/aggregation.hpp"
+
 void print_help(const std::string &app_name) {
   std::cout << std::endl
             << "Usage: " << app_name << " [OPTIONS]" << std::endl
@@ -27,6 +29,40 @@ void print_banner() {
 }
 
 int main(int argc, char *argv[]) {
+
+    vectordb::engine::execution::MinAggregator<std::string> minAggregator;
+    minAggregator.addValue("group1", 100);
+    minAggregator.addValue("group1", 50.5);
+    minAggregator.addValue("group2", 200);
+
+    std::cout << "Min Aggregation Results:" << std::endl;
+    for (auto it = minAggregator.begin(); it != minAggregator.end(); ++it) {
+        std::cout << "Key: " << it->first << ", Value: " << it->second << std::endl;
+    }
+
+    // Example with a range-based for loop
+    vectordb::engine::execution::MaxAggregator<std::string> maxAggregator;
+    maxAggregator.addValue("group1", 150);
+    maxAggregator.addValue("group1", 200.5);
+    maxAggregator.addValue("group2", 100);
+
+    std::cout << "Max Aggregation Results:" << std::endl;
+    for (const auto& pair : maxAggregator) {
+        std::cout << "Key: " << pair.first << ", Value: " << pair.second << std::endl;
+    }
+
+    vectordb::engine::execution::MinAggregator<double> minAggregator2;
+    minAggregator2.addValue(1.5, 100);
+    minAggregator2.addValue(1.5, 50.5);
+    minAggregator2.addValue(2.3, 200);
+
+    std::cout << "Min Aggregation Results:" << std::endl;
+    for (auto it = minAggregator2.begin(); it != minAggregator2.end(); ++it) {
+        std::cout << "Key: " << it->first << ", Value: " << it->second << std::endl;
+    }
+
+  return 0;
+
   print_banner();
   vectordb::engine::Logger logger;
 
