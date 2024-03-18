@@ -123,6 +123,7 @@ public:
 
 class FacetExecutor {
 protected:
+  bool global_group_by;
   std::vector<std::unique_ptr<BaseAggregator<int64_t>>> int_aggregators_;
   std::vector<std::unique_ptr<BaseAggregator<double>>> double_aggregators_;
   std::vector<std::unique_ptr<BaseAggregator<bool>>> bool_aggregators_;
@@ -158,9 +159,11 @@ public:
   //   }
   // ]
   FacetExecutor(
+    bool global_group_by,
     std::vector<std::vector<query::expr::ExprNodePtr>>& group_by_evals,
     std::vector<std::vector<query::expr::ExprNodePtr>>& aggregation_evals
   ) {
+    this->global_group_by = global_group_by;
     this->group_by_evals = group_by_evals;
     this->aggregation_evals = aggregation_evals;
     // Single group by, directly use the first group by evals to determine the type
@@ -221,6 +224,62 @@ public:
       }
     } else {
       throw "System error: multiple group by is not supported yet.";
+    }
+  }
+
+  void aggregate(
+    vectordb::engine::TableSegmentMVP *table_segment,
+    std::vector<int64_t> ids,
+    bool has_distance,
+    std::vector<double> distances
+  ) {
+    // TODO: support multiple group by
+    vectordb::query::expr::ExprEvaluator group_by_evaluator(
+      group_by_evals[0],
+      table_segment->field_name_mem_offset_map_,
+      table_segment->primitive_offset_,
+      table_segment->var_len_attr_num_,
+      table_segment->attribute_table_,
+      table_segment->var_len_attr_table_);
+    int group_by_root_index = group_by_evals[0].size() - 1;
+    std::vector<vectordb::query::expr::ExprEvaluator> aggregation_evaluators;
+    for (size_t i = 0; i < aggregation_evals.size(); ++i) {
+      aggregation_evaluators.emplace_back(
+        aggregation_evals[i],
+        table_segment->field_name_mem_offset_map_,
+        table_segment->primitive_offset_,
+        table_segment->var_len_attr_num_,
+        table_segment->attribute_table_,
+        table_segment->var_len_attr_table_);
+    }
+    // Loop through the ids, conduct evaluation, and aggregate
+    for (size_t i = 0; i < ids.size(); ++i) {
+      auto id = ids[i];
+      if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::INT) {
+        int64_t key = (int64_t)(group_by_evaluator.NumEvaluate(group_by_root_index, id, has_distance ? distances[i] : 0.0));
+        for (size_t j = 0; j < aggregation_evaluators.size(); ++j) {
+          auto value = aggregation_evaluators[j].NumEvaluate(aggregation_evals[j].size() - 1, id, has_distance ? distances[i] : 0.0);
+          int_aggregators_[j]->addValue(key, value);
+        }
+      } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::DOUBLE) {
+        double key = group_by_evaluator.NumEvaluate(group_by_root_index, id, has_distance ? distances[i] : 0.0);
+        for (size_t j = 0; j < aggregation_evaluators.size(); ++j) {
+          auto value = aggregation_evaluators[j].NumEvaluate(aggregation_evals[j].size() - 1, id, has_distance ? distances[i] : 0.0);
+          double_aggregators_[j]->addValue(key, value);
+        }
+      } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::BOOL) {
+        bool key = group_by_evaluator.LogicalEvaluate(group_by_root_index, id);
+        for (size_t j = 0; j < aggregation_evaluators.size(); ++j) {
+          auto value = aggregation_evaluators[j].NumEvaluate(aggregation_evals[j].size() - 1, id, has_distance ? distances[i] : 0.0);
+          bool_aggregators_[j]->addValue(key, value);
+        }
+      } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::STRING) {
+        std::string key = group_by_evaluator.StrEvaluate(group_by_root_index, id);
+        for (size_t j = 0; j < aggregation_evaluators.size(); ++j) {
+          auto value = aggregation_evaluators[j].NumEvaluate(aggregation_evals[j].size() - 1, id, has_distance ? distances[i] : 0.0);
+          string_aggregators_[j]->addValue(key, value);
+        }
+      }
     }
   }
 };
