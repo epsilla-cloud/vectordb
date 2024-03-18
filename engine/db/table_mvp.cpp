@@ -416,7 +416,8 @@ Status TableMVP::Project(
     std::vector<std::string> &query_fields,
     int64_t idlist_size,        // -1 means project all.
     std::vector<int64_t> &ids,  // doesn't matter if idlist_size is -1.
-    vectordb::Json &result, bool with_distance,
+    vectordb::Json &result,
+    bool with_distance,
     std::vector<double> &distances) {
   // Construct the result.
   result.LoadFromString("[]");
