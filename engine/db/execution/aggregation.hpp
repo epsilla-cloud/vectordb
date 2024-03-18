@@ -293,7 +293,16 @@ public:
     // TODO: support multiple group by
     result.LoadFromString("[]");
     int group_by_root_index = group_by_evals[0].size() - 1;
-    if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::INT) {
+    if (global_group_by) {
+      for (auto it = int_aggregators_[0]->begin(); it != int_aggregators_[0]->end(); ++it) {
+        vectordb::Json obj;
+        obj.LoadFromString("{}");
+        for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
+          obj.SetDouble(aggregation_exprs[i], int_aggregators_[i]->getValue(it->first));
+        }
+        result.AddObjectToArray(std::move(obj));
+      }
+    } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::INT) {
       for (auto it = int_aggregators_[0]->begin(); it != int_aggregators_[0]->end(); ++it) {
         vectordb::Json obj;
         obj.LoadFromString("{}");
