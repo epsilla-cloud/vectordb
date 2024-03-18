@@ -14,6 +14,7 @@
 #include "db/index/space_cosine.hpp"
 #include "db/index/space_ip.hpp"
 #include "db/index/space_l2.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -101,10 +102,10 @@ class KNNGraph {
 
     float total = float(N) * (N - 1) / 2;
     for (int it = 0; it < I; ++it) {
-      std::cout << "iterate " << it << std::endl;
+      logger_.Debug("Iteration " + std::to_string(it));
       int t = nndes.iterate();
       float rate = float(t) / (K * N);
-      std::cout << rate << std::endl;
+      logger_.Debug("Converge rate: " + std::to_string(rate));
       if (rate < T) break;
     }
 
@@ -132,6 +133,9 @@ class KNNGraph {
     // }
     // std::cout << "Finished" << std::endl;
   }
+
+ private:
+  vectordb::engine::Logger logger_;
 };
 
 }  // namespace index

@@ -3,10 +3,36 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <regex>
+#include <string>
 
 namespace vectordb {
 namespace query {
 namespace expr {
+
+
+// Function to escape regex special characters in the input string
+std::string escapeRegexSpecialChars(const std::string& likePattern) {
+  static const std::regex specialChars(R"([\.\+\*\?\^\$\(\)\[\]\{\}\|\\])");
+  std::string regexPattern = std::regex_replace(likePattern, specialChars, R"(\$&)");
+  return regexPattern;
+}
+
+// Function to convert SQL LIKE pattern to regex pattern
+std::string likeToRegexPattern(const std::string& likePattern) {
+  std::string regexPattern = escapeRegexSpecialChars(likePattern);
+  // Replace SQL LIKE wildcard '%' with regex '.*'
+  regexPattern = std::regex_replace(regexPattern, std::regex("%"), ".*");
+  // Replace SQL LIKE wildcard '_' with regex '.'
+  regexPattern = std::regex_replace(regexPattern, std::regex("_"), ".");
+  return regexPattern;
+}
+
+// Function to perform regex match
+bool regexMatch(const std::string& str, const std::string& pattern) {
+  std::regex regexPattern(pattern);
+  return std::regex_match(str, regexPattern);
+}
 
 ExprEvaluator::ExprEvaluator(
     std::vector<ExprNodePtr>& nodes,
@@ -73,6 +99,13 @@ double ExprEvaluator::GetRealNumberFieldValue(const std::string& field_name, con
   } else {
     return 0.0;
   }
+}
+
+vectordb::engine::index::GeospatialIndex::point_t ExprEvaluator::GeoPointEvaluate(const std::string& field_name,  const int64_t& cand_ind) {
+  auto offset = field_name_mem_offset_map_[field_name] + cand_ind * primitive_offset_;
+  double lat = *(reinterpret_cast<double*>(&attribute_table_[offset]));
+  double lon = *(reinterpret_cast<double*>(&attribute_table_[offset + sizeof(double)]));
+  return vectordb::engine::index::GeospatialIndex::point_t(lat, lon);
 }
 
 std::string ExprEvaluator::StrEvaluate(const int& node_index, const int64_t& cand_ind) {
@@ -174,6 +207,28 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
       auto left = LogicalEvaluate(left_index, cand_ind);
       auto right = LogicalEvaluate(right_index, cand_ind);
       return node_type == NodeType::AND ? (left && right) : (left || right);
+    } else if (node_type == NodeType::FunctionCall) {
+      if (root->function_name == "NEARBY") {
+        auto point = GeoPointEvaluate(nodes_[root->arguments[0]]->field_name, cand_ind);
+        auto lat = NumEvaluate(root->arguments[1], cand_ind, distance);
+        auto lon = NumEvaluate(root->arguments[2], cand_ind, distance);
+        auto dist = NumEvaluate(root->arguments[3], cand_ind, distance);
+        return vectordb::engine::index::GeospatialIndex::distance(point, vectordb::engine::index::GeospatialIndex::point_t(lat, lon)) <= dist;
+      }
+      // Support more functions
+    } else if (node_type == NodeType::LIKE) {
+      auto left = StrEvaluate(left_index, cand_ind);
+      auto right = StrEvaluate(right_index, cand_ind);
+      // str LIKE '' iff str == ''
+      if (right == "") {
+        return left == "";
+      }
+      // str LIKE '%' always matches
+      if (right == "%") {
+        return true;
+      }
+      std::string regexPattern = likeToRegexPattern(right);
+      return regexMatch(left, regexPattern);
     } else {
       auto left = NumEvaluate(left_index, cand_ind, distance);
       auto right = NumEvaluate(right_index, cand_ind, distance);
@@ -190,6 +245,30 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
     }
   }
   return false;
+}
+
+int64_t ExprEvaluator::UpliftingGeoIndex(const std::string& field_name, const int& node_index) {
+  auto root = nodes_[node_index];
+  auto node_type = root->node_type;
+  if (node_type == NodeType::FunctionCall) {
+    if (root->function_name == "NEARBY") {
+      if (nodes_[root->arguments[0]]->field_name == field_name) {
+        return node_index;
+      }
+    }
+    return -1;
+  }
+  if (node_type == NodeType::AND) {
+    int64_t left = UpliftingGeoIndex(field_name, root->left);
+    if (left != -1) {
+      return left;
+    }
+    int64_t right = UpliftingGeoIndex(field_name, root->right);
+    if (right != -1) {
+      return right;
+    }
+  }
+  return -1;
 }
 
 ExprEvaluator::~ExprEvaluator() {}
