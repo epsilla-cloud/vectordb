@@ -37,6 +37,9 @@ enum class FieldType {
   SPARSE_VECTOR_FLOAT = 50,
   SPARSE_VECTOR_DOUBLE = 51,
 
+  SET = 60,
+  LIST = 61,
+
   UNKNOWN = 999,
 };
 
@@ -55,6 +58,7 @@ struct FieldSchema {
   FieldType field_type_ = FieldType::INT4;
   size_t vector_dimension_ = DEFAULT_VECTOR_DIMENSION;
   MetricType metric_type_ = MetricType::EUCLIDEAN;
+  FieldType element_type = FieldType::INT4;
 };
 
 struct AutoEmbedding {
@@ -101,6 +105,8 @@ static const std::unordered_map<std::string, FieldType> fieldTypeMap = {
     {"VECTOR_DOUBLE", FieldType::VECTOR_DOUBLE},
     {"SPARSE_VECTOR_FLOAT", FieldType::SPARSE_VECTOR_FLOAT},
     {"SPARSE_VECTOR_DOUBLE", FieldType::SPARSE_VECTOR_DOUBLE},
+    {"SET", FieldType::SET},
+    {"LIST", FieldType::LIST},
     {"UNKNOWN", FieldType::UNKNOWN}};
 
 static const std::unordered_map<std::string, MetricType> metricTypeMap = {

@@ -78,6 +78,10 @@ class TableSegmentMVP {
   int64_t dense_vector_num_;
   char* attribute_table_;                                           // The attribute table in memory (exclude vector attributes and string attributes).
   std::vector<VariableLenAttrColumnContainer> var_len_attr_table_;  // The variable length attribute table in memory.
+
+  // TODO:
+  // vector for container attribute table
+
   // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
   std::vector<int64_t> vector_dims_;
   float** vector_tables_;      // The vector attribute tables. Each vector attribute has its own vector table.
