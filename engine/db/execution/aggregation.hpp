@@ -6,6 +6,13 @@
 #include <limits>
 #include <type_traits>
 #include <optional>
+#include <vector>
+#include <memory>
+#include "query/expr/expr_evaluator.hpp"
+#include "query/expr/expr_types.hpp"
+#include "utils/status.hpp"
+#include "utils/json.hpp"
+#include "db/table_segment_mvp.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -114,6 +121,140 @@ public:
   }
 };
 
+class FacetExecutor {
+protected:
+  std::vector<std::unique_ptr<BaseAggregator<int64_t>>> int_aggregators_;
+  std::vector<std::unique_ptr<BaseAggregator<double>>> double_aggregators_;
+  std::vector<std::unique_ptr<BaseAggregator<bool>>> bool_aggregators_;
+  std::vector<std::unique_ptr<BaseAggregator<std::string>>> string_aggregators_;
+  std::vector<std::vector<query::expr::ExprNodePtr>> group_by_evals;
+  std::vector<std::vector<query::expr::ExprNodePtr>> aggregation_evals;
+
+public:
+  // Facet JSON example:
+  // {
+  //   "group_by": [
+  //     "age",
+  //     "hobby"
+  //   ],
+  //   "aggregations": [
+  //     "SUM(age)",
+  //     "COUNT(*)",
+  //   ]
+  // }
+  // Output will be something like:
+  // [
+  //   {
+  //     "age": 20,
+  //     "hobby": "football",
+  //     "SUM(age)": 100,
+  //     "COUNT(*)": 5
+  //   },
+  //   {
+  //     "age": 20,
+  //     "hobby": "basketball",
+  //     "SUM(age)": 200,
+  //     "COUNT(*)": 10
+  //   }
+  // ]
+  FacetExecutor(
+    std::vector<std::vector<query::expr::ExprNodePtr>>& group_by_evals,
+    std::vector<std::vector<query::expr::ExprNodePtr>>& aggregation_evals
+  ) {
+    this->group_by_evals = group_by_evals;
+    this->aggregation_evals = aggregation_evals;
+    // Single group by, directly use the first group by evals to determine the type
+    if (group_by_evals.size() == 1) {
+      auto& group = group_by_evals[0][group_by_evals[0].size() - 1];
+      if (group->value_type == query::expr::ValueType::INT) {
+        for (size_t i = 0; i < aggregation_evals.size(); ++i) {
+          auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
+          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+            int_aggregators_.emplace_back(std::make_unique<SumAggregator<int64_t>>());
+          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+            int_aggregators_.emplace_back(std::make_unique<CountAggregator<int64_t>>());
+          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+            int_aggregators_.emplace_back(std::make_unique<MinAggregator<int64_t>>());
+          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+            int_aggregators_.emplace_back(std::make_unique<MaxAggregator<int64_t>>());
+          }
+        }
+      } else if (group->value_type == query::expr::ValueType::DOUBLE) {
+        for (size_t i = 0; i < aggregation_evals.size(); ++i) {
+          auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
+          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+            double_aggregators_.emplace_back(std::make_unique<SumAggregator<double>>());
+          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+            double_aggregators_.emplace_back(std::make_unique<CountAggregator<double>>());
+          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+            double_aggregators_.emplace_back(std::make_unique<MinAggregator<double>>());
+          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+            double_aggregators_.emplace_back(std::make_unique<MaxAggregator<double>>());
+          }
+        }
+      } else if (group->value_type == query::expr::ValueType::BOOL) {
+        for (size_t i = 0; i < aggregation_evals.size(); ++i) {
+          auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
+          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+            bool_aggregators_.emplace_back(std::make_unique<SumAggregator<bool>>());
+          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+            bool_aggregators_.emplace_back(std::make_unique<CountAggregator<bool>>());
+          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+            bool_aggregators_.emplace_back(std::make_unique<MinAggregator<bool>>());
+          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+            bool_aggregators_.emplace_back(std::make_unique<MaxAggregator<bool>>());
+          }
+        }
+      } else if (group->value_type == query::expr::ValueType::STRING) {
+        for (size_t i = 0; i < aggregation_evals.size(); ++i) {
+          auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
+          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+            string_aggregators_.emplace_back(std::make_unique<SumAggregator<std::string>>());
+          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+            string_aggregators_.emplace_back(std::make_unique<CountAggregator<std::string>>());
+          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+            string_aggregators_.emplace_back(std::make_unique<MinAggregator<std::string>>());
+          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+            string_aggregators_.emplace_back(std::make_unique<MaxAggregator<std::string>>());
+          }
+        }
+      }
+    } else {
+      throw "System error: multiple group by is not supported yet.";
+    }
+  }
+};
+
 }
 }
 }
+// vectordb::engine::execution::MinAggregator<std::string> minAggregator;
+// minAggregator.addValue("group1", 100);
+// minAggregator.addValue("group1", 50.5);
+// minAggregator.addValue("group2", 200);
+
+// std::cout << "Min Aggregation Results:" << std::endl;
+// for (auto it = minAggregator.begin(); it != minAggregator.end(); ++it) {
+//     std::cout << "Key: " << it->first << ", Value: " << it->second << std::endl;
+// }
+
+// // Example with a range-based for loop
+// vectordb::engine::execution::MaxAggregator<std::string> maxAggregator;
+// maxAggregator.addValue("group1", 150);
+// maxAggregator.addValue("group1", 200.5);
+// maxAggregator.addValue("group2", 100);
+
+// std::cout << "Max Aggregation Results:" << std::endl;
+// for (const auto& pair : maxAggregator) {
+//     std::cout << "Key: " << pair.first << ", Value: " << pair.second << std::endl;
+// }
+
+// vectordb::engine::execution::MinAggregator<double> minAggregator2;
+// minAggregator2.addValue(1.5, 100);
+// minAggregator2.addValue(1.5, 50.5);
+// minAggregator2.addValue(2.3, 200);
+
+// std::cout << "Min Aggregation Results:" << std::endl;
+// for (auto it = minAggregator2.begin(); it != minAggregator2.end(); ++it) {
+//     std::cout << "Key: " << it->first << ", Value: " << it->second << std::endl;
+// }
