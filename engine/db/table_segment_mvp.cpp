@@ -28,6 +28,8 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
       return 8;
     case meta::FieldType::BOOL:
       return 1;
+    case meta::FieldType::GEO_POINT:
+      return 16;
     case meta::FieldType::STRING:
     case meta::FieldType::JSON:
     case meta::FieldType::SPARSE_VECTOR_DOUBLE:
@@ -90,6 +92,9 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
       field_name_mem_offset_map_[field_schema.name_] = primitive_offset_;
       primitive_offset_ += FieldTypeSizeMVP(field_schema.field_type_);
       ++primitive_num_;
+      if (field_schema.field_type_ == meta::FieldType::GEO_POINT) {
+        geospatial_indices_[field_schema.name_] = std::make_shared<vectordb::engine::index::GeospatialIndex>();
+      }
     }
 
     if (field_schema.is_primary_key_) {
@@ -215,6 +220,24 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
           default:
             // other types cannot be PK, do nothing
             break;
+        }
+      }
+    }
+
+    // Handle the geospatial indices
+    for (auto& field : table_schema.fields_) {
+      if (field.field_type_ == meta::FieldType::GEO_POINT) {
+        auto index = geospatial_indices_[field.name_];
+        for (auto rIdx = 0; rIdx < record_number_; rIdx++) {
+          // skip deleted entry
+          if (deleted_->test(rIdx)) {
+            continue;
+          }
+          double lat = 0;
+          std::memcpy(&lat, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+          double lon = 0;
+          std::memcpy(&lon, &(attribute_table_[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+          index->insertPoint(lat, lon, rIdx);
         }
       }
     }
@@ -483,7 +506,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
   wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
-    std::cout << "No records to insert." << std::endl;
+    logger_.Debug("No records to insert.");
     return Status::OK();
   }
   // Check if the records are valid.
@@ -646,6 +669,27 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           case meta::FieldType::BOOL: {
             bool value = record.GetBool(field.name_);
             std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(bool));
+            break;
+          }
+          case meta::FieldType::GEO_POINT: {
+            double lat = record.Get(field.name_).GetDouble("latitude");
+            if (lat < -90) {
+              lat = -90;
+            }
+            if (lat > 90) {
+              lat = 90;
+            }
+            double lon = record.Get(field.name_).GetDouble("longitude");
+            if (lon < -180) {
+              lon = -180;
+            }
+            if (lon > 180) {
+              lon = 180;
+            }
+            std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &lat, sizeof(double));
+            std::memcpy(&(attribute_table_[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), &lon, sizeof(double));
+            // Insert into the geospatial index.
+            geospatial_indices_[field.name_]->insertPoint(lat, lon, cursor);
             break;
           }
           default:
@@ -940,8 +984,8 @@ Status TableSegmentMVP::InsertPrepare(meta::TableSchema& table_schema, Json& pks
 //   return Status::OK();
 // }
 
-Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path) {
-  if (skip_sync_disk_) {
+Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path, bool force) {
+  if (skip_sync_disk_ && !force) {
     return Status::OK();
   }
 
@@ -953,9 +997,10 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   if (!file) {
     return Status(DB_UNEXPECTED_ERROR, "Cannot open file: " + path);
   }
-
   // Write the number of records and the first record id
-  fwrite(&record_number_, sizeof(record_number_), 1, file);
+  int64_t current_wal_global_id = wal_global_id_.load();
+  size_t current_record_number = record_number_.load();
+  fwrite(&current_record_number, sizeof(current_record_number), 1, file);
   fwrite(&first_record_id_, sizeof(first_record_id_), 1, file);
 
   // Write the bitset
@@ -965,10 +1010,10 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
   fwrite(bitset_data, bitset_size, 1, file);
 
   // Write the attribute table.
-  fwrite(attribute_table_, record_number_ * primitive_offset_, 1, file);
+  fwrite(attribute_table_, current_record_number * primitive_offset_, 1, file);
 
   // Write the variable length table.
-  for (auto recordIdx = 0; recordIdx < record_number_; ++recordIdx) {
+  for (auto recordIdx = 0; recordIdx < current_record_number; ++recordIdx) {
     for (auto attrIdx = 0; attrIdx < var_len_attr_num_; ++attrIdx) {
       auto& entry = var_len_attr_table_[attrIdx][recordIdx];
       if (std::holds_alternative<std::string>(entry)) {
@@ -988,11 +1033,11 @@ Status TableSegmentMVP::SaveTableSegment(meta::TableSchema& table_schema, const 
 
   // Write the vector table.
   for (auto i = 0; i < dense_vector_num_; ++i) {
-    fwrite(vector_tables_[i], sizeof(float) * record_number_ * vector_dims_[i], 1, file);
+    fwrite(vector_tables_[i], sizeof(float) * current_record_number * vector_dims_[i], 1, file);
   }
 
   // Last, write the global wal id.
-  fwrite(&wal_global_id_, sizeof(wal_global_id_), 1, file);
+  fwrite(&current_wal_global_id, sizeof(current_wal_global_id), 1, file);
 
   // Flush changes to disk
   fflush(file);
@@ -1091,6 +1136,14 @@ void TableSegmentMVP::Debug(meta::TableSchema& table_schema) {
             bool value;
             std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(bool));
             std::cout << (value ? "true" : "false") << " ";
+            break;
+          }
+          case meta::FieldType::GEO_POINT: {
+            double value;
+            std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+            std::cout << "Latitude: " << value << " ";
+            std::memcpy(&value, &(attribute_table_[i * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+            std::cout << "Longitude: " << value << " ";
             break;
           }
           default:

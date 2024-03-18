@@ -30,7 +30,7 @@ Status DBServer::LoadDB(const std::string& db_name,
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
-    std::cout << status.message() << std::endl;
+    logger_.Error(status.message());
     return status;
   }
   try {
@@ -76,6 +76,29 @@ Status DBServer::ReleaseDB(const std::string& db_name) {
   }
   dbs_[it->second]->Release();
   return Status::OK();
+}
+
+Status DBServer::DumpDB(const std::string& db_name,
+                        const std::string& db_catalog_path) {
+  // Check that DB exists.
+  auto it = db_name_to_id_map_.find(db_name);
+  if (it == db_name_to_id_map_.end()) {
+    return Status(DB_NOT_FOUND, "DB not found: " + db_name);
+  }
+  // Create the folder if not exist.
+  if (!server::CommonUtil::CreateDirectory(db_catalog_path).ok()) {
+    return Status(DB_UNEXPECTED_ERROR, "Failed to create directory: " + db_catalog_path);
+  }
+  // Dump meta to disk.
+  meta::DatabaseSchema db_schema;
+  meta_->GetDatabase(db_name, db_schema);
+  auto status = meta_->SaveDBToFile(db_schema, db_catalog_path + "/catalog");
+  if (!status.ok()) {
+    return status;
+  }
+  // Dump DB to disk.
+  std::shared_ptr<DBMVP> db = dbs_[it->second];
+  return db->Dump(db_catalog_path);
 }
 
 Status DBServer::GetStatistics(const std::string& db_name,
@@ -209,8 +232,7 @@ Status DBServer::Rebuild() {
     if (db != nullptr) {
       auto status = db->Rebuild();
       if (!status.ok()) {
-        std::cout << "Rebuild db to " << db->db_catalog_path_ << " failed."
-                  << std::endl;
+        logger_.Error("Rebuild db to " + db->db_catalog_path_ + " failed.");
       }
     }
   }
@@ -224,8 +246,7 @@ Status DBServer::SwapExecutors() {
     if (db != nullptr) {
       auto status = db->SwapExecutors();
       if (!status.ok()) {
-        std::cout << "Swap executors for db of " << db->db_catalog_path_ << " failed."
-                  << std::endl;
+        logger_.Error("Swap executors for db of " + db->db_catalog_path_ + " failed.");
       }
     }
   }
@@ -301,7 +322,7 @@ Status DBServer::Delete(
     auto pkField = table->table_schema_.fields_[pkIdx];
     size_t pkListSize = pkList.GetSize();
     if (pkListSize == 0) {
-      std::cout << "No pk to delete." << std::endl;
+      logger_.Info("No pk to delete.");
       return Status::OK();
     }
     switch (pkField.field_type_) {
@@ -451,7 +472,7 @@ Status DBServer::SearchByContent(
     );
 
     if (!status.ok()) {
-      std::cerr << "embedding service error: " << status.message() << std::endl;
+      logger_.Error("Embedding service error: " + status.message());
       return status;
     }
     query_vec = denseQueryVec.data();

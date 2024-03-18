@@ -8,6 +8,7 @@
 
 #include "db/catalog/meta.hpp"
 #include "db/unique_key.hpp"
+#include "db/index/spatial/geoindex.hpp"
 #include "db/vector.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
@@ -16,6 +17,7 @@
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -51,7 +53,7 @@ class TableSegmentMVP {
   bool PK2ID(Json& record, size_t& id);
 
   // Save the table segment to disk.
-  Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path);
+  Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path, bool force = false);
 
   size_t GetRecordCount();
 
@@ -97,7 +99,12 @@ class TableSegmentMVP {
   int64_t pkFieldIdx() const;
   bool isEntryDeleted(int64_t id) const;
 
+  // Geospatial indices
+  std::unordered_map<std::string, std::shared_ptr<vectordb::engine::index::GeospatialIndex>> geospatial_indices_;
+
  private:
+  vectordb::engine::Logger logger_;
+
   std::mutex data_update_mutex_;
 
   // used to store primary key set for duplication check

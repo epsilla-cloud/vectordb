@@ -197,6 +197,40 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
+  ADD_CORS(DumpDB)
+
+  ENDPOINT("POST", "/api/dump", DumpDB,
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+
+    std::string db_path = parsedBody.GetString("path");
+    std::string db_name = parsedBody.GetString("name");
+    vectordb::Status status = db_server->DumpDB(db_name, db_path);
+
+    if (status.code() == DB_NOT_FOUND) {
+      // DB not found.
+      dto->statusCode = Status::CODE_404.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_404, dto);
+    } else if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = "Dump " + db_name + " successfully.";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
   ADD_CORS(CreateTable)
 
   ENDPOINT("POST", "/api/{db_name}/schema/tables", CreateTable,
