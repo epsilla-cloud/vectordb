@@ -128,7 +128,9 @@ protected:
   std::vector<std::unique_ptr<BaseAggregator<double>>> double_aggregators_;
   std::vector<std::unique_ptr<BaseAggregator<bool>>> bool_aggregators_;
   std::vector<std::unique_ptr<BaseAggregator<std::string>>> string_aggregators_;
+  std::vector<std::string> group_by_exprs;
   std::vector<std::vector<query::expr::ExprNodePtr>> group_by_evals;
+  std::vector<std::string> aggregation_exprs;
   std::vector<std::vector<query::expr::ExprNodePtr>> aggregation_evals;
 
 public:
@@ -160,11 +162,15 @@ public:
   // ]
   FacetExecutor(
     bool global_group_by,
+    std::vector<std::string>& group_by_exprs,
     std::vector<std::vector<query::expr::ExprNodePtr>>& group_by_evals,
+    std::vector<std::string>& aggregation_exprs,
     std::vector<std::vector<query::expr::ExprNodePtr>>& aggregation_evals
   ) {
     this->global_group_by = global_group_by;
+    this->group_by_exprs = group_by_exprs;
     this->group_by_evals = group_by_evals;
+    this->aggregation_exprs = aggregation_exprs;
     this->aggregation_evals = aggregation_evals;
     // Single group by, directly use the first group by evals to determine the type
     if (group_by_evals.size() == 1) {
@@ -281,6 +287,53 @@ public:
         }
       }
     }
+  }
+
+  void Project(vectordb::Json &result) {
+    // TODO: support multiple group by
+    result.LoadFromString("[]");
+    int group_by_root_index = group_by_evals[0].size() - 1;
+    if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::INT) {
+      for (auto it = int_aggregators_[0]->begin(); it != int_aggregators_[0]->end(); ++it) {
+        vectordb::Json obj;
+        obj.LoadFromString("{}");
+        obj.SetInt(group_by_exprs[0], it->first);
+        for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
+          obj.SetDouble(aggregation_exprs[i], int_aggregators_[i]->getValue(it->first));
+        }
+        result.AddObjectToArray(std::move(obj));
+      }
+    } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::DOUBLE) {
+      for (auto it = double_aggregators_[0]->begin(); it != double_aggregators_[0]->end(); ++it) {
+        vectordb::Json obj;
+        obj.LoadFromString("{}");
+        obj.SetDouble(group_by_exprs[0], it->first);
+        for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
+          obj.SetDouble(aggregation_exprs[i], double_aggregators_[i]->getValue(it->first));
+        }
+        result.AddObjectToArray(std::move(obj));
+      }
+    } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::BOOL) {
+      for (auto it = bool_aggregators_[0]->begin(); it != bool_aggregators_[0]->end(); ++it) {
+        vectordb::Json obj;
+        obj.LoadFromString("{}");
+        obj.SetBool(group_by_exprs[0], it->first);
+        for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
+          obj.SetDouble(aggregation_exprs[i], bool_aggregators_[i]->getValue(it->first));
+        }
+        result.AddObjectToArray(std::move(obj));
+      }
+    } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::STRING) {
+      for (auto it = string_aggregators_[0]->begin(); it != string_aggregators_[0]->end(); ++it) {
+        vectordb::Json obj;
+        obj.LoadFromString("{}");
+        obj.SetString(group_by_exprs[0], it->first);
+        for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
+          obj.SetDouble(aggregation_exprs[i], string_aggregators_[i]->getValue(it->first));
+        }
+        result.AddObjectToArray(std::move(obj));
+      }
+    } 
   }
 };
 
