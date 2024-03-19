@@ -123,7 +123,7 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         } else if (c == '&' || c == '|' || c == '^') {
           return Status(NOT_IMPLEMENTED_ERROR, "Epsilla does not support bitwise operators yet.");
         } else if (c == '@') {
-          if (i + 9 <= last_index && expression.substr(i, 9) == "@distance") {
+          if (i + 8 <= last_index && expression.substr(i, 9) == "@distance") {
             state = State::Attribute;
             cur_token = "@distance";
             i += 9;
