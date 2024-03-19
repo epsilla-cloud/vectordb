@@ -9,8 +9,6 @@
 #include "server/server.hpp"
 #include "logger/logger.hpp"
 
-#include "db/execution/aggregation.hpp"
-
 void print_help(const std::string &app_name) {
   std::cout << std::endl
             << "Usage: " << app_name << " [OPTIONS]" << std::endl
@@ -29,7 +27,6 @@ void print_banner() {
 }
 
 int main(int argc, char *argv[]) {
-
   print_banner();
   vectordb::engine::Logger logger;
 
