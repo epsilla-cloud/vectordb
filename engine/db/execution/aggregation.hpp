@@ -305,7 +305,12 @@ public:
         vectordb::Json obj;
         obj.LoadFromString("{}");
         for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
-          obj.SetDouble(aggregation_exprs[i], int_aggregators_[i]->getValue(it->first));
+          auto type = aggregation_evals[i][aggregation_evals[i].size() - 1]->value_type;
+          if (type == vectordb::query::expr::ValueType::INT) {
+            obj.SetInt(aggregation_exprs[i], (int64_t)(int_aggregators_[i]->getValue(it->first)));
+          } else {
+            obj.SetDouble(aggregation_exprs[i], int_aggregators_[i]->getValue(it->first));
+          }
         }
         result.AddObjectToArray(std::move(obj));
       }
@@ -315,7 +320,12 @@ public:
         obj.LoadFromString("{}");
         obj.SetInt(group_by_exprs[0], it->first);
         for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
-          obj.SetDouble(aggregation_exprs[i], int_aggregators_[i]->getValue(it->first));
+          auto type = aggregation_evals[i][aggregation_evals[i].size() - 1]->value_type;
+          if (type == vectordb::query::expr::ValueType::INT) {
+            obj.SetInt(aggregation_exprs[i], (int64_t)(int_aggregators_[i]->getValue(it->first)));
+          } else {
+            obj.SetDouble(aggregation_exprs[i], int_aggregators_[i]->getValue(it->first));
+          }
         }
         result.AddObjectToArray(std::move(obj));
       }
@@ -325,7 +335,12 @@ public:
         obj.LoadFromString("{}");
         obj.SetDouble(group_by_exprs[0], it->first);
         for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
-          obj.SetDouble(aggregation_exprs[i], double_aggregators_[i]->getValue(it->first));
+          auto type = aggregation_evals[i][aggregation_evals[i].size() - 1]->value_type;
+          if (type == vectordb::query::expr::ValueType::INT) {
+            obj.SetInt(aggregation_exprs[i], (int64_t)(double_aggregators_[i]->getValue(it->first)));
+          } else {
+            obj.SetDouble(aggregation_exprs[i], double_aggregators_[i]->getValue(it->first));
+          }
         }
         result.AddObjectToArray(std::move(obj));
       }
@@ -335,7 +350,12 @@ public:
         obj.LoadFromString("{}");
         obj.SetBool(group_by_exprs[0], it->first);
         for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
-          obj.SetDouble(aggregation_exprs[i], bool_aggregators_[i]->getValue(it->first));
+          auto type = aggregation_evals[i][aggregation_evals[i].size() - 1]->value_type;
+          if (type == vectordb::query::expr::ValueType::INT) {
+            obj.SetInt(aggregation_exprs[i], (int64_t)(bool_aggregators_[i]->getValue(it->first)));
+          } else {
+            obj.SetDouble(aggregation_exprs[i], bool_aggregators_[i]->getValue(it->first));
+          }
         }
         result.AddObjectToArray(std::move(obj));
       }
@@ -345,7 +365,12 @@ public:
         obj.LoadFromString("{}");
         obj.SetString(group_by_exprs[0], it->first);
         for (size_t i = 0; i < aggregation_exprs.size(); ++i) {
-          obj.SetDouble(aggregation_exprs[i], string_aggregators_[i]->getValue(it->first));
+          auto type = aggregation_evals[i][aggregation_evals[i].size() - 1]->value_type;
+          if (type == vectordb::query::expr::ValueType::INT) {
+            obj.SetInt(aggregation_exprs[i], (int64_t)(string_aggregators_[i]->getValue(it->first)));
+          } else {
+            obj.SetDouble(aggregation_exprs[i], string_aggregators_[i]->getValue(it->first));
+          }
         }
         result.AddObjectToArray(std::move(obj));
       }
