@@ -136,11 +136,11 @@ protected:
 public:
   // Facet JSON example:
   // {
-  //   "group_by": [
+  //   "group": [
   //     "age",
   //     "hobby"
   //   ],
-  //   "aggregations": [
+  //   "aggregate": [
   //     "SUM(age)",
   //     "COUNT(*)",
   //   ]
@@ -281,7 +281,7 @@ public:
           double_aggregators_[j]->addValue(key, value);
         }
       } else if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::BOOL) {
-        bool key = group_by_evaluator.LogicalEvaluate(group_by_root_index, id);
+        bool key = group_by_evaluator.LogicalEvaluate(group_by_root_index, id, has_distance ? distances[i] : 0.0);
         for (size_t j = 0; j < aggregation_evaluators.size(); ++j) {
           auto value = aggregation_evaluators[j].NumEvaluate(aggregation_evals[j].size() - 1, id, has_distance ? distances[i] : 0.0);
           bool_aggregators_[j]->addValue(key, value);

@@ -53,7 +53,9 @@ class DBServer {
       const int64_t limit,
       vectordb::Json& result,
       const std::string& filter,
-      bool with_distance);
+      bool with_distance,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets);
   Status SearchByContent(
       const std::string& db_name,
       const std::string& table_name,
@@ -64,6 +66,8 @@ class DBServer {
       vectordb::Json& result,
       const std::string& filter,
       bool with_distance,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets,
       std::unordered_map<std::string, std::string> &headers);
 
   Status Project(

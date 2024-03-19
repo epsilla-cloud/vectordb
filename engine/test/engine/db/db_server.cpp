@@ -300,7 +300,10 @@ TEST(DbServer, DenseVector) {
       vectordb::Json result;
       const auto limit = 6;
       auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true);
+      auto facetsConfig = vectordb::Json();
+      facetsConfig.LoadFromString("[]");
+      auto facets = vectordb::Json();
+      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true, facetsConfig, facets);
       EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
       EXPECT_EQ(result.GetSize(), 5) << "duplicate insert should've been ignored";
       for (int i = 0; i < result.GetSize(); i++) {
@@ -309,7 +312,7 @@ TEST(DbServer, DenseVector) {
             << result.DumpToString();
       }
 
-      auto badQueryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, badQueryDataPtr, limit, result, "", true);
+      auto badQueryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, badQueryDataPtr, limit, result, "", true, facetsConfig, facets);
       EXPECT_FALSE(badQueryStatus.ok()) << "query dense vector with sparse vector should fail";
     }
   }
@@ -490,7 +493,10 @@ TEST(DbServer, SparseVector) {
       vectordb::Json result;
       const auto limit = 6;
       auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "", true);
+      auto facetsConfig = vectordb::Json();
+      facetsConfig.LoadFromString("[]");
+      auto facets = vectordb::Json();
+      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "", true, facetsConfig, facets);
       EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
       EXPECT_EQ(result.GetSize(), 5) << "duplicate insert should've been ignored";
       for (int i = 0; i < result.GetSize(); i++) {
@@ -499,7 +505,7 @@ TEST(DbServer, SparseVector) {
             << result.DumpToString();
       }
 
-      auto badQueryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, badQueryDataPtr, limit, result, "", true);
+      auto badQueryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, badQueryDataPtr, limit, result, "", true, facetsConfig, facets);
       EXPECT_FALSE(badQueryStatus.ok()) << "query sparse vector column with dense vector should fail";
     }
   }
@@ -707,7 +713,10 @@ TEST(DbServer, DeleteByPK) {
     vectordb::Json result;
     const auto limit = 6;
     auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true);
+    auto facetsConfig = vectordb::Json();
+    facetsConfig.LoadFromString("[]");
+    auto facets = vectordb::Json();
+    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true, facetsConfig, facets);
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
     EXPECT_EQ(result.GetSize(), 5) << "duplicate insert should've been ignored";
     for (int i = 0; i < result.GetSize(); i++) {
@@ -727,7 +736,10 @@ TEST(DbServer, DeleteByPK) {
     vectordb::Json result;
     const auto limit = 6;
     auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true);
+    auto facetsConfig = vectordb::Json();
+    facetsConfig.LoadFromString("[]");
+    auto facets = vectordb::Json();
+    auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "", true, facetsConfig, facets);
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
     EXPECT_EQ(result.GetSize(), 1) << "records with ID 1/2/3/4 should've been deleted";
     for (int i = 0; i < result.GetSize(); i++) {
@@ -903,7 +915,10 @@ TEST(DbServer, InsertAndQueryDenseVectorDuringRebuild) {
         vectordb::Json list;
         list.LoadFromString("[]");
         list.AddObjectToArray(r);
-        status = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+        auto facetsConfig = vectordb::Json();
+        facetsConfig.LoadFromString("[]");
+        auto facets = vectordb::Json();
+        status = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true, facetsConfig, facets);
         if (!status.ok()) {
           return status;
         }
@@ -1040,7 +1055,10 @@ TEST(DbServer, InsertAndQuerySparseVectorDuringRebuild) {
         vectordb::Json list;
         list.LoadFromString("[]");
         list.AddObjectToArray(r);
-        status = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+        auto facetsConfig = vectordb::Json();
+        facetsConfig.LoadFromString("[]");
+        auto facets = vectordb::Json();
+        status = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true, facetsConfig, facets);
         if (!status.ok()) {
           return status;
         }
@@ -1145,7 +1163,10 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
 
     auto rebuildStatus = database.Rebuild();
     EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
-    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+    auto facetsConfig = vectordb::Json();
+    facetsConfig.LoadFromString("[]");
+    auto facets = vectordb::Json();
+    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true, facetsConfig, facets);
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
     EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
     for (int i = 0; i < queryResult.GetSize(); i++) {
@@ -1165,7 +1186,10 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
     EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
     // verify query result before rebuild
-    auto preRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+    auto facetsConfig = vectordb::Json();
+    facetsConfig.LoadFromString("[]");
+    auto facets = vectordb::Json();
+    auto preRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true, facetsConfig, facets);
     EXPECT_TRUE(preRebuildQueryStatus.ok()) << preRebuildQueryStatus.message();
     EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
     for (int i = 0; i < queryResult.GetSize(); i++) {
@@ -1189,7 +1213,10 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
     }
 
     // verify query result during rebuild
-    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+    auto facetsConfig = vectordb::Json();
+    facetsConfig.LoadFromString("[]");
+    auto facets = vectordb::Json();
+    auto queryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true, facetsConfig, facets);
     queryCountDuringRebuild++;
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
     EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
@@ -1204,7 +1231,10 @@ TEST(DbServer, QueryDenseVectorDuringRebuild) {
   // verify query result after rebuild
   auto rebuildStatus = rebuildStatusFuture.get();
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
-  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true);
+  auto facetsConfig = vectordb::Json();
+  facetsConfig.LoadFromString("[]");
+  auto facets = vectordb::Json();
+  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "", true, facetsConfig, facets);
   EXPECT_TRUE(postRebuildQueryStatus.ok()) << postRebuildQueryStatus.message();
   EXPECT_EQ(queryResult.GetSize(), limit) << "more than expected entries loaded";
   for (int i = 0; i < queryResult.GetSize(); i++) {
@@ -1584,7 +1614,10 @@ TEST(DbServer, DenseVectorFilter) {
       vectordb::Json result;
       const auto limit = 6;
       auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "ID <= 2", true);
+      auto facetsConfig = vectordb::Json();
+      facetsConfig.LoadFromString("[]");
+      auto facets = vectordb::Json();
+      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryData, limit, result, "ID <= 2", true, facetsConfig, facets);
       EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
       EXPECT_EQ(result.GetSize(), 2) << "only ID <= 2 entries should be included";
       for (int i = 0; i < result.GetSize(); i++) {
@@ -1772,7 +1805,10 @@ TEST(DbServer, SparseVectorFilter) {
       vectordb::Json result;
       const auto limit = 6;
       auto queryFields = std::vector<std::string>{"ID", "Doc", testcase.searchFieldName};
-      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "ID <= 2", true);
+      auto facetsConfig = vectordb::Json();
+      facetsConfig.LoadFromString("[]");
+      auto facets = vectordb::Json();
+      auto queryStatus = database.Search(dbName, tableName, testcase.searchFieldName, queryFields, queryDimension, queryDataPtr, limit, result, "ID <= 2", true, facetsConfig, facets);
       EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
       EXPECT_EQ(result.GetSize(), 2) << "only ID <= 2 entries should be included";
       for (int i = 0; i < result.GetSize(); i++) {
@@ -1879,7 +1915,10 @@ TEST(DbServer, InsertDenseVectorLargeBatch) {
   auto rebuildStatus = rebuildStatusFuture.get();
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
   const auto limit = 100;
-  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "ID < 10", true);
+  auto facetsConfig = vectordb::Json();
+  facetsConfig.LoadFromString("[]");
+  auto facets = vectordb::Json();
+  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "ID < 10", true, facetsConfig, facets);
   EXPECT_TRUE(postRebuildQueryStatus.ok()) << postRebuildQueryStatus.message();
   EXPECT_LE(queryResult.GetSize(), 10) << "more than expected entries loaded";
   for (int i = 0; i < queryResult.GetSize(); i++) {
@@ -1986,7 +2025,10 @@ TEST(DbServer, InsertSparseVectorLargeBatch) {
   auto rebuildStatus = rebuildStatusFuture.get();
   EXPECT_TRUE(rebuildStatus.ok()) << rebuildStatus.message();
   const auto limit = 100;
-  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "ID < 10", true);
+  auto facetsConfig = vectordb::Json();
+  facetsConfig.LoadFromString("[]");
+  auto facets = vectordb::Json();
+  auto postRebuildQueryStatus = database.Search(dbName, tableName, fieldName, queryFields, dimension, queryData, limit, queryResult, "ID < 10", true, facetsConfig, facets);
   EXPECT_TRUE(postRebuildQueryStatus.ok()) << postRebuildQueryStatus.message();
   EXPECT_LE(queryResult.GetSize(), 10) << "more than expected entries loaded";
   for (int i = 0; i < queryResult.GetSize(); i++) {
@@ -2092,7 +2134,10 @@ TEST(DbServer, InvalidSparseVector) {
     const auto limit = 6;
     std::string expectedField = "EmbeddingEuclidean";
     auto queryFields = std::vector<std::string>{"ID", "Doc", expectedField};
-    auto queryStatus = database.Search(dbName, tableName, expectedField, queryFields, queryDimension, queryDataPtr, limit, result, "", true);
+    auto facetsConfig = vectordb::Json();
+    facetsConfig.LoadFromString("[]");
+    auto facets = vectordb::Json();
+    auto queryStatus = database.Search(dbName, tableName, expectedField, queryFields, queryDimension, queryDataPtr, limit, result, "", true, facetsConfig, facets);
     EXPECT_TRUE(queryStatus.ok()) << queryStatus.message();
     EXPECT_EQ(result.GetSize(), 1) << "invalid records should've been ignored";
     EXPECT_EQ(result.GetArrayElement(0).GetInt("ID"), 5);

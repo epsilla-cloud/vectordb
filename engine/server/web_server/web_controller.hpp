@@ -734,7 +734,15 @@ class WebController : public oatpp::web::server::api::ApiController {
       headers[MISTRALAI_KEY_HEADER] = headerValue->c_str();
     }
 
-    vectordb::Json result;
+    vectordb::Json facetsConfig;
+    if (parsedBody.HasMember("facets")) {
+      facetsConfig = parsedBody.GetArray("facets");
+    } else {
+      facetsConfig.LoadFromString("[]");
+    }
+
+    vectordb::Json projects;
+    vectordb::Json facets;
     vectordb::Status search_status;
     if (parsedBody.HasMember("queryVector")) {
       // Query by provided vector.
@@ -788,9 +796,11 @@ class WebController : public oatpp::web::server::api::ApiController {
         dense_vector_size,
         query,
         limit,
-        result,
+        projects,
         filter,
-        with_distance);
+        with_distance,
+        facetsConfig,
+        facets);
     } else if (parsedBody.HasMember("query")) {
       // Query by provided content.
       std::string query_content = parsedBody.GetString("query");
@@ -801,9 +811,11 @@ class WebController : public oatpp::web::server::api::ApiController {
         query_fields,
         query_content,
         limit,
-        result,
+        projects,
         filter,
         with_distance,
+        facetsConfig,
+        facets,
         headers);
     } else {
       status_dto->statusCode = Status::CODE_400.code;
@@ -834,7 +846,20 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.LoadFromString("{}");
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Query search successfully.");
-    response.SetObject("result", result);
+    if (facetsConfig.GetSize() == 0) {
+      // Projection only
+      response.SetObject("result", projects);
+    } else if (query_fields.size() == 0) {
+      // No response given, only facets
+      response.SetObject("result", facets);
+    } else {
+      // Both projection and facets
+      vectordb::Json final_result;
+      final_result.LoadFromString("{}");
+      final_result.SetObject("records", projects);
+      final_result.SetObject("facets", facets);
+      response.SetObject("result", final_result);
+    }
     return createResponse(Status::CODE_200, response.DumpToString());
   }
 

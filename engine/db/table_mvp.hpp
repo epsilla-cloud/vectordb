@@ -62,7 +62,9 @@ class TableMVP {
       const int64_t limit,
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
-      bool with_distance);
+      bool with_distance,
+      std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+      vectordb::Json &facets);
 
   Status SearchByAttribute(
       std::vector<std::string> &query_fields,

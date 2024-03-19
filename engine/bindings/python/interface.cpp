@@ -308,6 +308,9 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
   }
   Py_XDECREF(queryVector);
   auto result = vectordb::Json();
+  auto facetsConfig = vectordb::Json();
+  facetsConfig.LoadFromString("[]");
+  auto facets = vectordb::Json();
   auto status = db->Search(
       db_name,
       tableName,
@@ -318,7 +321,9 @@ static PyObject *query(PyObject *self, PyObject *args, PyObject *kwargs) {
       limit,
       result,
       queryFilter,
-      withDistance);
+      withDistance,
+      facetsConfig,
+      facets);
 
   if (!status.ok()) {
     PyErr_SetString(PyExc_Exception, status.message().c_str());
