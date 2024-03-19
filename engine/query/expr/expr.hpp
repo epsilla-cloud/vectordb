@@ -17,7 +17,8 @@ class Expr {
   static Status ParseNodeFromStr(
       std::string expression,
       std::vector<ExprNodePtr>& nodes,
-      std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map);
+      std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map,
+      bool check_bool = true);
   static Status DumpToJson(ExprNodePtr& node, Json& json);
 };
 

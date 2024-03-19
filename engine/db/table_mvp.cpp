@@ -380,7 +380,9 @@ Status TableMVP::SearchByAttribute(
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     const int64_t skip,
     const int64_t limit,
-    vectordb::Json &result) {
+    vectordb::Json &projects,
+    std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+    vectordb::Json &facets) {
   // TODO: create a separate pool for search by attribute.
   int64_t field_offset = 0;
   // [Note] the following invocation is wrong
@@ -403,11 +405,29 @@ Status TableMVP::SearchByAttribute(
       primary_keys,
       filter_nodes,
       result_num);
-  auto status =
-      Project(query_fields, result_num, executor.exec_->search_result_, result,
-              false, executor.exec_->distance_);
-  if (!status.ok()) {
-    return status;
+  // If facets are provided, only project if query_fields if not empty.
+  if (query_fields.size() > 0 || facet_executors.size() == 0) {
+    auto status =
+        Project(query_fields, result_num, executor.exec_->search_result_, projects,
+                false, executor.exec_->distance_);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+  if (facet_executors.size() > 0) {
+    facets.LoadFromString("[]");
+    for (auto &facet_executor : facet_executors) {
+      facet_executor.Aggregate(
+        table_segment_.get(),
+        result_num,
+        executor.exec_->search_result_,
+        false,
+        executor.exec_->distance_
+      );
+      vectordb::Json facet;
+      facet_executor.Project(facet);
+      facets.AddObjectToArray(std::move(facet));
+    }
   }
   return Status::OK();
 }

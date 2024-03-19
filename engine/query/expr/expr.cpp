@@ -409,7 +409,8 @@ Status CheckCompatible(std::string& op, ValueType& left, ValueType& right, Value
 Status GenerateNodes(
     std::vector<std::string>& tokens,
     std::vector<ExprNodePtr>& nodes,
-    std::unordered_map<std::string, engine::meta::FieldType>& field_map) {
+    std::unordered_map<std::string, engine::meta::FieldType>& field_map,
+    bool check_bool) {
   std::stack<ExprNodePtr> node_stack;
   std::vector<ExprNodePtr> node_list;
 
@@ -614,7 +615,7 @@ Status GenerateNodes(
   node_list.push_back(node_stack.top());
   node_stack.pop();
 
-  if (node_list.back()->value_type != ValueType::BOOL) {
+  if (check_bool && node_list.back()->value_type != ValueType::BOOL) {
     return Status(INVALID_EXPR, "Filter should be a boolean expression,");
   }
 
@@ -625,7 +626,8 @@ Status GenerateNodes(
 Status Expr::ParseNodeFromStr(
     std::string expression,
     std::vector<ExprNodePtr>& nodes,
-    std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map) {
+    std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map,
+    bool check_bool) {
   // Skip if expression is empty.
   if (expression == "") {
     return Status::OK();
@@ -644,7 +646,7 @@ Status Expr::ParseNodeFromStr(
   std::vector<std::string> tokens_queue;
   tokens_queue = ShuntingYard(token_list);
 
-  Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map);
+  Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map, check_bool);
   if (!nodes_status.ok()) {
     logger.Error(nodes_status.message());
     return nodes_status;

@@ -897,9 +897,18 @@ class WebController : public oatpp::web::server::api::ApiController {
       }
     }
 
-    vectordb::Json result;
+    vectordb::Json facetsConfig;
+    if (parsedBody.HasMember("facets")) {
+      facetsConfig = parsedBody.GetArray("facets");
+    } else {
+      facetsConfig.LoadFromString("[]");
+    }
+
+    vectordb::Json projects;
+    vectordb::Json facets;
+
     vectordb::Status get_status = db_server->Project(
-        db_name, table_name, query_fields, pks, filter, skip, limit, result);
+        db_name, table_name, query_fields, pks, filter, skip, limit, projects, facetsConfig, facets);
     if (!get_status.ok()) {
       status_dto->statusCode = Status::CODE_500.code;
       status_dto->message = get_status.message();
@@ -910,7 +919,21 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.LoadFromString("{}");
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Query get successfully.");
-    response.SetObject("result", result);
+    if (facetsConfig.GetSize() == 0) {
+      // Projection only
+      response.SetObject("result", projects);
+    } else if (query_fields.size() == 0) {
+      // No response given, only facets
+      response.SetObject("result", facets);
+    } else {
+      // Both projection and facets
+      vectordb::Json final_result;
+      final_result.LoadFromString("{}");
+      final_result.SetObject("records", projects);
+      final_result.SetObject("facets", facets);
+      response.SetObject("result", final_result);
+    }
+    
     return createResponse(Status::CODE_200, response.DumpToString());
   }
 

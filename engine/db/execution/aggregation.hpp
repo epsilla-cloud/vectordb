@@ -164,6 +164,7 @@ public:
     bool global_group_by,
     std::vector<std::string>& group_by_exprs,
     std::vector<std::vector<query::expr::ExprNodePtr>>& group_by_evals,
+    std::vector<query::expr::NodeType>& aggregation_types,
     std::vector<std::string>& aggregation_exprs,
     std::vector<std::vector<query::expr::ExprNodePtr>>& aggregation_evals
   ) {
@@ -178,52 +179,52 @@ public:
       if (group->value_type == query::expr::ValueType::INT) {
         for (size_t i = 0; i < aggregation_evals.size(); ++i) {
           auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
-          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+          if (aggregation_types[i] == query::expr::NodeType::SumAggregation) {
             int_aggregators_.emplace_back(std::make_unique<SumAggregator<int64_t>>());
-          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::CountAggregation) {
             int_aggregators_.emplace_back(std::make_unique<CountAggregator<int64_t>>());
-          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MinAggregation) {
             int_aggregators_.emplace_back(std::make_unique<MinAggregator<int64_t>>());
-          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MaxAggregation) {
             int_aggregators_.emplace_back(std::make_unique<MaxAggregator<int64_t>>());
           }
         }
       } else if (group->value_type == query::expr::ValueType::DOUBLE) {
         for (size_t i = 0; i < aggregation_evals.size(); ++i) {
           auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
-          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+          if (aggregation_types[i] == query::expr::NodeType::SumAggregation) {
             double_aggregators_.emplace_back(std::make_unique<SumAggregator<double>>());
-          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::CountAggregation) {
             double_aggregators_.emplace_back(std::make_unique<CountAggregator<double>>());
-          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MinAggregation) {
             double_aggregators_.emplace_back(std::make_unique<MinAggregator<double>>());
-          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MaxAggregation) {
             double_aggregators_.emplace_back(std::make_unique<MaxAggregator<double>>());
           }
         }
       } else if (group->value_type == query::expr::ValueType::BOOL) {
         for (size_t i = 0; i < aggregation_evals.size(); ++i) {
           auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
-          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+          if (aggregation_types[i] == query::expr::NodeType::SumAggregation) {
             bool_aggregators_.emplace_back(std::make_unique<SumAggregator<bool>>());
-          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::CountAggregation) {
             bool_aggregators_.emplace_back(std::make_unique<CountAggregator<bool>>());
-          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MinAggregation) {
             bool_aggregators_.emplace_back(std::make_unique<MinAggregator<bool>>());
-          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MaxAggregation) {
             bool_aggregators_.emplace_back(std::make_unique<MaxAggregator<bool>>());
           }
         }
       } else if (group->value_type == query::expr::ValueType::STRING) {
         for (size_t i = 0; i < aggregation_evals.size(); ++i) {
           auto& agg = aggregation_evals[i][aggregation_evals[i].size() - 1];
-          if (agg->node_type == query::expr::NodeType::SumAggregation) {
+          if (aggregation_types[i] == query::expr::NodeType::SumAggregation) {
             string_aggregators_.emplace_back(std::make_unique<SumAggregator<std::string>>());
-          } else if (agg->node_type == query::expr::NodeType::CountAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::CountAggregation) {
             string_aggregators_.emplace_back(std::make_unique<CountAggregator<std::string>>());
-          } else if (agg->node_type == query::expr::NodeType::MinAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MinAggregation) {
             string_aggregators_.emplace_back(std::make_unique<MinAggregator<std::string>>());
-          } else if (agg->node_type == query::expr::NodeType::MaxAggregation) {
+          } else if (aggregation_types[i] == query::expr::NodeType::MaxAggregation) {
             string_aggregators_.emplace_back(std::make_unique<MaxAggregator<std::string>>());
           }
         }
@@ -233,8 +234,9 @@ public:
     }
   }
 
-  void aggregate(
+  void Aggregate(
     vectordb::engine::TableSegmentMVP *table_segment,
+    int64_t idlist_size,
     std::vector<int64_t> ids,
     bool has_distance,
     std::vector<double> distances
@@ -259,8 +261,13 @@ public:
         table_segment->var_len_attr_table_);
     }
     // Loop through the ids, conduct evaluation, and aggregate
-    for (size_t i = 0; i < ids.size(); ++i) {
-      auto id = ids[i];
+    bool from_id_list = true;
+    if (idlist_size == -1) {
+      idlist_size = table_segment->record_number_.load();
+      from_id_list = false;
+    }
+    for (size_t i = 0; i < idlist_size; ++i) {
+      int64_t id = from_id_list ? ids[i] : i;
       if (group_by_evals[0][group_by_root_index]->value_type == query::expr::ValueType::INT) {
         int64_t key = (int64_t)(group_by_evaluator.NumEvaluate(group_by_root_index, id, has_distance ? distances[i] : 0.0));
         for (size_t j = 0; j < aggregation_evaluators.size(); ++j) {
