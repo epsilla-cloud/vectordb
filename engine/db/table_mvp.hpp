@@ -22,6 +22,7 @@
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
+#include "db/execution/aggregation.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -69,7 +70,9 @@ class TableMVP {
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       const int64_t skip,
       const int64_t limit,
-      vectordb::Json &result);
+      vectordb::Json &projects,
+      std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+      vectordb::Json &facets);
 
   Status Project(
       std::vector<std::string> &query_fields,

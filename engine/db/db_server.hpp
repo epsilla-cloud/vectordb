@@ -74,7 +74,9 @@ class DBServer {
       const std::string& filter,
       const int64_t skip,
       const int64_t limit,
-      vectordb::Json& result);
+      vectordb::Json& result,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets);
 
   void StartRebuild() {
     if (rebuild_started_) {

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "db/catalog/basic_meta_impl.hpp"
+#include "db/execution/aggregation.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -484,6 +485,27 @@ Status DBServer::SearchByContent(
   return Status(INVALID_PAYLOAD, "Index not found: " + index_name);
 }
 
+vectordb::query::expr::NodeType getAggregationNodeType(std::string str, std::string& agg_nut_expr) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  if (str.substr(0, 4) == "SUM(" && str[str.size() - 1] == ')') {
+    agg_nut_expr = str.substr(4, str.size() - 5);
+    return vectordb::query::expr::NodeType::SumAggregation;
+  } else if (str.substr(0, 4) == "MAX(" && str[str.size() - 1] == ')') {
+    agg_nut_expr = str.substr(4, str.size() - 5);
+    return vectordb::query::expr::NodeType::MaxAggregation;
+  } else if (str.substr(0, 4) == "MIN(" && str[str.size() - 1] == ')') {
+    agg_nut_expr = str.substr(4, str.size() - 5);
+    return vectordb::query::expr::NodeType::MinAggregation;
+  } else if (str.substr(0, 6) == "COUNT(" && str[str.size() - 1] == ')') {
+    agg_nut_expr = "1";
+    return vectordb::query::expr::NodeType::CountAggregation;
+  } else {
+    return vectordb::query::expr::NodeType::Invalid;
+  }
+} 
+
 Status DBServer::Project(const std::string& db_name,
                          const std::string& table_name,
                          std::vector<std::string>& query_fields,
@@ -491,7 +513,9 @@ Status DBServer::Project(const std::string& db_name,
                          const std::string& filter,
                          const int64_t skip,
                          const int64_t limit,
-                         vectordb::Json& result) {
+                         vectordb::Json& project,
+                         vectordb::Json& facets_config,
+                         vectordb::Json& facets) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -508,9 +532,79 @@ Status DBServer::Project(const std::string& db_name,
     return expr_parse_status;
   }
 
+  // Facets validation
+  std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
+  int64_t facet_size = facets_config.GetSize();
+  for (int64_t i = 0; i < facet_size; ++i) {
+    auto facet_config = facets_config.GetArrayElement(i);
+    std::cout << facet_config.DumpToString() << std::endl;
+    auto groupby_config = facet_config.GetArray("group");
+    bool global_groupby = false;
+    std::vector<std::string> groupby_exprs;
+    if (groupby_config.GetSize() == 0) {
+      global_groupby = true;
+      groupby_exprs.emplace_back("1");
+    } else if (groupby_config.GetSize() > 1) {
+      return Status(DB_UNEXPECTED_ERROR, "Multi-expression group is not supported yet: " + groupby_config.DumpToString());
+    } else {
+      groupby_exprs.emplace_back(groupby_config.GetArrayElement(0).GetString());
+    }
+    std::vector<std::vector<query::expr::ExprNodePtr>> groupby_expr_nodes;
+    for (auto& expr: groupby_exprs) {
+      std::vector<query::expr::ExprNodePtr> nodes;
+      Status status = vectordb::query::expr::Expr::ParseNodeFromStr(expr, nodes, table->field_name_field_type_map_, false);
+      if (!status.ok()) {
+        return status;
+      }
+      auto data_type = nodes[nodes.size() - 1]->value_type;
+      if (data_type == vectordb::query::expr::ValueType::INT ||
+          data_type == vectordb::query::expr::ValueType::DOUBLE ||
+          data_type == vectordb::query::expr::ValueType::STRING ||
+          data_type == vectordb::query::expr::ValueType::BOOL) {
+        groupby_expr_nodes.emplace_back(nodes);
+      } else {
+        return Status(DB_UNEXPECTED_ERROR, "Group by expression must be int, double, bool, or string.");
+      }
+    }
+    std::vector<std::string> agg_exprs;
+    std::vector<vectordb::query::expr::NodeType> agg_types;
+    std::vector<std::vector<query::expr::ExprNodePtr>> agg_expr_nodes;
+    auto agg_config = facet_config.GetArray("aggregations");
+    size_t agg_size = agg_config.GetSize();
+    if (agg_size == 0) {
+      return Status(DB_UNEXPECTED_ERROR, "Aggregation is not specified.");
+    }
+    for (size_t j = 0; j < agg_size; ++j) {
+      std::string agg_expr = agg_config.GetArrayElement(j).GetString();
+      std::string agg_nut_expr;
+      auto agg_type = getAggregationNodeType(agg_expr, agg_nut_expr);
+      if (agg_type == vectordb::query::expr::NodeType::Invalid) {
+        return Status(DB_UNEXPECTED_ERROR, "Invalid aggregation expression: " + agg_expr);
+      }
+      agg_exprs.emplace_back(agg_expr);
+      agg_types.emplace_back(agg_type);
+      std::vector<query::expr::ExprNodePtr> nodes;
+      Status status = vectordb::query::expr::Expr::ParseNodeFromStr(agg_nut_expr, nodes, table->field_name_field_type_map_, false);
+      if (!status.ok()) {
+        return status;
+      }
+      agg_expr_nodes.emplace_back(nodes);
+    }
+    facet_executors.emplace_back(
+      vectordb::engine::execution::FacetExecutor(
+        global_groupby,
+        groupby_exprs,
+        groupby_expr_nodes,
+        agg_types,
+        agg_exprs,
+        agg_expr_nodes
+      )
+    );
+  }
+
   std::vector<int64_t> ids;
   std::vector<double> distances;
-  return table->SearchByAttribute(query_fields, primary_keys, expr_nodes, skip, limit, result);
+  return table->SearchByAttribute(query_fields, primary_keys, expr_nodes, skip, limit, project, facet_executors, facets);
 }
 
 }  // namespace engine
