@@ -291,10 +291,14 @@ Status TableMVP::Delete(
 
 Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
-                        int64_t query_dimension, const VectorPtr query_data,
-                        const int64_t limit, vectordb::Json &result,
+                        int64_t query_dimension,
+                        const VectorPtr query_data,
+                        const int64_t limit,
+                        vectordb::Json &result,
                         std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
-                        bool with_distance) {
+                        bool with_distance,
+                        std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+                        vectordb::Json &facets) {
   // Check if field_name exists.
   if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
@@ -365,11 +369,31 @@ Status TableMVP::Search(const std::string &field_name,
   executor.exec_->Search(updatedQueryData, table_segment_.get(), limit,
                          filter_nodes, result_num);
   result_num = result_num > limit ? limit : result_num;
-  auto status =
-      Project(query_fields, result_num, executor.exec_->search_result_, result,
-              with_distance, executor.exec_->distance_);
-  if (!status.ok()) {
-    return status;
+
+  // If facets are provided, only project if query_fields if not empty.
+  if (query_fields.size() > 0 || facet_executors.size() == 0) {
+    auto status =
+        Project(query_fields, result_num, executor.exec_->search_result_, result,
+                with_distance, executor.exec_->distance_);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (facet_executors.size() > 0) {
+    facets.LoadFromString("[]");
+    for (auto &facet_executor : facet_executors) {
+      facet_executor.Aggregate(
+        table_segment_.get(),
+        result_num,
+        executor.exec_->search_result_,
+        true,
+        executor.exec_->distance_
+      );
+      vectordb::Json facet;
+      facet_executor.Project(facet);
+      facets.AddObjectToArray(std::move(facet));
+    }
   }
   return Status::OK();
 }
@@ -380,7 +404,9 @@ Status TableMVP::SearchByAttribute(
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     const int64_t skip,
     const int64_t limit,
-    vectordb::Json &result) {
+    vectordb::Json &projects,
+    std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+    vectordb::Json &facets) {
   // TODO: create a separate pool for search by attribute.
   int64_t field_offset = 0;
   // [Note] the following invocation is wrong
@@ -403,11 +429,29 @@ Status TableMVP::SearchByAttribute(
       primary_keys,
       filter_nodes,
       result_num);
-  auto status =
-      Project(query_fields, result_num, executor.exec_->search_result_, result,
-              false, executor.exec_->distance_);
-  if (!status.ok()) {
-    return status;
+  // If facets are provided, only project if query_fields if not empty.
+  if (query_fields.size() > 0 || facet_executors.size() == 0) {
+    auto status =
+        Project(query_fields, result_num, executor.exec_->search_result_, projects,
+                false, executor.exec_->distance_);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+  if (facet_executors.size() > 0) {
+    facets.LoadFromString("[]");
+    for (auto &facet_executor : facet_executors) {
+      facet_executor.Aggregate(
+        table_segment_.get(),
+        result_num,
+        executor.exec_->search_result_,
+        false,
+        executor.exec_->distance_
+      );
+      vectordb::Json facet;
+      facet_executor.Project(facet);
+      facets.AddObjectToArray(std::move(facet));
+    }
   }
   return Status::OK();
 }
@@ -416,7 +460,8 @@ Status TableMVP::Project(
     std::vector<std::string> &query_fields,
     int64_t idlist_size,        // -1 means project all.
     std::vector<int64_t> &ids,  // doesn't matter if idlist_size is -1.
-    vectordb::Json &result, bool with_distance,
+    vectordb::Json &result,
+    bool with_distance,
     std::vector<double> &distances) {
   // Construct the result.
   result.LoadFromString("[]");

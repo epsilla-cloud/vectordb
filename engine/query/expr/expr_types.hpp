@@ -39,6 +39,11 @@ enum class NodeType {
   NOT,
   FunctionCall,
   LIKE,
+  SumAggregation,
+  MinAggregation,
+  MaxAggregation,
+  // AvgAggregation,
+  CountAggregation,
 };
 
 const std::unordered_map<std::string, NodeType> OperatorNodeTypeMap = {
