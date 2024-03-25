@@ -109,6 +109,7 @@ Try our fully managed vector DBaaS at <a href="https://cloud.epsilla.com/">Epsil
 **1. Build Epsilla Python Bindings lib package**
 ```shell
 cd engine/scripts
+(If on Ubuntu, run this first: bash setup-dev.sh)
 bash install_oatpp_modules.sh
 cd ..
 bash build.sh
