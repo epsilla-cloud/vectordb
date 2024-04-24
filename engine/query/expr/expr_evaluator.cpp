@@ -183,6 +183,16 @@ bool ExprEvaluator::LogicalEvaluate(const int& node_index, const int64_t& cand_i
     auto child_index = root->left;
     auto left = LogicalEvaluate(child_index, cand_ind);
     return !left;
+  } else if (node_type == NodeType::IN) {
+    auto len = root->arguments.size();
+    auto src = StrEvaluate(root->arguments[len - 1], cand_ind);
+    for (auto i = 0; i < len - 1; i++) {
+      auto tgt = StrEvaluate(root->arguments[i], cand_ind);
+      if (src == tgt) {
+        return true;
+      }
+    }
+    return false;
   } else if (root->left != -1 && root->right != -1) {
     auto left_index = root->left;
     auto right_index = root->right;
