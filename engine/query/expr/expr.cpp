@@ -19,7 +19,9 @@ enum class State {
   String,
   Attribute,
   Operator,
-  Function
+  Function,
+  InList,
+  InListString,
 };
 
 bool isArithChar(char c) {
@@ -45,6 +47,13 @@ bool isLike(std::string str) {
   return str == "LIKE";
 };
 
+bool isIn(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  return str == "IN";
+};
+
 bool isLogicalStr(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
     return std::toupper(c);
@@ -56,12 +65,11 @@ bool isUnsupportedLogicalOp(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
     return std::toupper(c);
   });
-  return str == "ALL" || str == "ANY" || str == "BETWEEN" || str == "EXISTS" || str == "IN" ||
-         str == "SOME";
+  return str == "ALL" || str == "ANY" || str == "BETWEEN" || str == "EXISTS" || str == "SOME";
 }
 
 bool isOperator(std::string str) {
-  return isArithStr(str) || isCompareStr(str) || isLogicalStr(str) || isLike(str);
+  return isArithStr(str) || isCompareStr(str) || isLogicalStr(str) || isLike(str) || isIn(str);
 };
 
 int getPrecedence(std::string& op) {
@@ -69,7 +77,7 @@ int getPrecedence(std::string& op) {
     return 1;
   } else if (isCompareStr(op)) {
     return 2;
-  } else if (isLike(op)) {
+  } else if (isLike(op) || isIn(op)) {
     return 3;
   } else if (op == "+" || op == "-") {
     return 4;
@@ -135,6 +143,7 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         }
         break;
       case State::String:
+      case State::InListString:
         if (c == '\'') {
           // check if last character of cur_token is '\', pop the '\' and add the '\'' to cur_token
           if (i != last_index && cur_token.size() > 0 && cur_token[cur_token.size() - 1] == '\\') {
@@ -147,7 +156,11 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
             if (cur_token.size() >= 2) {
               token_list.push_back(cur_token);
               cur_token.clear();
-              state = State::Start;
+              if (state == State::InListString) {
+                state = State::InList;
+              } else {
+                state = State::Start;
+              }
             }
           }
         } else {
@@ -166,30 +179,60 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
           } else {
             token_list.push_back(cur_token);
           }
+          if (isIn(cur_token)) {
+            state = State::InList;
+          } else {
+            state = State::Start;
+          }
           cur_token.clear();
-          state = State::Start;
         } else if (std::isalnum(c) || c == '_') {
           cur_token += c;
           i++;
         } else if (c == '(') {
-          // Function call
-          // TODO: handle string with '(' and ')'
-          state = State::Function;
-          cur_token += c;
-          i++;
-          int parenCount = 1;
-          while (i < expression.length() && parenCount > 0) {
-            c = expression[i];
-            if (c == '(') parenCount++;
-            if (c == ')') parenCount--;
+          if (isIn(cur_token)) {
+            state = State::InList;
+            token_list.push_back("IN");
+            token_list.push_back("(");
+            cur_token.clear();
+            i++;
+          } else {
+            // Function call
+            // TODO: handle string with '(' and ')'
+            state = State::Function;
             cur_token += c;
             i++;
+            int parenCount = 1;
+            while (i < expression.length() && parenCount > 0) {
+              c = expression[i];
+              if (c == '(') parenCount++;
+              if (c == ')') parenCount--;
+              cur_token += c;
+              i++;
+            }
+            token_list.push_back(cur_token);
+            cur_token.clear();
+            state = State::Start;
           }
-          token_list.push_back(cur_token);
-          cur_token.clear();
-          state = State::Start;
         } else {
           return Status(INVALID_EXPR, "Invalid name: " + (cur_token += c));
+        }
+        break;
+      case State::InList:
+        if (c == '\'') {
+          state = State::InListString;
+          cur_token = "'";
+          i++;
+        } else if (c == '(') {
+          token_list.push_back("(");
+          i++;
+        } else if (c == ')') {
+          token_list.push_back(")");
+          i++;
+          state = State::Start;
+        } else if (std::isspace(c) || c == ',') {
+          i++;
+        } else {
+          return Status(INVALID_EXPR, "Filter expression is not valid.");
         }
         break;
       case State::Number:
@@ -437,6 +480,33 @@ Status GenerateNodes(
         node->right = -1;
 
         node_stack.push(node);
+      } else if (isIn(token)) {
+        if (node_stack.size() < 2) {
+          return Status(INVALID_EXPR, "Not enough operands for IN operator.");
+        }
+
+        ExprNodePtr in_node = std::make_shared<ExprNode>();
+        in_node->node_type = NodeType::IN;
+        in_node->value_type = ValueType::BOOL;
+
+        while (node_stack.top()->node_type != NodeType::StringAttr) {
+          ExprNodePtr element_node = node_stack.top();
+          node_stack.pop();
+          in_node->arguments.push_back(node_list.size());
+          node_list.push_back(element_node);
+        }
+
+        // std::reverse(list_node->arguments.begin(), list_node->arguments.end());  // Correct the order
+
+        ExprNodePtr attr_node = node_stack.top();
+        node_stack.pop();
+        if (attr_node->value_type != ValueType::STRING) {
+          return Status(INVALID_EXPR, "IN operation is only supported for string attributes.");
+        }
+        in_node->arguments.push_back(node_list.size()); // Attribute index
+        node_list.push_back(attr_node);
+
+        node_stack.push(in_node);
       } else {
         if (node_stack.size() < 2) {
           return Status(INVALID_EXPR, "Filter expression is invalid.");

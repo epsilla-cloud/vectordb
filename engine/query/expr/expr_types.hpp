@@ -44,6 +44,8 @@ enum class NodeType {
   MaxAggregation,
   // AvgAggregation,
   CountAggregation,
+  IN,
+  ListString,
 };
 
 const std::unordered_map<std::string, NodeType> OperatorNodeTypeMap = {
@@ -69,6 +71,7 @@ enum class ValueType {
   DOUBLE,
   BOOL,
   GEO_POINT,
+  LIST_STRING,
 };
 
 struct ExprNode {
