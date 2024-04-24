@@ -95,7 +95,6 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
   size_t last_index = expression.length() - 1;
   for (size_t i = 0; i < expression.length();) {
     char c = expression[i];
-    std::cout << i << " " << c << std::endl;
     switch (state) {
       case State::Start:
         if (std::isspace(c)) {
@@ -160,7 +159,6 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
               if (state == State::InListString) {
                 state = State::InList;
               } else {
-                std::cout << "Here?? " << std::endl;
                 state = State::Start;
               }
             }
@@ -181,8 +179,12 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
           } else {
             token_list.push_back(cur_token);
           }
+          if (isIn(cur_token)) {
+            state = State::InList;
+          } else {
+            state = State::Start;
+          }
           cur_token.clear();
-          state = State::Start;
         } else if (std::isalnum(c) || c == '_') {
           cur_token += c;
           i++;
@@ -220,6 +222,9 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
           state = State::InListString;
           cur_token = "'";
           i++;
+        } else if (c == '(') {
+          token_list.push_back("(");
+          i++;
         } else if (c == ')') {
           token_list.push_back(")");
           i++;
@@ -227,7 +232,6 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         } else if (std::isspace(c) || c == ',') {
           i++;
         } else {
-          std::cout << "here " << c << std::endl;
           return Status(INVALID_EXPR, "Filter expression is not valid.");
         }
         break;
@@ -453,10 +457,6 @@ Status GenerateNodes(
   std::stack<ExprNodePtr> node_stack;
   std::vector<ExprNodePtr> node_list;
 
-  // FIXME: remove
-  for (std::string token : tokens) {
-    std::cout << token << std::endl;
-  }
   for (std::string token : tokens) {
     if (isUnsupportedLogicalOp(token)) {
       return Status(NOT_IMPLEMENTED_ERROR, "Epsilla does not support " + token + " yet.");
@@ -485,14 +485,14 @@ Status GenerateNodes(
           return Status(INVALID_EXPR, "Not enough operands for IN operator.");
         }
 
-        ExprNodePtr list_node = std::make_shared<ExprNode>();
-        list_node->node_type = NodeType::ListString;
-        list_node->value_type = ValueType::LIST_STRING;
+        ExprNodePtr in_node = std::make_shared<ExprNode>();
+        in_node->node_type = NodeType::IN;
+        in_node->value_type = ValueType::BOOL;
 
         while (node_stack.top()->node_type != NodeType::StringAttr) {
           ExprNodePtr element_node = node_stack.top();
           node_stack.pop();
-          list_node->arguments.push_back(node_list.size());
+          in_node->arguments.push_back(node_list.size());
           node_list.push_back(element_node);
         }
 
@@ -503,14 +503,8 @@ Status GenerateNodes(
         if (attr_node->value_type != ValueType::STRING) {
           return Status(INVALID_EXPR, "IN operation is only supported for string attributes.");
         }
-
-        ExprNodePtr in_node = std::make_shared<ExprNode>();
-        in_node->node_type = NodeType::IN;
-        in_node->value_type = ValueType::BOOL;
         in_node->arguments.push_back(node_list.size()); // Attribute index
         node_list.push_back(attr_node);
-        in_node->arguments.push_back(node_list.size()); // List index
-        node_list.push_back(list_node);
 
         node_stack.push(in_node);
       } else {
