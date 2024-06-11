@@ -1,6 +1,6 @@
 apiVersion: v2
 name: epsilla
-description: A Helm chart for Espilla Vector Database
+description: Helm chart for Espilla Vector Database
 
 # A chart can be either an 'application' or a 'library' chart.
 #
