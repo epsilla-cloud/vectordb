@@ -153,8 +153,8 @@ ANNGraphSegment::ANNGraphSegment(int64_t size_limit)
 //   return Status::OK();
 // }
 
-Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id) {
-  if (skip_sync_disk_) {
+Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id, bool force) {
+  if (skip_sync_disk_ && !force) {
     return Status::OK();
   }
 
@@ -203,11 +203,10 @@ void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_column, int64
 
   // Build a KNN graph using NN descent.
   const int64_t k = Default_NSG_Config.knng;
-  std::cout << "KNN" << std::endl;
+  logger_.Debug("KNN graph building start");
   vectordb::engine::index::Graph knng(n);
-  std::cout << "KNN graph" << std::endl;
   vectordb::engine::index::KNNGraph graph(n, dim, k, vector_column, knng, metricType);
-  std::cout << "KNN graph finish" << std::endl;
+  logger_.Debug("KNN graph building finish");
 
   vectordb::engine::index::BuildParams b_params;
   b_params.candidate_pool_size = Default_NSG_Config.candidate_pool_size;

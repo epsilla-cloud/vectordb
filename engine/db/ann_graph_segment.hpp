@@ -9,6 +9,7 @@
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
 #include "utils/status.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -33,11 +34,12 @@ class ANNGraphSegment {
   void Debug();
 
   // Save the ANN graph index to disk.
-  Status SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id);
+  Status SaveANNGraph(const std::string& db_catalog_path, int64_t table_id, int64_t field_id, bool force = false);
 
   ~ANNGraphSegment();
 
  public:
+  vectordb::engine::Logger logger_;
   bool skip_sync_disk_;  // For default DB, skip sync to disk.
   // bool synced_with_disk_;              // Whether the table segment is synced with disk.
   int64_t first_record_id_;             // The internal record id (node id) of the first record in the segment.

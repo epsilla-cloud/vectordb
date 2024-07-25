@@ -13,6 +13,7 @@
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -28,6 +29,7 @@ class DBServer {
   Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled, std::unordered_map<std::string, std::string> &headers);
   Status UnloadDB(const std::string& db_name);
   Status ReleaseDB(const std::string& db_name);
+  Status DumpDB(const std::string& db_name, const std::string& db_catalog_path);
   Status GetStatistics(const std::string& db_name, vectordb::Json& response);
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema, size_t& table_id);
   Status CreateTable(const std::string& db_name, const std::string& table_schema_json, size_t& table_id);
@@ -51,7 +53,9 @@ class DBServer {
       const int64_t limit,
       vectordb::Json& result,
       const std::string& filter,
-      bool with_distance);
+      bool with_distance,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets);
   Status SearchByContent(
       const std::string& db_name,
       const std::string& table_name,
@@ -62,6 +66,8 @@ class DBServer {
       vectordb::Json& result,
       const std::string& filter,
       bool with_distance,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets,
       std::unordered_map<std::string, std::string> &headers);
 
   Status Project(
@@ -72,7 +78,9 @@ class DBServer {
       const std::string& filter,
       const int64_t skip,
       const int64_t limit,
-      vectordb::Json& result);
+      vectordb::Json& result,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets);
 
   void StartRebuild() {
     if (rebuild_started_) {
@@ -111,6 +119,7 @@ class DBServer {
   }
 
  private:
+  vectordb::engine::Logger logger_;
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // TODO: change to concurrent version.
   std::unordered_map<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.

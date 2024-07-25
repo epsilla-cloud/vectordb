@@ -19,6 +19,7 @@
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
 #include "utils/status.hpp"
+#include "db/catalog/meta.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -193,6 +194,7 @@ class VecSearchExecutor {
       int64_t& result_size);
 
   Status SearchByAttribute(
+      meta::TableSchema& table_schema,
       vectordb::engine::TableSegmentMVP* table_segment,
       const size_t skip,
       const size_t limit,

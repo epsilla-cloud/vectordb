@@ -39,7 +39,7 @@ Status EmbeddingService::getSupportedModels(std::vector<EmbeddingModel> &models)
     }
     return Status::OK();
   } catch (const std::exception& e) {
-    std::cerr << "Exception in getSupportedModels: " << e.what() << std::endl;
+    logger_.Error(std::string("Exception in getSupportedModels: ") + e.what());
     return Status(INFRA_UNEXPECTED_ERROR, "Failed to load supported embedding models.");
   }
 }
@@ -125,10 +125,10 @@ Status EmbeddingService::denseEmbedDocuments(
         }
         return Status::OK();
       } else {
-        std::cout << "Embedding response: " << responseBody->c_str() << std::endl;
+        logger_.Error(std::string("Embedding response: ") + responseBody->c_str());
       }
     } catch (const std::exception& e) {
-      std::cerr << "Exception in embedDocuments: " << e.what() << std::endl;
+      logger_.Error(std::string("Exception in embedDocuments: ") + e.what());
     }
     attempt++;
     if (attempt >= EmbeddingDocsRetry) {
@@ -137,7 +137,7 @@ Status EmbeddingService::denseEmbedDocuments(
     // Exponential backoff logic
     int delaySec = EmbeddingBackoffInitialDelaySec * std::pow(EmbeddingBackoffExpBase, attempt);
     std::this_thread::sleep_for(std::chrono::seconds(delaySec));
-    std::cout << "Retry embedding documents." << std::endl;
+    logger_.Info("Retry embedding documents.");
   }
   return Status(INFRA_UNEXPECTED_ERROR, "Failed to embbed the documents.");
 }
@@ -218,7 +218,7 @@ Status EmbeddingService::denseEmbedQuery(
         return Status::OK();
       }
     } catch (const std::exception& e) {
-      std::cerr << "Exception in denseEmbedQuery: " << e.what() << std::endl;
+      logger_.Error(std::string("Exception in denseEmbedQuery: ") + e.what());
     }
     attempt++;
     if (attempt >= EmbeddingQueryRetry) {
@@ -227,7 +227,7 @@ Status EmbeddingService::denseEmbedQuery(
     // Exponential backoff logic
     int delaySec = EmbeddingBackoffInitialDelaySec * std::pow(EmbeddingBackoffExpBase, attempt);
     std::this_thread::sleep_for(std::chrono::seconds(delaySec));
-    std::cout << "Retry embedding the query." << std::endl;
+    logger_.Info("Retry embedding the query.");
   }
   return Status(INFRA_UNEXPECTED_ERROR, "Failed to embed the query.");
 }

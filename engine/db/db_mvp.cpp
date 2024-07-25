@@ -84,7 +84,7 @@ Status DBMVP::Rebuild() {
     if (table != nullptr) {
       auto status = table->Rebuild(db_catalog_path_);
       if (!status.ok()) {
-        std::cout << "Rebuild table " << table->table_schema_.name_ << " failed." << std::endl;
+        logger_.Error("Rebuild table " + table->table_schema_.name_ + " failed.");
       }
     }
   }
@@ -98,7 +98,7 @@ Status DBMVP::SwapExecutors() {
     if (table != nullptr) {
       auto status = table->SwapExecutors();
       if (!status.ok()) {
-        std::cout << "Swap executors for table " << table->table_schema_.name_ << " failed." << std::endl;
+        logger_.Error("Swap executors for table " + table->table_schema_.name_ + " failed.");
       }
     }
   }
@@ -112,9 +112,28 @@ Status DBMVP::Release() {
     if (table != nullptr) {
       auto status = table->Release();
       if (!status.ok()) {
-        std::cout << "Release table " << table->table_schema_.name_ << " failed." << std::endl;
+        logger_.Error("Release table " + table->table_schema_.name_ + " failed.");
       }
     }
+  }
+  return Status::OK();
+}
+
+Status DBMVP::Dump(const std::string& db_catalog_path) {
+  // Loop through all tables and dump
+  bool success = true;
+  for (int64_t i = 0; i < tables_.size(); ++i) {
+    std::shared_ptr<TableMVP> table = tables_[i];
+    if (table != nullptr) {
+      auto status = table->Dump(db_catalog_path);
+      if (!status.ok()) {
+        logger_.Error("Dump table " + table->table_schema_.name_ + " failed.");
+        success = false;
+      }
+    }
+  }
+  if (!success) {
+    return Status(DB_UNEXPECTED_ERROR, "Dump database failed.");
   }
   return Status::OK();
 }

@@ -21,6 +21,8 @@
 #include "utils/concurrent_vector.hpp"
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
+#include "logger/logger.hpp"
+#include "db/execution/aggregation.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -60,7 +62,9 @@ class TableMVP {
       const int64_t limit,
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
-      bool with_distance);
+      bool with_distance,
+      std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+      vectordb::Json &facets);
 
   Status SearchByAttribute(
       std::vector<std::string> &query_fields,
@@ -68,7 +72,9 @@ class TableMVP {
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       const int64_t skip,
       const int64_t limit,
-      vectordb::Json &result);
+      vectordb::Json &projects,
+      std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+      vectordb::Json &facets);
 
   Status Project(
       std::vector<std::string> &query_fields,
@@ -77,6 +83,8 @@ class TableMVP {
       vectordb::Json &result,
       bool with_distance,
       std::vector<double> &distances);
+
+  Status Dump(const std::string &db_catalog_path);
 
   size_t GetRecordCount();
 
@@ -89,6 +97,7 @@ class TableMVP {
   ~TableMVP();
 
  public:
+  vectordb::engine::Logger logger_;
   std::string db_catalog_path_;
   // The table schema.
   meta::TableSchema table_schema_;

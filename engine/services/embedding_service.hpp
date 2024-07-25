@@ -15,6 +15,7 @@
 #include <oatpp/core/macro/codegen.hpp>
 #include "oatpp/codegen/ApiClient_define.hpp"
 #include <oatpp/parser/json/mapping/ObjectMapper.hpp>
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -86,6 +87,7 @@ public:
 
 private:
   std::shared_ptr<MyApiClient> m_client;
+  vectordb::engine::Logger logger_;
 };
 
 }  // namespace engine

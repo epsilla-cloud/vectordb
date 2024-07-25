@@ -11,6 +11,7 @@
 #include "db/index/nsg/neighbor.hpp"
 #include "db/vector.hpp"
 #include "utils/concurrent_bitset.hpp"
+#include "logger/logger.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -96,6 +97,8 @@ class NsgIndex {
   //                   const BuildParam &parameters);
 
  protected:
+  vectordb::engine::Logger logger_;
+
   virtual void InitNavigationPoint();
 
   // link specify
