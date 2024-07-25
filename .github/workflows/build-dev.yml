@@ -2,14 +2,15 @@ name: Build Vectordb in dev
 
 on:
   push:
-    branches: [ "dev", "distritubed-*" ]
+    branches: [ "dev", "stag", "helm", "distritubed-*" ]
     paths: ['engine/Dockerfile', 'VERSION']
 
 jobs:
   build:
   
     name: Build Vectordb in dev
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
     - name: Check out code
