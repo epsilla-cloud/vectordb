@@ -4,6 +4,7 @@
 #include <string>
 
 #include "db/catalog/basic_meta_impl.hpp"
+#include "db/execution/aggregation.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -30,7 +31,7 @@ Status DBServer::LoadDB(const std::string& db_name,
   // Load database meta
   vectordb::Status status = meta_->LoadDatabase(db_catalog_path, db_name);
   if (!status.ok()) {
-    std::cout << status.message() << std::endl;
+    logger_.Error(status.message());
     return status;
   }
   try {
@@ -76,6 +77,29 @@ Status DBServer::ReleaseDB(const std::string& db_name) {
   }
   dbs_[it->second]->Release();
   return Status::OK();
+}
+
+Status DBServer::DumpDB(const std::string& db_name,
+                        const std::string& db_catalog_path) {
+  // Check that DB exists.
+  auto it = db_name_to_id_map_.find(db_name);
+  if (it == db_name_to_id_map_.end()) {
+    return Status(DB_NOT_FOUND, "DB not found: " + db_name);
+  }
+  // Create the folder if not exist.
+  if (!server::CommonUtil::CreateDirectory(db_catalog_path).ok()) {
+    return Status(DB_UNEXPECTED_ERROR, "Failed to create directory: " + db_catalog_path);
+  }
+  // Dump meta to disk.
+  meta::DatabaseSchema db_schema;
+  meta_->GetDatabase(db_name, db_schema);
+  auto status = meta_->SaveDBToFile(db_schema, db_catalog_path + "/catalog");
+  if (!status.ok()) {
+    return status;
+  }
+  // Dump DB to disk.
+  std::shared_ptr<DBMVP> db = dbs_[it->second];
+  return db->Dump(db_catalog_path);
 }
 
 Status DBServer::GetStatistics(const std::string& db_name,
@@ -209,8 +233,7 @@ Status DBServer::Rebuild() {
     if (db != nullptr) {
       auto status = db->Rebuild();
       if (!status.ok()) {
-        std::cout << "Rebuild db to " << db->db_catalog_path_ << " failed."
-                  << std::endl;
+        logger_.Error("Rebuild db to " + db->db_catalog_path_ + " failed.");
       }
     }
   }
@@ -224,8 +247,7 @@ Status DBServer::SwapExecutors() {
     if (db != nullptr) {
       auto status = db->SwapExecutors();
       if (!status.ok()) {
-        std::cout << "Swap executors for db of " << db->db_catalog_path_ << " failed."
-                  << std::endl;
+        logger_.Error("Swap executors for db of " + db->db_catalog_path_ + " failed.");
       }
     }
   }
@@ -301,7 +323,7 @@ Status DBServer::Delete(
     auto pkField = table->table_schema_.fields_[pkIdx];
     size_t pkListSize = pkList.GetSize();
     if (pkListSize == 0) {
-      std::cout << "No pk to delete." << std::endl;
+      logger_.Info("No pk to delete.");
       return Status::OK();
     }
     switch (pkField.field_type_) {
@@ -337,6 +359,102 @@ Status DBServer::Delete(
   return table->Delete(pkList, filter, expr_nodes);
 }
 
+vectordb::query::expr::NodeType getAggregationNodeType(std::string &str, std::string& agg_nut_expr) {
+  std::string temp_str = str;
+  std::transform(temp_str.begin(), temp_str.end(), temp_str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  if (temp_str.substr(0, 4) == "SUM(" && temp_str[temp_str.size() - 1] == ')') {
+    agg_nut_expr = str.substr(4, str.size() - 5);
+    return vectordb::query::expr::NodeType::SumAggregation;
+  } else if (temp_str.substr(0, 4) == "MAX(" && temp_str[temp_str.size() - 1] == ')') {
+    agg_nut_expr = str.substr(4, str.size() - 5);
+    return vectordb::query::expr::NodeType::MaxAggregation;
+  } else if (temp_str.substr(0, 4) == "MIN(" && temp_str[temp_str.size() - 1] == ')') {
+    agg_nut_expr = str.substr(4, str.size() - 5);
+    return vectordb::query::expr::NodeType::MinAggregation;
+  } else if (temp_str.substr(0, 6) == "COUNT(" && temp_str[temp_str.size() - 1] == ')') {
+    agg_nut_expr = "1";
+    return vectordb::query::expr::NodeType::CountAggregation;
+  } else {
+    return vectordb::query::expr::NodeType::Invalid;
+  }
+}
+
+Status preprocessFacets(
+  vectordb::Json& facets_config,
+  std::shared_ptr<TableMVP> table,
+  std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors
+) {
+int64_t facet_size = facets_config.GetSize();
+  for (int64_t i = 0; i < facet_size; ++i) {
+    auto facet_config = facets_config.GetArrayElement(i);
+    auto groupby_config = facet_config.GetArray("group");
+    bool global_groupby = false;
+    std::vector<std::string> groupby_exprs;
+    if (groupby_config.GetSize() == 0) {
+      global_groupby = true;
+      groupby_exprs.emplace_back("1");
+    } else if (groupby_config.GetSize() > 1) {
+      return Status(DB_UNEXPECTED_ERROR, "Multi-expression group is not supported yet: " + groupby_config.DumpToString());
+    } else {
+      groupby_exprs.emplace_back(groupby_config.GetArrayElement(0).GetString());
+    }
+    std::vector<std::vector<query::expr::ExprNodePtr>> groupby_expr_nodes;
+    for (auto& expr: groupby_exprs) {
+      std::vector<query::expr::ExprNodePtr> nodes;
+      Status status = vectordb::query::expr::Expr::ParseNodeFromStr(expr, nodes, table->field_name_field_type_map_, false);
+      if (!status.ok()) {
+        return status;
+      }
+      auto data_type = nodes[nodes.size() - 1]->value_type;
+      if (data_type == vectordb::query::expr::ValueType::INT ||
+          data_type == vectordb::query::expr::ValueType::DOUBLE ||
+          data_type == vectordb::query::expr::ValueType::STRING ||
+          data_type == vectordb::query::expr::ValueType::BOOL) {
+        groupby_expr_nodes.emplace_back(nodes);
+      } else {
+        return Status(DB_UNEXPECTED_ERROR, "Group by expression must be int, double, bool, or string.");
+      }
+    }
+    std::vector<std::string> agg_exprs;
+    std::vector<vectordb::query::expr::NodeType> agg_types;
+    std::vector<std::vector<query::expr::ExprNodePtr>> agg_expr_nodes;
+    auto agg_config = facet_config.GetArray("aggregate");
+    size_t agg_size = agg_config.GetSize();
+    if (agg_size == 0) {
+      return Status(DB_UNEXPECTED_ERROR, "Aggregation is not specified.");
+    }
+    for (size_t j = 0; j < agg_size; ++j) {
+      std::string agg_expr = agg_config.GetArrayElement(j).GetString();
+      std::string agg_nut_expr;
+      auto agg_type = getAggregationNodeType(agg_expr, agg_nut_expr);
+      if (agg_type == vectordb::query::expr::NodeType::Invalid) {
+        return Status(DB_UNEXPECTED_ERROR, "Invalid aggregation expression: " + agg_expr);
+      }
+      agg_exprs.emplace_back(agg_expr);
+      agg_types.emplace_back(agg_type);
+      std::vector<query::expr::ExprNodePtr> nodes;
+      Status status = vectordb::query::expr::Expr::ParseNodeFromStr(agg_nut_expr, nodes, table->field_name_field_type_map_, false);
+      if (!status.ok()) {
+        return status;
+      }
+      agg_expr_nodes.emplace_back(nodes);
+    }
+    facet_executors.emplace_back(
+      vectordb::engine::execution::FacetExecutor(
+        global_groupby,
+        groupby_exprs,
+        groupby_expr_nodes,
+        agg_types,
+        agg_exprs,
+        agg_expr_nodes
+      )
+    );
+  }
+  return Status::OK();
+}
+
 Status DBServer::Search(const std::string& db_name,
                         const std::string& table_name,
                         std::string& field_name,
@@ -346,7 +464,9 @@ Status DBServer::Search(const std::string& db_name,
                         const int64_t limit,
                         vectordb::Json& result,
                         const std::string& filter,
-                        bool with_distance) {
+                        bool with_distance,
+                        vectordb::Json& facets_config,
+                        vectordb::Json& facets) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -378,8 +498,15 @@ Status DBServer::Search(const std::string& db_name,
     return expr_parse_status;
   }
 
+  // Facets validation
+  std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
+  Status facet_status = preprocessFacets(facets_config, table, facet_executors);
+  if (!facet_status.ok()) {
+    return facet_status;
+  }
+
   return table->Search(field_name, query_fields, query_dimension, query_data, limit,
-                       result, expr_nodes, with_distance);
+                       result, expr_nodes, with_distance, facet_executors, facets);
 }
 
 Status DBServer::SearchByContent(
@@ -392,6 +519,8 @@ Status DBServer::SearchByContent(
       vectordb::Json& result,
       const std::string& filter,
       bool with_distance,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets,
       std::unordered_map<std::string, std::string> &headers) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
@@ -451,13 +580,20 @@ Status DBServer::SearchByContent(
     );
 
     if (!status.ok()) {
-      std::cerr << "embedding service error: " << status.message() << std::endl;
+      logger_.Error("Embedding service error: " + status.message());
       return status;
     }
     query_vec = denseQueryVec.data();
 
+    // Facets validation
+    std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
+    Status facet_status = preprocessFacets(facets_config, table, facet_executors);
+    if (!facet_status.ok()) {
+      return facet_status;
+    }
+
     return table->Search(index_name, query_fields, query_dimension, query_vec, limit,
-                         result, expr_nodes, with_distance);
+                         result, expr_nodes, with_distance, facet_executors, facets);
   }
 
   return Status(INVALID_PAYLOAD, "Index not found: " + index_name);
@@ -470,7 +606,9 @@ Status DBServer::Project(const std::string& db_name,
                          const std::string& filter,
                          const int64_t skip,
                          const int64_t limit,
-                         vectordb::Json& result) {
+                         vectordb::Json& project,
+                         vectordb::Json& facets_config,
+                         vectordb::Json& facets) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
@@ -487,9 +625,16 @@ Status DBServer::Project(const std::string& db_name,
     return expr_parse_status;
   }
 
+  // Facets validation
+  std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
+  Status facet_status = preprocessFacets(facets_config, table, facet_executors);
+  if (!facet_status.ok()) {
+    return facet_status;
+  }
+
   std::vector<int64_t> ids;
   std::vector<double> distances;
-  return table->SearchByAttribute(query_fields, primary_keys, expr_nodes, skip, limit, result);
+  return table->SearchByAttribute(query_fields, primary_keys, expr_nodes, skip, limit, project, facet_executors, facets);
 }
 
 }  // namespace engine

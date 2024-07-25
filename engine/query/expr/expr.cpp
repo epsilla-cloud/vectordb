@@ -1,5 +1,5 @@
 #include "expr.hpp"
-
+#include <iostream>
 #include <algorithm>
 #include <queue>
 #include <regex>
@@ -18,7 +18,10 @@ enum class State {
   Number,
   String,
   Attribute,
-  Operator
+  Operator,
+  Function,
+  InList,
+  InListString,
 };
 
 bool isArithChar(char c) {
@@ -37,6 +40,20 @@ bool isCompareStr(std::string str) {
   return str == ">" || str == ">=" || str == "=" || str == "<=" || str == "<" || str == "<>";
 };
 
+bool isLike(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  return str == "LIKE";
+};
+
+bool isIn(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  return str == "IN";
+};
+
 bool isLogicalStr(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
     return std::toupper(c);
@@ -48,23 +65,25 @@ bool isUnsupportedLogicalOp(std::string str) {
   std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
     return std::toupper(c);
   });
-  return str == "ALL" || str == "ANY" || str == "BETWEEN" || str == "EXISTS" || str == "IN" ||
-         str == "LIKE" || str == "SOME";
+  return str == "ALL" || str == "ANY" || str == "BETWEEN" || str == "EXISTS" || str == "SOME";
 }
 
 bool isOperator(std::string str) {
-  return isArithStr(str) || isCompareStr(str) || isLogicalStr(str);
+  return isArithStr(str) || isCompareStr(str) || isLogicalStr(str) || isLike(str) || isIn(str);
 };
 
 int getPrecedence(std::string& op) {
-  if (isLogicalStr(op))
+  if (isLogicalStr(op)) {
     return 1;
-  else if (isCompareStr(op))
+  } else if (isCompareStr(op)) {
     return 2;
-  if (op == "+" || op == "-")
+  } else if (isLike(op) || isIn(op)) {
     return 3;
-  else if (op == "*" || op == "/" || op == "%")
+  } else if (op == "+" || op == "-") {
     return 4;
+  } else if (op == "*" || op == "/" || op == "%") {
+    return 5;
+  }
   return 0;
 };
 
@@ -112,7 +131,7 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         } else if (c == '&' || c == '|' || c == '^') {
           return Status(NOT_IMPLEMENTED_ERROR, "Epsilla does not support bitwise operators yet.");
         } else if (c == '@') {
-          if (i + 9 <= last_index && expression.substr(i, 9) == "@distance") {
+          if (i + 8 <= last_index && expression.substr(i, 9) == "@distance") {
             state = State::Attribute;
             cur_token = "@distance";
             i += 9;
@@ -124,6 +143,7 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         }
         break;
       case State::String:
+      case State::InListString:
         if (c == '\'') {
           // check if last character of cur_token is '\', pop the '\' and add the '\'' to cur_token
           if (i != last_index && cur_token.size() > 0 && cur_token[cur_token.size() - 1] == '\\') {
@@ -136,7 +156,11 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
             if (cur_token.size() >= 2) {
               token_list.push_back(cur_token);
               cur_token.clear();
-              state = State::Start;
+              if (state == State::InListString) {
+                state = State::InList;
+              } else {
+                state = State::Start;
+              }
             }
           }
         } else {
@@ -150,14 +174,65 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
         break;
       case State::Attribute:
         if (std::isspace(c) || c == ')' || isArithChar(c) || isCompareChar(c)) {
-          token_list.push_back(cur_token);
+          if (isLike(cur_token)) {
+            token_list.push_back("LIKE");
+          } else {
+            token_list.push_back(cur_token);
+          }
+          if (isIn(cur_token)) {
+            state = State::InList;
+          } else {
+            state = State::Start;
+          }
           cur_token.clear();
-          state = State::Start;
         } else if (std::isalnum(c) || c == '_') {
           cur_token += c;
           i++;
+        } else if (c == '(') {
+          if (isIn(cur_token)) {
+            state = State::InList;
+            token_list.push_back("IN");
+            token_list.push_back("(");
+            cur_token.clear();
+            i++;
+          } else {
+            // Function call
+            // TODO: handle string with '(' and ')'
+            state = State::Function;
+            cur_token += c;
+            i++;
+            int parenCount = 1;
+            while (i < expression.length() && parenCount > 0) {
+              c = expression[i];
+              if (c == '(') parenCount++;
+              if (c == ')') parenCount--;
+              cur_token += c;
+              i++;
+            }
+            token_list.push_back(cur_token);
+            cur_token.clear();
+            state = State::Start;
+          }
         } else {
           return Status(INVALID_EXPR, "Invalid name: " + (cur_token += c));
+        }
+        break;
+      case State::InList:
+        if (c == '\'') {
+          state = State::InListString;
+          cur_token = "'";
+          i++;
+        } else if (c == '(') {
+          token_list.push_back("(");
+          i++;
+        } else if (c == ')') {
+          token_list.push_back(")");
+          i++;
+          state = State::Start;
+        } else if (std::isspace(c) || c == ',') {
+          i++;
+        } else {
+          return Status(INVALID_EXPR, "Filter expression is not valid.");
         }
         break;
       case State::Number:
@@ -287,6 +362,13 @@ bool isNotOperator(std::string str) {
   return str == "NOT";
 };
 
+bool isNearbyFunction(std::string str) {
+  std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) {
+    return std::toupper(c);
+  });
+  return str.substr(0, 7) == "NEARBY(";
+};
+
 NodeType GetOperatorNodeType(std::string op) {
   if (isLogicalStr(op)) {
     std::transform(op.begin(), op.end(), op.begin(), [](unsigned char c) {
@@ -357,6 +439,12 @@ Status CheckCompatible(std::string& op, ValueType& left, ValueType& right, Value
       }
     }
   }
+  if (isLike(op)) {
+    if (left != ValueType::STRING || right != ValueType::STRING) {
+      return Status(INVALID_EXPR, "LIKE statement is invalid.");
+    }
+    root = ValueType::BOOL;
+  }
 
   return Status::OK();
 };
@@ -364,7 +452,8 @@ Status CheckCompatible(std::string& op, ValueType& left, ValueType& right, Value
 Status GenerateNodes(
     std::vector<std::string>& tokens,
     std::vector<ExprNodePtr>& nodes,
-    std::unordered_map<std::string, engine::meta::FieldType>& field_map) {
+    std::unordered_map<std::string, engine::meta::FieldType>& field_map,
+    bool check_bool) {
   std::stack<ExprNodePtr> node_stack;
   std::vector<ExprNodePtr> node_list;
 
@@ -391,6 +480,33 @@ Status GenerateNodes(
         node->right = -1;
 
         node_stack.push(node);
+      } else if (isIn(token)) {
+        if (node_stack.size() < 2) {
+          return Status(INVALID_EXPR, "Not enough operands for IN operator.");
+        }
+
+        ExprNodePtr in_node = std::make_shared<ExprNode>();
+        in_node->node_type = NodeType::IN;
+        in_node->value_type = ValueType::BOOL;
+
+        while (node_stack.top()->node_type != NodeType::StringAttr) {
+          ExprNodePtr element_node = node_stack.top();
+          node_stack.pop();
+          in_node->arguments.push_back(node_list.size());
+          node_list.push_back(element_node);
+        }
+
+        // std::reverse(list_node->arguments.begin(), list_node->arguments.end());  // Correct the order
+
+        ExprNodePtr attr_node = node_stack.top();
+        node_stack.pop();
+        if (attr_node->value_type != ValueType::STRING) {
+          return Status(INVALID_EXPR, "IN operation is only supported for string attributes.");
+        }
+        in_node->arguments.push_back(node_list.size()); // Attribute index
+        node_list.push_back(attr_node);
+
+        node_stack.push(in_node);
       } else {
         if (node_stack.size() < 2) {
           return Status(INVALID_EXPR, "Filter expression is invalid.");
@@ -412,6 +528,83 @@ Status GenerateNodes(
         node->right = node_list.size() - 1;
 
         node_stack.push(node);
+      }
+    } else if (isNearbyFunction(token)) {
+      // NEARBY(geo_point_attr, latitude, longitude, distance)
+      // Extract the argument string inside the parentheses of "NEARBY(...)"
+      std::string argsStr = token.substr(7, token.length() - 8); // Remove "NEARBY(" and the closing ")"
+
+      // Split the arguments by commas
+      std::vector<std::string> arguments;
+      std::stringstream ss(argsStr);
+      std::string arg;
+      while (std::getline(ss, arg, ',')) {
+        // Trim spaces from the beginning and end of arg
+        arg.erase(0, arg.find_first_not_of(' ')); // Leading spaces
+        arg.erase(arg.find_last_not_of(' ') + 1); // Trailing spaces
+        arguments.push_back(arg);
+      }
+
+      if (arguments.size() == 4) {
+        // Successfully extracted 4 arguments
+        std::string geo_point_attr = arguments[0];
+        std::string latitude = arguments[1];
+        std::string longitude = arguments[2];
+        std::string distance = arguments[3];
+
+        // Validate the arguments
+        if (field_map.find(geo_point_attr) == field_map.end()) {
+          return Status(INVALID_EXPR, "Invalid filter expression: field name '" + geo_point_attr + "' not found.");
+        }
+        engine::meta::FieldType field_type = field_map[geo_point_attr];
+        if (field_type != engine::meta::FieldType::GEO_POINT) {
+          return Status(INVALID_EXPR, "Type of field '" + geo_point_attr + "' is not a GEO_POINT.");
+        }
+        for (int idx = 1; idx < 4; ++idx) {
+          if (!isDoubleConstant(arguments[idx]) && !isIntConstant(arguments[idx])) {
+            return Status(INVALID_EXPR, "Invalid filter expression: argument " + std::to_string(idx + 1) + " is not a valid number.");
+          }
+        }
+
+        // Create a new ExprNode for the NEARBY function
+        ExprNodePtr attr_node = std::make_shared<ExprNode>();
+        attr_node->field_name = geo_point_attr;
+        attr_node->node_type = NodeType::GeoPointAttr;
+        attr_node->value_type = ValueType::GEO_POINT;
+        node_list.push_back(attr_node);
+        ExprNodePtr lat_node = std::make_shared<ExprNode>();
+        lat_node->node_type = NodeType::DoubleConst;
+        lat_node->value_type = ValueType::DOUBLE;
+        lat_node->double_value = std::stod(latitude);
+        if (lat_node->double_value < -90 || lat_node->double_value > 90) {
+          return Status(INVALID_EXPR, "Invalid filter expression: latitude should be in the range of [-90, 90].");
+        }
+        node_list.push_back(lat_node);
+        ExprNodePtr lon_node = std::make_shared<ExprNode>();
+        lon_node->node_type = NodeType::DoubleConst;
+        lon_node->value_type = ValueType::DOUBLE;
+        lon_node->double_value = std::stod(longitude);
+        node_list.push_back(lon_node);
+        if (lon_node->double_value < -180 || lon_node->double_value > 180) {
+          return Status(INVALID_EXPR, "Invalid filter expression: longitude should be in the range of [-180, 180].");
+        }
+        ExprNodePtr dist_node = std::make_shared<ExprNode>();
+        dist_node->node_type = NodeType::DoubleConst;
+        dist_node->value_type = ValueType::DOUBLE;
+        dist_node->double_value = std::stod(distance);
+        node_list.push_back(dist_node);
+        ExprNodePtr node = std::make_shared<ExprNode>();
+        node->node_type = NodeType::FunctionCall;
+        node->function_name = "NEARBY";
+        node->value_type = ValueType::BOOL;
+        node->arguments.push_back(node_list.size() - 4);
+        node->arguments.push_back(node_list.size() - 3);
+        node->arguments.push_back(node_list.size() - 2);
+        node->arguments.push_back(node_list.size() - 1);
+        node_list.push_back(node);
+        node_stack.push(node);
+      } else {
+        return Status(INVALID_EXPR, "Wrong number of arguments in NEARBY function.");
       }
     } else {
       ExprNodePtr node = std::make_shared<ExprNode>();
@@ -492,7 +685,7 @@ Status GenerateNodes(
   node_list.push_back(node_stack.top());
   node_stack.pop();
 
-  if (node_list.back()->value_type != ValueType::BOOL) {
+  if (check_bool && node_list.back()->value_type != ValueType::BOOL) {
     return Status(INVALID_EXPR, "Filter should be a boolean expression,");
   }
 
@@ -503,7 +696,8 @@ Status GenerateNodes(
 Status Expr::ParseNodeFromStr(
     std::string expression,
     std::vector<ExprNodePtr>& nodes,
-    std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map) {
+    std::unordered_map<std::string, vectordb::engine::meta::FieldType>& field_map,
+    bool check_bool) {
   // Skip if expression is empty.
   if (expression == "") {
     return Status::OK();
@@ -522,7 +716,7 @@ Status Expr::ParseNodeFromStr(
   std::vector<std::string> tokens_queue;
   tokens_queue = ShuntingYard(token_list);
 
-  Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map);
+  Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map, check_bool);
   if (!nodes_status.ok()) {
     logger.Error(nodes_status.message());
     return nodes_status;

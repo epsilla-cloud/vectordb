@@ -35,7 +35,7 @@ class BasicMetaImpl : public Meta {
 
   Status DropTable(const std::string& db_name, const std::string& table_name) override;
 
-  Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path);
+  Status SaveDBToFile(const DatabaseSchema& db, const std::string& file_path) override;
 
   void SetLeader(bool is_leader) override;
 

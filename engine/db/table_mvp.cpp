@@ -93,7 +93,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
 Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   // Limit how many threads rebuild takes.
   omp_set_num_threads(globalConfig.RebuildThreads);
-  std::cout << "Rebuild table segment with threads: " << globalConfig.RebuildThreads << std::endl;
+  logger_.Debug("Rebuild table segment with threads: " + std::to_string(globalConfig.RebuildThreads));
 
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
@@ -101,7 +101,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
   // Only leader sync table to disk.
   if (is_leader_) {
     // Write the table data to disk.
-    std::cout << "Save table segment." << std::endl;
+    logger_.Debug("Save table segment.");
     table_segment_->SaveTableSegment(table_schema_, db_catalog_path);
 
     // Clean up old WAL files.
@@ -120,8 +120,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       if (ann_graph_segment_[index]->record_number_ == record_number ||
           record_number < globalConfig.MinimalGraphSize) {
         // No need to rebuild the ann graph.
-        std::cout << "Skip rebuild ANN graph for attribute: "
-                  << table_schema_.fields_[i].name_ << std::endl;
+        logger_.Debug("Skip rebuild ANN graph for attribute: " + table_schema_.fields_[i].name_);
         ++index;
         continue;
       }
@@ -139,10 +138,8 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       }
 
       // Rebuild the ann graph.
-      std::cout << "Rebuild ANN graph for attribute: "
-                << table_schema_.fields_[i].name_ << std::endl;
+      logger_.Debug("Rebuild ANN graph for attribute: " + table_schema_.fields_[i].name_);
       if (is_leader_) {
-        std::cout << "leader" << std::endl;
         // For leader, rebuild the ann graph.
         auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(false);
         new_ann->BuildFromVectorTable(
@@ -153,18 +150,16 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             ann_graph_segment_[index];
         ann_graph_segment_[index] = new_ann;
         // Write the ANN graph to disk.
-        std::cout << "Save ANN graph segment." << std::endl;
+        logger_.Debug("Save ANN graph segment.");
         ann_graph_segment_[index]->SaveANNGraph(
             db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
       } else {
-        std::cout << "follower" << std::endl;
         // For follower, directly reload the ann graph from disk.
         auto new_ann = std::make_shared<vectordb::engine::ANNGraphSegment>(
             db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_);
         // Check if the ann graph has went ahead of the table. If so, skip.
         if (new_ann->record_number_ > record_number) {
-          std::cout << "Skip sync ANN graph for attribute: "
-                    << table_schema_.fields_[i].name_ << std::endl;
+          logger_.Debug("Skip sync ANN graph for attribute: " + table_schema_.fields_[i].name_);
           ++index;
           continue;
         }
@@ -201,7 +196,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
     }
   }
 
-  std::cout << "Rebuild done." << std::endl;
+  logger_.Debug("Rebuild done.");
   return Status::OK();
 }
 
@@ -232,8 +227,7 @@ Status TableMVP::SwapExecutors() {
       }
 
       // Rebuild the ann graph.
-      std::cout << "Swap executors for attribute: "
-                << table_schema_.fields_[i].name_ << std::endl;
+      logger_.Debug("Swap executors for attribute: " + table_schema_.fields_[i].name_);
 
       // Replace the executors.
       auto pool = std::make_shared<execution::ExecutorPool>();
@@ -263,7 +257,7 @@ Status TableMVP::SwapExecutors() {
     }
   }
 
-  std::cout << "Swap executors done." << std::endl;
+  logger_.Debug("Swap executors done.");
   return Status::OK();
 }
 
@@ -297,10 +291,14 @@ Status TableMVP::Delete(
 
 Status TableMVP::Search(const std::string &field_name,
                         std::vector<std::string> &query_fields,
-                        int64_t query_dimension, const VectorPtr query_data,
-                        const int64_t limit, vectordb::Json &result,
+                        int64_t query_dimension,
+                        const VectorPtr query_data,
+                        const int64_t limit,
+                        vectordb::Json &result,
                         std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
-                        bool with_distance) {
+                        bool with_distance,
+                        std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+                        vectordb::Json &facets) {
   // Check if field_name exists.
   if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
@@ -371,11 +369,31 @@ Status TableMVP::Search(const std::string &field_name,
   executor.exec_->Search(updatedQueryData, table_segment_.get(), limit,
                          filter_nodes, result_num);
   result_num = result_num > limit ? limit : result_num;
-  auto status =
-      Project(query_fields, result_num, executor.exec_->search_result_, result,
-              with_distance, executor.exec_->distance_);
-  if (!status.ok()) {
-    return status;
+
+  // If facets are provided, only project if query_fields if not empty.
+  if (query_fields.size() > 0 || facet_executors.size() == 0) {
+    auto status =
+        Project(query_fields, result_num, executor.exec_->search_result_, result,
+                with_distance, executor.exec_->distance_);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (facet_executors.size() > 0) {
+    facets.LoadFromString("[]");
+    for (auto &facet_executor : facet_executors) {
+      facet_executor.Aggregate(
+        table_segment_.get(),
+        result_num,
+        executor.exec_->search_result_,
+        true,
+        executor.exec_->distance_
+      );
+      vectordb::Json facet;
+      facet_executor.Project(facet);
+      facets.AddObjectToArray(std::move(facet));
+    }
   }
   return Status::OK();
 }
@@ -386,7 +404,9 @@ Status TableMVP::SearchByAttribute(
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     const int64_t skip,
     const int64_t limit,
-    vectordb::Json &result) {
+    vectordb::Json &projects,
+    std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+    vectordb::Json &facets) {
   // TODO: create a separate pool for search by attribute.
   int64_t field_offset = 0;
   // [Note] the following invocation is wrong
@@ -402,17 +422,36 @@ Status TableMVP::SearchByAttribute(
   // Search.
   int64_t result_num = 0;
   executor.exec_->SearchByAttribute(
+      table_schema_,
       table_segment_.get(),
       skip,
       limit,
       primary_keys,
       filter_nodes,
       result_num);
-  auto status =
-      Project(query_fields, result_num, executor.exec_->search_result_, result,
-              false, executor.exec_->distance_);
-  if (!status.ok()) {
-    return status;
+  // If facets are provided, only project if query_fields if not empty.
+  if (query_fields.size() > 0 || facet_executors.size() == 0) {
+    auto status =
+        Project(query_fields, result_num, executor.exec_->search_result_, projects,
+                false, executor.exec_->distance_);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+  if (facet_executors.size() > 0) {
+    facets.LoadFromString("[]");
+    for (auto &facet_executor : facet_executors) {
+      facet_executor.Aggregate(
+        table_segment_.get(),
+        result_num,
+        executor.exec_->search_result_,
+        false,
+        executor.exec_->distance_
+      );
+      vectordb::Json facet;
+      facet_executor.Project(facet);
+      facets.AddObjectToArray(std::move(facet));
+    }
   }
   return Status::OK();
 }
@@ -421,7 +460,8 @@ Status TableMVP::Project(
     std::vector<std::string> &query_fields,
     int64_t idlist_size,        // -1 means project all.
     std::vector<int64_t> &ids,  // doesn't matter if idlist_size is -1.
-    vectordb::Json &result, bool with_distance,
+    vectordb::Json &result,
+    bool with_distance,
     std::vector<double> &distances) {
   // Construct the result.
   result.LoadFromString("[]");
@@ -526,6 +566,16 @@ Status TableMVP::Project(
             record.SetObject(field, json);
             break;
           }
+          case meta::FieldType::GEO_POINT: {
+            vectordb::Json geoPoint;
+            double *lat = reinterpret_cast<double *>(
+                &table_segment_->attribute_table_[offset]);
+            double *lon = reinterpret_cast<double *>(
+                &table_segment_->attribute_table_[offset + sizeof(double)]);
+            geoPoint.LoadFromString("{\"latitude\": " + std::to_string(*lat) + ", \"longitude\": " + std::to_string(*lon) + "}");
+            record.SetObject(field, geoPoint);
+            break;
+          }
           default:
             return Status(DB_UNEXPECTED_ERROR, "Unknown field type.");
         }
@@ -536,6 +586,49 @@ Status TableMVP::Project(
       record.SetDouble("@distance", distances[i]);
     }
     result.AddObjectToArray(std::move(record));
+  }
+  return Status::OK();
+}
+
+Status TableMVP::Dump(const std::string &db_catalog_path) {
+  // Create the folder if not exist.
+  auto table_dump_path = db_catalog_path + "/" + std::to_string(table_schema_.id_);
+  if (!server::CommonUtil::CreateDirectory(table_dump_path).ok()) {
+    return Status(DB_UNEXPECTED_ERROR, "Failed to create directory: " + table_dump_path);
+  }
+  // Get the current record number.
+  int64_t record_number = table_segment_->record_number_;
+
+  // Dump the table segment.
+  logger_.Debug("Dump table segment.");
+  auto segment_dump_status = table_segment_->SaveTableSegment(table_schema_, db_catalog_path, true);
+  if (!segment_dump_status.ok()) {
+    return segment_dump_status;
+  }
+  // Dump the ann graphs.
+  int64_t index = 0;
+  for (int i = 0; i < table_schema_.fields_.size(); ++i) {
+    auto fType = table_schema_.fields_[i].field_type_;
+    auto mType = table_schema_.fields_[i].metric_type_;
+
+    if (fType == meta::FieldType::VECTOR_FLOAT ||
+        fType == meta::FieldType::VECTOR_DOUBLE ||
+        fType == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+        fType == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+      if (record_number < globalConfig.MinimalGraphSize) {
+        // No need to rebuild the ann graph.
+        logger_.Debug("Skip dump ANN graph for attribute: " + table_schema_.fields_[i].name_);
+        ++index;
+        continue;
+      }
+
+      std::shared_ptr<vectordb::engine::ANNGraphSegment> ann_ptr = ann_graph_segment_[index];
+      // Write the ANN graph to disk.
+      logger_.Debug("Dump ANN graph segment.");
+      ann_graph_segment_[index]->SaveANNGraph(db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_, true);
+
+      ++index;
+    }
   }
   return Status::OK();
 }

@@ -863,6 +863,7 @@ Status VecSearchExecutor::Search(
 }
 
 Status VecSearchExecutor::SearchByAttribute(
+    meta::TableSchema &table_schema,
     vectordb::engine::TableSegmentMVP *table_segment,
     const size_t skip,
     const size_t raw_limit,
@@ -889,6 +890,7 @@ Status VecSearchExecutor::SearchByAttribute(
   if (limit > L_master_) {
     search_result_.resize(limit);
   }
+
   int64_t record_size = primary_keys.GetSize();
   if (record_size > 0) {
     // Has id list.
@@ -909,16 +911,48 @@ Status VecSearchExecutor::SearchByAttribute(
       }
     }
   } else {
-    for (int64_t id = 0; id < total_vector; ++id) {
-      if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
-        continue;
+    // Loop through geo-indices to filter out records.
+    bool use_geo_index = false;
+    for (auto field: table_schema.fields_) {
+      if (field.field_type_ == meta::FieldType::GEO_POINT) {
+        int64_t node_idx = expr_evaluator.UpliftingGeoIndex(field.name_, filter_root_index);
+        if (node_idx != -1) {
+          use_geo_index = true;
+          auto index = table_segment->geospatial_indices_[field.name_];
+          std::vector<vectordb::engine::index::GeospatialIndex::value_t> ids;
+          auto lat = expr_evaluator.NumEvaluate(filter_nodes[node_idx]->arguments[1], -1, 0);
+          auto lon = expr_evaluator.NumEvaluate(filter_nodes[node_idx]->arguments[2], -1, 0);
+          auto dist = expr_evaluator.NumEvaluate(filter_nodes[node_idx]->arguments[3], -1, 0);
+          index->searchWithinRadius(lat, lon, dist, ids);
+          for (const auto& result : ids) {
+            int64_t id = result.second;
+            if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+              continue;
+            }
+            counter++;
+            if (counter >= skip && counter < skip + limit) {
+              search_result_[result_size++] = id;
+            }
+            if (counter >= skip + limit) {
+              break;
+            }
+          }
+        }
       }
-      counter++;
-      if (counter >= skip && counter < skip + limit) {
-        search_result_[result_size++] = id;
-      }
-      if (counter >= skip + limit) {
-        break;
+    }
+
+    if (!use_geo_index) {
+      for (int64_t id = 0; id < total_vector; ++id) {
+        if (deleted.test(id) || !expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+          continue;
+        }
+        counter++;
+        if (counter >= skip && counter < skip + limit) {
+          search_result_[result_size++] = id;
+        }
+        if (counter >= skip + limit) {
+          break;
+        }
       }
     }
   }
