@@ -3,9 +3,13 @@ ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
 RUN scripts/install_oatpp_modules.sh
-RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod +x vectordb && \
+RUN mkdir -p /vectordb/build && \
+    cd /vectordb/build && \
+    cmake .. && make && \
+    chmod +x vectordb && \
     wget https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-amd64 && \
-    chmod +x geesefs-linux-amd64 && mv geesefs-linux-amd64 /usr/local/bin/geesefs
+    chmod +x geesefs-linux-amd64 && \
+    mv geesefs-linux-amd64 /usr/local/bin/geesefs
 
 
 FROM epsilla/base
