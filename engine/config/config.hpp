@@ -22,6 +22,7 @@ struct Config {
   std::atomic<int> MinimalGraphSize{100};
   std::atomic<int> NumExecutorPerField{16};
   std::atomic<int> RebuildThreads{1};
+  std::atomic<bool> PreFilter{false};
 
   // Setter method for IntraQueryThreads
   void setIntraQueryThreads(int value) {
@@ -77,6 +78,9 @@ struct Config {
     if (json.HasMember("SearchQueueSize")) {
       setSearchQueueSize(json.GetInt("SearchQueueSize"));
       needSwapExecutors = true;
+    }
+    if (json.HasMember("PreFilter")) {
+      PreFilter.store(json.GetBool("PreFilter"));
     }
   }
 };
