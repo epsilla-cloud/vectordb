@@ -47,6 +47,7 @@ class VecSearchExecutor {
   int64_t L_master_;              // = 100;
   int64_t L_local_;               // = 100;
   int64_t subsearch_iterations_;  // = 15;
+  bool prefilter_enabled_;        // = false;
   std::vector<int64_t> search_result_;
   std::vector<double> distance_;
   std::vector<int64_t> init_ids_;
@@ -69,7 +70,8 @@ class VecSearchExecutor {
       int num_threads,
       int64_t L_master,
       int64_t L_local,
-      int64_t subsearch_iterations);
+      int64_t subsearch_iterations,
+      bool prefilter_enabled);
 
   static int64_t AddIntoQueue(
       std::vector<Candidate>& queue,
@@ -179,6 +181,14 @@ class VecSearchExecutor {
       const int64_t index_threshold);
 
   bool BruteForceSearch(
+      const VectorPtr query_data,
+      const int64_t start,
+      const int64_t end,
+      const ConcurrentBitset& deleted,
+      vectordb::query::expr::ExprEvaluator& expr_evaluator,
+      vectordb::engine::TableSegmentMVP* table_segment,
+      const int root_node_index);
+  bool PreFilterBruteForceSearch(
       const VectorPtr query_data,
       const int64_t start,
       const int64_t end,
