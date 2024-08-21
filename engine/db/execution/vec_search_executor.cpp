@@ -38,7 +38,8 @@ VecSearchExecutor::VecSearchExecutor(
     int num_threads,
     int64_t L_master,
     int64_t L_local,
-    int64_t subsearch_iterations)
+    int64_t subsearch_iterations,
+    bool prefilter_enabled)
     : total_indexed_vector_(ann_index->record_number_),
       dimension_(dimension),
       start_search_point_(start_search_point),
@@ -59,7 +60,8 @@ VecSearchExecutor::VecSearchExecutor(
       local_queues_sizes_(num_threads, 0),
       local_queues_starts_(num_threads),
       brute_force_search_(ann_index->record_number_ < BruteforceThreshold),
-      brute_force_queue_(BruteforceThreshold) {
+      brute_force_queue_(BruteforceThreshold),
+      prefilter_enabled_(prefilter_enabled) {
   ann_index_ = ann_index;
   for (int q_i = 0; q_i < num_threads; ++q_i) {
     local_queues_starts_[q_i] = q_i * L_local;
@@ -765,6 +767,69 @@ bool VecSearchExecutor::BruteForceSearch(
   return true;
 }
 
+bool VecSearchExecutor::PreFilterBruteForceSearch(
+    const VectorPtr query_data,
+    const int64_t start,
+    const int64_t end,
+    const ConcurrentBitset &deleted,
+    vectordb::query::expr::ExprEvaluator &expr_evaluator,
+    vectordb::engine::TableSegmentMVP *table_segment,
+    const int root_node_index) {
+  if (brute_force_queue_.size() < end - start) {
+    brute_force_queue_.resize(end - start);
+  }
+  float dist;
+  if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
+#pragma omp parallel for
+    for (int64_t v_id = start; v_id < end; ++v_id) {
+      // FIXME: pre-filter combined with @distance filter is not supported.
+      if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
+        float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
+            std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+            std::get<DenseVectorPtr>(query_data),
+            dist_func_param_);
+        brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+      } else {
+        brute_force_queue_[v_id - start] = Candidate(v_id, std::numeric_limits<float>::max(), true);
+      }
+    }
+  } else {
+#pragma omp parallel for
+    for (int64_t v_id = start; v_id < end; ++v_id) {
+      // FIXME: pre-filter combined with @distance filter is not supported.
+      if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
+        auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+        float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
+            *std::get<SparseVectorPtr>(vecData),
+            *std::get<SparseVectorPtr>(query_data));
+        brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
+      } else {
+        brute_force_queue_[v_id - start] = Candidate(v_id, std::numeric_limits<float>::max(), true);
+      }
+    }
+  }
+
+  // compacting the result with 2 pointers by removing the not passing filter entries
+  // iter: the iterator to loop through the brute force queue
+  // num_result: the pointer to the current right-most slot in the new result
+  int64_t iter = 0,
+          num_result = 0;
+  // remove the invalid entries
+  for (; iter < end - start; ++iter) {
+    if (!brute_force_queue_[iter].is_checked_) {
+      if (iter != num_result) {
+        brute_force_queue_[num_result] = brute_force_queue_[iter];
+      }
+      num_result++;
+    }
+  }
+  brute_force_queue_.resize(num_result);
+  std::sort(
+      brute_force_queue_.begin(),
+      brute_force_queue_.end());
+  return true;
+}
+
 Status VecSearchExecutor::Search(
     const VectorPtr query_data,
     vectordb::engine::TableSegmentMVP *table_segment,
@@ -787,7 +852,14 @@ Status VecSearchExecutor::Search(
   //           << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
   //           << total_vector << std::endl;
 
-  if (brute_force_search_) {
+  if (prefilter_enabled_) {
+    PreFilterBruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+    result_size = std::min({brute_force_queue_.size(), limit});
+    for (int64_t k_i = 0; k_i < result_size; ++k_i) {
+      search_result_[k_i] = brute_force_queue_[k_i].id_;
+      distance_[k_i] = brute_force_queue_[k_i].distance_;
+    }
+  } else if (brute_force_search_) {
     BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {

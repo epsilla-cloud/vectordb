@@ -83,7 +83,8 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
             globalConfig.IntraQueryThreads,
             globalConfig.MasterQueueSize,
             globalConfig.LocalQueueSize,
-            globalConfig.GlobalSyncInterval));
+            globalConfig.GlobalSyncInterval,
+            globalConfig.PreFilter));
       }
       executor_pool_.push_back(pool);
     }
@@ -186,7 +187,8 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
             globalConfig.IntraQueryThreads,
             globalConfig.MasterQueueSize,
             globalConfig.LocalQueueSize,
-            globalConfig.GlobalSyncInterval));
+            globalConfig.GlobalSyncInterval,
+            globalConfig.PreFilter));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);
@@ -247,7 +249,8 @@ Status TableMVP::SwapExecutors() {
             globalConfig.IntraQueryThreads,
             globalConfig.MasterQueueSize,
             globalConfig.LocalQueueSize,
-            globalConfig.GlobalSyncInterval));
+            globalConfig.GlobalSyncInterval,
+            globalConfig.PreFilter));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);
