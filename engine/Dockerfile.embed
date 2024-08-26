@@ -11,16 +11,14 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod 
 
 FROM epsilla/base
 WORKDIR /root
-
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
 ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
 ENV PYTHONUNBUFFERED=True
 
-COPY --from=models /root/models /root/models
+COPY --from=models /root/models  /root/models
 COPY --from=builder /vectordb/build/vectordb /vectordb
-COPY ./scripts/heartbeat.sh /heartbeat.sh
-
+COPY ./scripts/heartbeat.sh      /heartbeat.sh
 COPY ./epsilla-embed             /root/
 COPY ./epsilla-embed/launch.conf /etc/supervisor/conf.d/launch.conf
 
@@ -30,7 +28,6 @@ RUN apt-get update && \
     poetry update && \
     poetry install --only main && \
     rm -rf /var/lib/apt/lists/*
-
 
 EXPOSE 8888 8889
 
