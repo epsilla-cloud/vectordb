@@ -1,7 +1,7 @@
 FROM epsilla/embedding:models AS models
 
 
-FROM epsilla/base AS builder
+FROM epsilla/ubuntu AS builder
 ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
@@ -9,7 +9,7 @@ RUN scripts/install_oatpp_modules.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod +x vectordb
 
 
-FROM epsilla/base
+FROM epsilla/ubuntu
 WORKDIR /root
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
@@ -22,10 +22,7 @@ COPY ./scripts/heartbeat.sh      /heartbeat.sh
 COPY ./epsilla-embed             /root/
 COPY ./epsilla-embed/launch.conf /etc/supervisor/conf.d/launch.conf
 
-RUN apt-get update && \
-    apt-get install -y procps supervisor && \
-    pip install --upgrade --no-cache-dir pip boto3 poetry --break-system-packages && \
-    poetry update && \
+RUN poetry update && \
     poetry install --only main && \
     rm -rf /var/lib/apt/lists/*
 
