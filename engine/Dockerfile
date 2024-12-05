@@ -7,7 +7,7 @@ RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod 
     chmod +x /usr/local/bin/geesefs && /usr/local/bin/geesefs -v
 
 
-FROM epsilla/base
+FROM epsilla/ubuntu
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
 ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
@@ -15,7 +15,7 @@ COPY --from=builder /vectordb/build/vectordb /vectordb
 COPY --from=builder /usr/local/bin/geesefs   /usr/local/bin/geesefs
 
 
-FROM epsilla/base
+FROM epsilla/ubuntu
 ARG TARGETARCH
 ARG RELEASE_VERSION=latest
 ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
