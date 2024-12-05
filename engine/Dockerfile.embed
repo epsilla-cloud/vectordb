@@ -1,7 +1,7 @@
-FROM epsilla/embedding:models AS models
+FROM epsilla/embedding:models as models
 
 
-FROM epsilla/ubuntu AS builder
+FROM epsilla/ubuntu as builder
 ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
