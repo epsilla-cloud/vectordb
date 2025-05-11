@@ -1,7 +1,7 @@
 <div align="center">
 <p align="center">
 
-<img width="275" alt="Epsilla Logo" src="https://epsilla-misc.s3.amazonaws.com/epsilla-horizontal.png">
+<img width="275" alt="Epsilla Logo" src="https://www.epsilla.com/lovable-uploads/15c9d72d-da52-4584-a6f9-c26f126a2af8.png">
 
 **A 10x faster, cheaper, and better vector database**
 
