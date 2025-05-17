@@ -31,6 +31,7 @@ constexpr const char* METRIC_TYPE = "metric_type";
 constexpr const char* INDICES = "indices";
 constexpr const char* MODEL = "model";
 constexpr const char* DIMENSIONS = "dimensions";
+constexpr const char* ELEMENT_TYPE = "element_type";
 
 constexpr const char* DB_CATALOG_FILE_NAME = "catalog";
 
@@ -48,6 +49,10 @@ Status LoadFieldSchemaFromJson(const vectordb::Json& json, meta::FieldSchema& fi
       field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     field_schema.vector_dimension_ = json.GetInt(VECTOR_DIMENSION);
     field_schema.metric_type_ = static_cast<meta::MetricType>(json.GetInt(METRIC_TYPE));
+  }
+  // Only set and list fields have element_type.
+  if (field_schema.field_type_ == meta::FieldType::SET || field_schema.field_type_ == meta::FieldType::LIST) {
+    field_schema.element_type = static_cast<meta::FieldType>(json.GetInt(ELEMENT_TYPE));
   }
   return Status::OK();
 }
@@ -112,6 +117,10 @@ void DumpFieldSchemaToJson(const meta::FieldSchema& field_schema, vectordb::Json
       field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
     json.SetInt(VECTOR_DIMENSION, field_schema.vector_dimension_);
     json.SetInt(METRIC_TYPE, static_cast<int>(field_schema.metric_type_));
+  }
+  // Only set and list fields have element_type.
+  if (field_schema.field_type_ == meta::FieldType::SET || field_schema.field_type_ == meta::FieldType::LIST) {
+    json.SetInt(ELEMENT_TYPE, static_cast<int>(field_schema.element_type));
   }
 }
 
@@ -361,6 +370,23 @@ Status ValidateSchema(TableSchema& table_schema, std::vector<EmbeddingModel> &em
       }
       if (field.metric_type_ == MetricType::UNKNOWN) {
         return Status(DB_UNEXPECTED_ERROR, "Metric type of " + field.name_ + " is not valid.");
+      }
+    }
+
+    // 8. Set and list fields must have element type and should be supported data type.
+    if (field.field_type_ == FieldType::SET || field.field_type_ == FieldType::LIST) {
+      if (field.element_type == FieldType::UNKNOWN) {
+        return Status(DB_UNEXPECTED_ERROR, "Element type of " + field.name_ + " is not valid.");
+      }
+      if (field.element_type != FieldType::INT1 &&
+          field.element_type != FieldType::INT2 &&
+          field.element_type != FieldType::INT4 &&
+          field.element_type != FieldType::INT8 &&
+          field.element_type != FieldType::FLOAT &&
+          field.element_type != FieldType::DOUBLE &&
+          field.element_type != FieldType::STRING &&
+          field.element_type != FieldType::BOOL) {
+        return Status(DB_UNEXPECTED_ERROR, "Element type of " + field.name_ + " is not supported.");
       }
     }
 
