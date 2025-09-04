@@ -53,7 +53,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
       if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
         columnData = table_segment_
                          ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                              [table_schema_.fields_[i].name_]];
+                                              [table_schema_.fields_[i].name_]].get();
       } else {
         // sparse vector
         columnData = &table_segment_
@@ -130,7 +130,7 @@ Status TableMVP::Rebuild(const std::string &db_catalog_path) {
       if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
         columnData = table_segment_
                          ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                              [table_schema_.fields_[i].name_]];
+                                              [table_schema_.fields_[i].name_]].get();
       } else {
         // sparse vector
         columnData = &table_segment_
@@ -220,7 +220,7 @@ Status TableMVP::SwapExecutors() {
       if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
         columnData = table_segment_
                          ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                              [table_schema_.fields_[i].name_]];
+                                              [table_schema_.fields_[i].name_]].get();
       } else {
         // sparse vector
         columnData = &table_segment_
@@ -269,6 +269,41 @@ Status TableMVP::Release() {
   return table_segment_->Release();
 }
 
+Status TableMVP::Compact(double threshold) {
+  if (table_segment_ == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table segment is null");
+  }
+  
+  if (!table_segment_->NeedsCompaction(threshold)) {
+    return Status(DB_SUCCESS, "Compaction not needed (threshold: " + 
+                 std::to_string(threshold) + ")");
+  }
+  
+  logger_.Info("Starting compaction for table " + table_schema_.name_ + 
+               " (deleted ratio: " + std::to_string(table_segment_->GetDeletedRatio()) + ")");
+  
+  auto status = table_segment_->CompactSegment();
+  if (!status.ok()) {
+    logger_.Error("Compaction failed for table " + table_schema_.name_ + ": " + status.message());
+    return status;
+  }
+  
+  // Save the compacted segment to disk
+  status = table_segment_->SaveTableSegment(table_schema_, db_catalog_path_, true);
+  if (!status.ok()) {
+    logger_.Error("Failed to save compacted segment for table " + table_schema_.name_);
+  }
+  
+  return status;
+}
+
+bool TableMVP::NeedsCompaction(double threshold) const {
+  if (table_segment_ == nullptr) {
+    return false;
+  }
+  return table_segment_->NeedsCompaction(threshold);
+}
+
 Status TableMVP::Insert(vectordb::Json &record, std::unordered_map<std::string, std::string> &headers, bool upsert) {
   int64_t wal_id =
       wal_->WriteEntry(upsert ? LogEntryType::UPSERT : LogEntryType::INSERT, record.DumpToString());
@@ -289,7 +324,20 @@ Status TableMVP::Delete(
   delete_wal.SetString("filter", filter);
   int64_t wal_id =
       wal_->WriteEntry(LogEntryType::DELETE, delete_wal.DumpToString());
-  return table_segment_->Delete(records, filter_nodes, wal_id);
+  auto status = table_segment_->Delete(records, filter_nodes, wal_id);
+  
+  // Trigger incremental compaction if enabled
+  if (status.ok() && compactor_) {
+    // Check if compaction is needed
+    const double deletion_ratio = table_segment_->GetDeletedRatio();
+    if (deletion_ratio > 0.2) {  // 20% threshold for incremental compaction
+      logger_.Debug("Deletion ratio " + std::to_string(deletion_ratio) + 
+                   " exceeds threshold, triggering incremental compaction");
+      compactor_->TriggerCompaction();
+    }
+  }
+  
+  return status;
 }
 
 Status TableMVP::Search(const std::string &field_name,
@@ -645,7 +693,39 @@ void TableMVP::SetLeader(bool is_leader) {
   is_leader_ = is_leader;
 }
 
-TableMVP::~TableMVP() {}
+TableMVP::~TableMVP() {
+  if (compactor_) {
+    compactor_->Stop();
+  }
+}
+
+void TableMVP::EnableIncrementalCompaction(const CompactionConfig& config) {
+  if (!compactor_) {
+    compactor_ = std::make_unique<IncrementalCompactor>(config);
+  } else {
+    compactor_->UpdateConfig(config);
+  }
+  
+  // Register the table segment for compaction
+  if (table_segment_) {
+    compactor_->RegisterSegment(table_segment_, table_schema_.name_);
+  }
+  
+  // Start background compaction if configured
+  if (config.background_compaction) {
+    compactor_->Start();
+  }
+  
+  logger_.Info("Incremental compaction enabled for table " + table_schema_.name_);
+}
+
+void TableMVP::DisableIncrementalCompaction() {
+  if (compactor_) {
+    compactor_->Stop();
+    compactor_->UnregisterSegment(table_schema_.name_);
+    logger_.Info("Incremental compaction disabled for table " + table_schema_.name_);
+  }
+}
 
 }  // namespace engine
 }  // namespace vectordb

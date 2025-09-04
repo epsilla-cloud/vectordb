@@ -111,6 +111,8 @@ class DBServer {
 
   Status Rebuild();
 
+  Status Compact(const std::string& db_name = "", const std::string& table_name = "", double threshold = 0.3);
+
   Status SwapExecutors();
 
   void InjectEmbeddingService(std::string& embedding_service_url) {

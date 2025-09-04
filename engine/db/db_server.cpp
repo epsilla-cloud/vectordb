@@ -240,6 +240,31 @@ Status DBServer::Rebuild() {
   return Status::OK();
 }
 
+Status DBServer::Compact(const std::string& db_name, const std::string& table_name, double threshold) {
+  if (db_name.empty()) {
+    // Compact all databases
+    int compacted_count = 0;
+    for (auto& db : dbs_) {
+      if (db != nullptr) {
+        auto status = db->Compact(table_name, threshold);
+        if (status.ok()) {
+          compacted_count++;
+        } else {
+          logger_.Error("Compaction failed for database: " + status.message());
+        }
+      }
+    }
+    return Status(DB_SUCCESS, "Compacted " + std::to_string(compacted_count) + " databases");
+  } else {
+    // Compact specific database
+    auto db = GetDB(db_name);
+    if (db == nullptr) {
+      return Status(INVALID_NAME, "Database " + db_name + " does not exist");
+    }
+    return db->Compact(table_name, threshold);
+  }
+}
+
 Status DBServer::SwapExecutors() {
   // Loop through all dbs and swap executors
   for (int64_t i = 0; i < dbs_.size(); ++i) {

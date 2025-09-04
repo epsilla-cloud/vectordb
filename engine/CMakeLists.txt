@@ -69,7 +69,8 @@ file(GLOB_RECURSE QUERY_FILES "query/*")
 list(APPEND LIB_FILES ${QUERY_FILES})
 
 # used by PyBinding
-find_package(PythonLibs REQUIRED)
+# Use the newer FindPython module for better compatibility
+find_package(Python3 COMPONENTS Development)
 
 add_library(oatpp STATIC IMPORTED)
 set_target_properties(oatpp PROPERTIES
@@ -115,17 +116,30 @@ if(CURL_FOUND)
   target_link_libraries(vectordb PUBLIC ${CURL_LIBRARIES})
 endif()
 
-add_library(pybinding SHARED bindings/python/interface.cpp)
-
-target_include_directories(pybinding PUBLIC ${PYTHON_INCLUDE_PATH})
-# the binding library name must match the module name
-set_target_properties(pybinding PROPERTIES
-   PREFIX ""
-   SUFFIX ".so"
-   OUTPUT_NAME "epsilla"
-)
-target_link_libraries(pybinding PUBLIC vectordb_dylib)
-target_link_libraries(pybinding PUBLIC ${PYTHON_LIBRARIES})
+# Only build Python binding if Python has shared libraries available
+if(Python3_FOUND)
+  # Check if Python was built with shared libraries
+  execute_process(
+    COMMAND ${Python3_EXECUTABLE} -c "import sysconfig; import sys; sys.exit(0 if sysconfig.get_config_var('Py_ENABLE_SHARED') else 1)"
+    RESULT_VARIABLE PYTHON_HAS_SHARED_LIB
+  )
+  
+  if(PYTHON_HAS_SHARED_LIB EQUAL 0)
+    add_library(pybinding SHARED bindings/python/interface.cpp)
+    
+    target_include_directories(pybinding PUBLIC ${Python3_INCLUDE_DIRS})
+    # the binding library name must match the module name
+    set_target_properties(pybinding PROPERTIES
+       PREFIX ""
+       SUFFIX ".so"
+       OUTPUT_NAME "epsilla"
+    )
+    target_link_libraries(pybinding PUBLIC vectordb_dylib)
+    target_link_libraries(pybinding PUBLIC Python3::Python)
+  else()
+    message(WARNING "Python was built without shared libraries. Skipping Python binding. The core C++ libraries are still built successfully.")
+  endif()
+endif()
 
 if(APPLE)
     set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/Cellar/libomp/16.0.6/include")

@@ -15,6 +15,7 @@
 #include "db/table_segment_mvp.hpp"
 #include "db/vector.hpp"
 #include "db/wal/write_ahead_log.hpp"
+#include "db/incremental_compactor.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/concurrent_bitset.hpp"
 #include "utils/concurrent_hashmap.hpp"
@@ -39,6 +40,12 @@ class TableMVP {
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
+
+  // Compact the table by removing deleted records
+  Status Compact(double threshold = 0.3);
+
+  // Check if any segment needs compaction
+  bool NeedsCompaction(double threshold = 0.3) const;
 
   // Swap executors during config change.
   Status SwapExecutors();
@@ -121,6 +128,13 @@ class TableMVP {
   std::atomic<bool> is_leader_;
 
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
+  
+  // Incremental compactor for background compaction
+  std::unique_ptr<IncrementalCompactor> compactor_;
+  
+  // Enable/disable incremental compaction
+  void EnableIncrementalCompaction(const CompactionConfig& config = CompactionConfig());
+  void DisableIncrementalCompaction();
 };
 
 }  // namespace engine
