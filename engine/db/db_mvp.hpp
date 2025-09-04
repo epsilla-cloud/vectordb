@@ -30,6 +30,7 @@ class DBMVP {
   std::vector<std::string> GetTables();
   std::shared_ptr<TableMVP> GetTable(const std::string& table_name);
   Status Rebuild();
+  Status Compact(const std::string& table_name = "", double threshold = 0.3);
   Status SwapExecutors();
   Status Release();
   Status Dump(const std::string& db_catalog_path);

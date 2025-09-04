@@ -91,6 +91,37 @@ Status DBMVP::Rebuild() {
   return Status::OK();
 }
 
+Status DBMVP::Compact(const std::string& table_name, double threshold) {
+  if (table_name.empty()) {
+    // Compact all tables
+    int compacted_count = 0;
+    for (auto& table : tables_) {
+      if (table != nullptr && table->NeedsCompaction(threshold)) {
+        auto status = table->Compact(threshold);
+        if (status.ok()) {
+          compacted_count++;
+        } else {
+          logger_.Error("Compaction failed for table " + table->table_schema_.name_ + ": " + status.message());
+        }
+      }
+    }
+    return Status(DB_SUCCESS, "Compacted " + std::to_string(compacted_count) + " tables");
+  } else {
+    // Compact specific table
+    auto it = table_name_to_id_map_.find(table_name);
+    if (it == table_name_to_id_map_.end()) {
+      return Status(INVALID_NAME, "Table " + table_name + " does not exist");
+    }
+    
+    auto table = tables_[it->second];
+    if (table == nullptr) {
+      return Status(DB_UNEXPECTED_ERROR, "Table " + table_name + " is null");
+    }
+    
+    return table->Compact(threshold);
+  }
+}
+
 Status DBMVP::SwapExecutors() {
   // Loop through all tables and swap executors
   for (int64_t i = 0; i < tables_.size(); ++i) {

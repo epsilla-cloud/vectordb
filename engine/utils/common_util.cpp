@@ -138,19 +138,20 @@ namespace {
 void RemoveDirectory(const std::string& path) {
   DIR* dir = nullptr;
   struct dirent* dmsg;
-  const int32_t buf_size = 256;
-  char file_name[buf_size];
-
-  std::string folder_name = path + "/%s";
+  
   if ((dir = opendir(path.c_str())) != nullptr) {
     while ((dmsg = readdir(dir)) != nullptr) {
       if (strcmp(dmsg->d_name, ".") != 0 && strcmp(dmsg->d_name, "..") != 0) {
-        snprintf(file_name, buf_size, folder_name.c_str(), dmsg->d_name);
-        std::string tmp = file_name;
-        if (tmp.find(".") == std::string::npos) {
-          RemoveDirectory(file_name);
+        // Use std::string to safely construct the path
+        std::string file_path = path + "/" + dmsg->d_name;
+        
+        // Check if it's a directory (without relying on extension)
+        struct stat st;
+        if (stat(file_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+          RemoveDirectory(file_path);
+        } else {
+          remove(file_path.c_str());
         }
-        remove(file_name);
       }
     }
   }
@@ -261,23 +262,41 @@ Status CommonUtil::AtomicWriteToFile(const std::string& path, const std::string&
   std::string temp_path = path + ".tmp";
   FILE* file = fopen(temp_path.c_str(), "w");
   if (file == nullptr) {
-    // LOG_SERVER_ERROR_ << "Failed to open temp file: " << temp_path;
-    return Status(INFRA_UNEXPECTED_ERROR, "Failed to open temp file: " + temp_path);
+    return Status(INFRA_UNEXPECTED_ERROR, "Failed to open temp file: " + temp_path + 
+                  " (errno: " + std::to_string(errno) + " - " + strerror(errno) + ")");
   }
+
+  // RAII wrapper for FILE*
+  auto file_guard = std::unique_ptr<FILE, decltype(&fclose)>(file, fclose);
 
   size_t num_written = fwrite(content.c_str(), 1, content.size(), file);
   if (num_written != content.size()) {
-    // TODO: Handle error...
+    // Clean up temp file on failure
+    std::remove(temp_path.c_str());
+    return Status(DB_UNEXPECTED_ERROR, "Failed to write complete content to file: " + path + 
+                  " (wrote " + std::to_string(num_written) + " of " + 
+                  std::to_string(content.size()) + " bytes)");
   }
 
-  fflush(file);  // Ensures the data is written to OS buffers
-  fsync(fileno(file));  // Ensures the data is written to the disk
+  if (fflush(file) != 0) {
+    std::remove(temp_path.c_str());
+    return Status(DB_UNEXPECTED_ERROR, "Failed to flush file: " + path + 
+                  " (errno: " + std::to_string(errno) + " - " + strerror(errno) + ")");
+  }
+  
+  if (fsync(fileno(file)) != 0) {
+    std::remove(temp_path.c_str());
+    return Status(DB_UNEXPECTED_ERROR, "Failed to sync file to disk: " + path + 
+                  " (errno: " + std::to_string(errno) + " - " + strerror(errno) + ")");
+  }
 
-  fclose(file);
+  // Close file before rename (required on Windows)
+  file_guard.reset();
 
   if (std::rename(temp_path.c_str(), path.c_str()) != 0) {
-    // LOG_SERVER_ERROR_ << "Failed to rename temp file: " << temp_path << " to " << path;
-    return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + temp_path + " to " + path);
+    std::remove(temp_path.c_str());
+    return Status(INFRA_UNEXPECTED_ERROR, "Failed to rename temp file: " + temp_path + " to " + path +
+                  " (errno: " + std::to_string(errno) + " - " + strerror(errno) + ")");
   }
 
   return Status::OK();

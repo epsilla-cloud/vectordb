@@ -21,6 +21,7 @@
 #include "server/web_server/handler/web_request_handler.hpp"
 #include "server/web_server/utils/util.hpp"
 #include "utils/error.hpp"
+#include "utils/path_validator.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 #include "utils/constants.hpp"
@@ -115,11 +116,36 @@ class WebController : public oatpp::web::server::api::ApiController {
       headers[MISTRALAI_KEY_HEADER] = headerValue->c_str();
     }
 
-    std::string db_path = parsedBody.GetString("path");
-    std::string db_name = parsedBody.GetString("name");
+    std::string raw_db_path = parsedBody.GetString("path");
+    std::string raw_db_name = parsedBody.GetString("name");
+    
+    // Validate and sanitize the database path
+    std::string db_path;
+    vectordb::Status validation_status = vectordb::engine::PathValidator::ValidatePath(raw_db_path, db_path, false);
+    if (!validation_status.ok()) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid database path: " + validation_status.message();
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    
+    // Validate and sanitize the database name
+    std::string db_name;
+    validation_status = vectordb::engine::PathValidator::ValidateDbName(raw_db_name, db_name);
+    if (!validation_status.ok()) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid database name: " + validation_status.message();
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    
     int64_t init_table_scale = InitTableScale;
     if (parsedBody.HasMember("vectorScale")) {
       init_table_scale = parsedBody.GetInt("vectorScale");
+      // Validate vector scale range
+      if (init_table_scale < 1 || init_table_scale > 100000000) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid vector scale: must be between 1 and 100,000,000";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
     }
     bool wal_enabled = true;
     if (parsedBody.HasMember("walEnabled")) {
@@ -257,7 +283,17 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->message = "Missing table name in your payload.";
       return createDtoResponse(Status::CODE_400, dto);
     }
-    table_schema.name_ = parsedBody.GetString("name");
+    
+    // Validate and sanitize table name
+    std::string raw_table_name = parsedBody.GetString("name");
+    std::string sanitized_table_name;
+    vectordb::Status validation_status = vectordb::engine::PathValidator::ValidateTableName(raw_table_name, sanitized_table_name);
+    if (!validation_status.ok()) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid table name: " + validation_status.message();
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    table_schema.name_ = sanitized_table_name;
 
     if (!parsedBody.HasMember("fields")) {
       dto->statusCode = Status::CODE_400.code;
@@ -270,7 +306,17 @@ class WebController : public oatpp::web::server::api::ApiController {
       auto body_field = parsedBody.GetArrayElement("fields", i);
       vectordb::engine::meta::FieldSchema field;
       field.id_ = i;
-      field.name_ = body_field.GetString("name");
+      
+      // Validate and sanitize field name
+      std::string raw_field_name = body_field.GetString("name");
+      std::string sanitized_field_name;
+      validation_status = vectordb::engine::PathValidator::ValidateFieldName(raw_field_name, sanitized_field_name);
+      if (!validation_status.ok()) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid field name '" + raw_field_name + "': " + validation_status.message();
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+      field.name_ = sanitized_field_name;
       if (body_field.HasMember("primaryKey")) {
         field.is_primary_key_ = body_field.GetBool("primaryKey");
         if (field.is_primary_key_) {
@@ -976,6 +1022,89 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     dto->statusCode = Status::CODE_200.code;
     dto->message = "Rebuild finished!";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(Compact)
+
+  ENDPOINT("POST", "/api/{db_name}/compact", Compact, PATH(String, db_name, "db_name"), BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    
+    // Handle empty body
+    if (body->empty()) {
+      parsedBody.LoadFromString("{}");
+    } else {
+      auto valid = parsedBody.LoadFromString(body);
+      if (!valid) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid JSON payload.";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    std::string table_name = "";
+    if (parsedBody.HasMember("tableName")) {
+      table_name = parsedBody.GetString("tableName");
+    }
+    
+    double threshold = 0.3;  // Default 30% deleted records threshold
+    if (parsedBody.HasMember("threshold")) {
+      threshold = parsedBody.GetDouble("threshold");
+      if (threshold < 0.0 || threshold > 1.0) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Threshold must be between 0.0 and 1.0";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    vectordb::Status status = db_server->Compact(db_name, table_name, threshold);
+    if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = status.message();
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(CompactAll)
+
+  ENDPOINT("POST", "/api/compact", CompactAll, BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    
+    // Handle empty body
+    if (body->empty()) {
+      parsedBody.LoadFromString("{}");
+    } else {
+      auto valid = parsedBody.LoadFromString(body);
+      if (!valid) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid JSON payload.";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    double threshold = 0.3;  // Default 30% deleted records threshold
+    if (parsedBody.HasMember("threshold")) {
+      threshold = parsedBody.GetDouble("threshold");
+      if (threshold < 0.0 || threshold > 1.0) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Threshold must be between 0.0 and 1.0";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    vectordb::Status status = db_server->Compact("", "", threshold);
+    if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = status.message();
     return createDtoResponse(Status::CODE_200, dto);
   }
 

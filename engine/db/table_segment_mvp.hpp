@@ -52,6 +52,15 @@ class TableSegmentMVP {
   // Convert a primary key to an internal id
   bool PK2ID(Json& record, size_t& id);
 
+  // Compact the segment by removing deleted records and reorganizing data
+  Status CompactSegment();
+
+  // Get the ratio of deleted records to total records
+  double GetDeletedRatio() const;
+
+  // Check if compaction is needed based on deleted ratio threshold
+  bool NeedsCompaction(double threshold = 0.3) const;
+
   // Save the table segment to disk.
   Status SaveTableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path, bool force = false);
 
@@ -78,15 +87,15 @@ class TableSegmentMVP {
   std::vector<meta::FieldType> var_len_attr_field_type_;
   int64_t sparse_vector_num_;
   int64_t dense_vector_num_;
-  char* attribute_table_;                                           // The attribute table in memory (exclude vector attributes and string attributes).
+  std::unique_ptr<char[]> attribute_table_;                         // The attribute table in memory (exclude vector attributes and string attributes).
   std::vector<VariableLenAttrColumnContainer> var_len_attr_table_;  // The variable length attribute table in memory.
   // std::vector<std::vector<std::string>> string_tables_;  // Hold the string attributes.
   std::vector<int64_t> vector_dims_;
-  float** vector_tables_;      // The vector attribute tables. Each vector attribute has its own vector table.
-                               // (From left to right defined in schema)
-  ConcurrentBitset* deleted_;  // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
-                               // The deleted records still occupy the position in all other structures.
-                               // They should be skipped during search.
+  std::vector<std::unique_ptr<float[]>> vector_tables_;  // The vector attribute tables. Each vector attribute has its own vector table.
+                                                         // (From left to right defined in schema)
+  std::unique_ptr<ConcurrentBitset> deleted_;            // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
+                                                         // The deleted records still occupy the position in all other structures.
+                                                         // They should be skipped during search.
 
   bool isIntPK() const;
   bool isStringPK() const;
@@ -99,6 +108,7 @@ class TableSegmentMVP {
   std::unordered_map<std::string, std::shared_ptr<vectordb::engine::index::GeospatialIndex>> geospatial_indices_;
 
  private:
+  friend class IncrementalCompactor;  // Allow IncrementalCompactor access for compaction
   vectordb::engine::Logger logger_;
 
   std::mutex data_update_mutex_;

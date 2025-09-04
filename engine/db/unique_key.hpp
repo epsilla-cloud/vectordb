@@ -29,6 +29,7 @@ class UniqueKey {
   }
 
   bool getKey(int8_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
     auto it = int8_map_.find(k);
     auto found = it != int8_map_.end();
     if (found) {
@@ -63,6 +64,7 @@ class UniqueKey {
   }
 
   bool getKey(int16_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
     auto it = int16_map_.find(k);
     auto found = it != int16_map_.end();
     if (found) {
@@ -97,6 +99,7 @@ class UniqueKey {
   }
 
   bool getKey(int32_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
     auto it = int32_map_.find(k);
     auto found = it != int32_map_.end();
     if (found) {
@@ -131,6 +134,7 @@ class UniqueKey {
   }
 
   bool getKey(int64_t k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
     auto it = int64_map_.find(k);
     auto found = it != int64_map_.end();
     if (found) {
@@ -165,6 +169,7 @@ class UniqueKey {
   }
 
   bool getKey(const std::string &k, size_t &offset_result) {
+    std::shared_lock<std::shared_timed_mutex> l(mutex_);
     auto it = string_map_.find(k);
     auto found = it != string_map_.end();
     if (found) {
@@ -181,6 +186,42 @@ class UniqueKey {
   bool removeKey(const std::string &k) {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     return string_map_.erase(k) == 1;
+  }
+
+  // Thread-safe putKey methods
+  template <typename T>
+  void putKey(T k, size_t offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    if constexpr (std::is_same_v<T, int8_t>) {
+      int8_map_[k] = offset;
+    } else if constexpr (std::is_same_v<T, int16_t>) {
+      int16_map_[k] = offset;
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+      int32_map_[k] = offset;
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+      int64_map_[k] = offset;
+    } else if constexpr (std::is_same_v<T, std::string>) {
+      string_map_[k] = offset;
+    }
+  }
+
+  void clear() {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    int8_map_.clear();
+    int16_map_.clear();
+    int32_map_.clear();
+    int64_map_.clear();
+    string_map_.clear();
+  }
+  
+  void swap(UniqueKey& other) {
+    std::unique_lock<std::shared_timed_mutex> l1(mutex_);
+    std::unique_lock<std::shared_timed_mutex> l2(other.mutex_);
+    int8_map_.swap(other.int8_map_);
+    int16_map_.swap(other.int16_map_);
+    int32_map_.swap(other.int32_map_);
+    int64_map_.swap(other.int64_map_);
+    string_map_.swap(other.string_map_);
   }
 
  private:
