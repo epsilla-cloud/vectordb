@@ -5,11 +5,13 @@
 #include <string>
 #include <typeinfo>
 #include <unordered_map>
+#include <shared_mutex>
 
 #include "db/catalog/meta.hpp"
 #include "db/unique_key.hpp"
 #include "db/index/spatial/geoindex.hpp"
 #include "db/vector.hpp"
+#include "db/concurrent_operations.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
 #include "utils/concurrent_bitset.hpp"
@@ -24,52 +26,40 @@ namespace engine {
 
 struct AttributeTable {
  public:
-  char* data;
+  std::unique_ptr<char[]> data;
   int64_t length;
   
-  AttributeTable(int64_t len) : length(len) {
-    data = new char[len];
+  AttributeTable(int64_t len) : length(len), data(std::make_unique<char[]>(len)) {
   }
   
   // Copy constructor - deep copy
-  AttributeTable(const AttributeTable& other) : length(other.length) {
-    data = new char[length];
-    std::memcpy(data, other.data, length);
+  AttributeTable(const AttributeTable& other) : length(other.length), 
+    data(std::make_unique<char[]>(other.length)) {
+    std::memcpy(data.get(), other.data.get(), length);
   }
   
-  // Move constructor
-  AttributeTable(AttributeTable&& other) noexcept 
-    : data(other.data), length(other.length) {
-    other.data = nullptr;
-    other.length = 0;
-  }
+  // Move constructor - default is fine with unique_ptr
+  AttributeTable(AttributeTable&& other) noexcept = default;
   
   // Copy assignment operator
   AttributeTable& operator=(const AttributeTable& other) {
     if (this != &other) {
-      delete[] data;
       length = other.length;
-      data = new char[length];
-      std::memcpy(data, other.data, length);
+      data = std::make_unique<char[]>(length);
+      std::memcpy(data.get(), other.data.get(), length);
     }
     return *this;
   }
   
-  // Move assignment operator
-  AttributeTable& operator=(AttributeTable&& other) noexcept {
-    if (this != &other) {
-      delete[] data;
-      data = other.data;
-      length = other.length;
-      other.data = nullptr;
-      other.length = 0;
-    }
-    return *this;
-  }
+  // Move assignment operator - default is fine with unique_ptr
+  AttributeTable& operator=(AttributeTable&& other) noexcept = default;
   
-  ~AttributeTable() {
-    delete[] data;
-  }
+  // Destructor - default is fine with unique_ptr
+  ~AttributeTable() = default;
+  
+  // Convenience method to get raw pointer for existing code compatibility
+  char* get() { return data.get(); }
+  const char* get() const { return data.get(); }
 };
 
 class TableSegmentMVP {
@@ -157,7 +147,12 @@ class TableSegmentMVP {
   friend class IncrementalCompactor;  // Allow IncrementalCompactor access for compaction
   vectordb::engine::Logger logger_;
 
-  std::mutex data_update_mutex_;
+  // Enhanced concurrency control
+  mutable std::shared_mutex data_rw_mutex_;  // Reader-writer lock replacing single mutex
+  std::unique_ptr<AtomicCapacityManager> capacity_manager_;  // Thread-safe capacity management
+  std::unique_ptr<SnapshotManager> snapshot_manager_;  // Snapshot isolation for queries
+  std::unique_ptr<AtomicUpsertManager> upsert_manager_;  // Atomic upsert operations
+  std::unique_ptr<WALTransactionManager> wal_manager_;  // WAL transaction support
 
   // used to store primary key set for duplication check
   UniqueKey primary_key_;

@@ -27,6 +27,16 @@ class UniqueKey {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     int8_map_[k] = offset;
   }
+  
+  bool compareAndSwapKey(int8_t k, size_t expected_offset, size_t new_offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    auto it = int8_map_.find(k);
+    if (it != int8_map_.end() && it->second == expected_offset) {
+      it->second = new_offset;
+      return true;
+    }
+    return false;
+  }
 
   bool getKey(int8_t k, size_t &offset_result) {
     std::shared_lock<std::shared_timed_mutex> l(mutex_);
@@ -61,6 +71,16 @@ class UniqueKey {
   void updateKey(int16_t k, size_t offset) {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     int16_map_[k] = offset;
+  }
+  
+  bool compareAndSwapKey(int16_t k, size_t expected_offset, size_t new_offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    auto it = int16_map_.find(k);
+    if (it != int16_map_.end() && it->second == expected_offset) {
+      it->second = new_offset;
+      return true;
+    }
+    return false;
   }
 
   bool getKey(int16_t k, size_t &offset_result) {
@@ -97,6 +117,16 @@ class UniqueKey {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     int32_map_[k] = offset;
   }
+  
+  bool compareAndSwapKey(int32_t k, size_t expected_offset, size_t new_offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    auto it = int32_map_.find(k);
+    if (it != int32_map_.end() && it->second == expected_offset) {
+      it->second = new_offset;
+      return true;
+    }
+    return false;
+  }
 
   bool getKey(int32_t k, size_t &offset_result) {
     std::shared_lock<std::shared_timed_mutex> l(mutex_);
@@ -132,6 +162,16 @@ class UniqueKey {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     int64_map_[k] = offset;
   }
+  
+  bool compareAndSwapKey(int64_t k, size_t expected_offset, size_t new_offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    auto it = int64_map_.find(k);
+    if (it != int64_map_.end() && it->second == expected_offset) {
+      it->second = new_offset;
+      return true;
+    }
+    return false;
+  }
 
   bool getKey(int64_t k, size_t &offset_result) {
     std::shared_lock<std::shared_timed_mutex> l(mutex_);
@@ -166,6 +206,16 @@ class UniqueKey {
   void updateKey(const std::string &k, size_t offset) {
     std::unique_lock<std::shared_timed_mutex> l(mutex_);
     string_map_[k] = offset;
+  }
+  
+  bool compareAndSwapKey(const std::string &k, size_t expected_offset, size_t new_offset) {
+    std::unique_lock<std::shared_timed_mutex> l(mutex_);
+    auto it = string_map_.find(k);
+    if (it != string_map_.end() && it->second == expected_offset) {
+      it->second = new_offset;
+      return true;
+    }
+    return false;
   }
 
   bool getKey(const std::string &k, size_t &offset_result) {
@@ -215,8 +265,11 @@ class UniqueKey {
   }
   
   void swap(UniqueKey& other) {
-    std::unique_lock<std::shared_timed_mutex> l1(mutex_);
-    std::unique_lock<std::shared_timed_mutex> l2(other.mutex_);
+    // Use std::lock to avoid deadlock by acquiring both locks in a consistent order
+    std::unique_lock<std::shared_timed_mutex> l1(mutex_, std::defer_lock);
+    std::unique_lock<std::shared_timed_mutex> l2(other.mutex_, std::defer_lock);
+    std::lock(l1, l2);  // Acquires both locks without deadlock
+    
     int8_map_.swap(other.int8_map_);
     int16_map_.swap(other.int16_map_);
     int32_map_.swap(other.int32_map_);

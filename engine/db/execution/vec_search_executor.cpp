@@ -3,6 +3,7 @@
 #include <omp.h>
 
 #include <algorithm>
+#include <atomic>
 #include <numeric>
 
 #include "query/expr/expr.hpp"
@@ -63,6 +64,13 @@ VecSearchExecutor::VecSearchExecutor(
       brute_force_queue_(BruteforceThreshold),
       prefilter_enabled_(prefilter_enabled) {
   ann_index_ = ann_index;
+  
+  // Log thread configuration for debugging
+  static std::atomic<int> executor_count(0);
+  int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
+  printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld)\n", 
+         executor_id, num_threads_, dimension_, total_indexed_vector_);
+  
   for (int q_i = 0; q_i < num_threads; ++q_i) {
     local_queues_starts_[q_i] = q_i * L_local;
   }

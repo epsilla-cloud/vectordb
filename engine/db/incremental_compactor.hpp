@@ -203,7 +203,7 @@ private:
         }
         
         // Lock for write during compaction
-        std::unique_lock<std::mutex> lock(segment->data_update_mutex_);
+        std::unique_lock<std::shared_mutex> lock(segment->data_rw_mutex_);
         
         // Move records in batches
         for (size_t i = 0; i < plan.records_to_move; ++i) {

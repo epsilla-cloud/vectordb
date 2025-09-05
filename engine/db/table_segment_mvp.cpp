@@ -137,6 +137,10 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_t
       primitive_num_(0),
       var_len_attr_num_(0),
       dense_vector_num_(0),
+      capacity_manager_(std::make_unique<AtomicCapacityManager>(init_table_scale)),
+      snapshot_manager_(std::make_unique<SnapshotManager>()),
+      upsert_manager_(std::make_unique<AtomicUpsertManager>()),
+      wal_manager_(std::make_unique<WALTransactionManager>()),
       sparse_vector_num_(0),
       vector_dims_(0) {
   embedding_service_ = embedding_service;
@@ -153,6 +157,10 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
       primitive_num_(0),
       var_len_attr_num_(0),
       dense_vector_num_(0),
+      capacity_manager_(std::make_unique<AtomicCapacityManager>(init_table_scale)),
+      snapshot_manager_(std::make_unique<SnapshotManager>()),
+      upsert_manager_(std::make_unique<AtomicUpsertManager>()),
+      wal_manager_(std::make_unique<WALTransactionManager>()),
       sparse_vector_num_(0),
       vector_dims_(0),
       wal_global_id_(-1) {
@@ -343,7 +351,7 @@ bool TableSegmentMVP::isEntryDeleted(int64_t id) const {
 }
 
 Status TableSegmentMVP::Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id) {
-  std::unique_lock<std::mutex> lock(data_update_mutex_);
+  std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
 
   wal_global_id_ = wal_id;
   size_t deleted_record = 0;
@@ -477,14 +485,15 @@ Status TableSegmentMVP::DeleteByID(
 }
 
 Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers, bool upsert) {
-  std::unique_lock<std::mutex> lock(data_update_mutex_);
+  // Use write lock for insert operations
+  std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
 
-  wal_global_id_ = wal_id;
   size_t new_record_size = records.GetSize();
   if (new_record_size == 0) {
     logger_.Debug("No records to insert.");
     return Status::OK();
   }
+  
   // Check if the records are valid.
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
@@ -496,19 +505,27 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
     }
   }
 
-  // Resize if needed.
-  if (record_number_ + new_record_size > size_limit_) {
+  // Atomically reserve capacity
+  size_t reserved_position;
+  if (!capacity_manager_->TryReserve(new_record_size, reserved_position)) {
     return Status(
         DB_UNEXPECTED_ERROR,
         "Currently, each table in this database can hold up to " + std::to_string(size_limit_) + " records. " +
             "To insert more records, please unload the database and reload with a larger vectorScale parameter.");
-    // DoubleSize();
   }
 
+  // Start WAL transaction
+  auto wal_txn = wal_manager_->BeginTransaction(wal_id);
+  wal_manager_->SetRollback(wal_txn.get(), [this, count = new_record_size]() {
+    capacity_manager_->ReleaseReservation(count);
+    logger_.Error("WAL transaction rolled back, released " + std::to_string(count) + " reserved slots");
+  });
+  
+  wal_global_id_ = wal_id;
   size_t skipped_entry = 0;
 
-  // Process the insert.
-  size_t cursor = record_number_;
+  // Process the insert using reserved position
+  size_t cursor = reserved_position;
 
   // Hold for the record id.
   size_t upsert_size = 0;
@@ -787,8 +804,8 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
   size_t old_record_number = record_number_;
 
-  // update the vector size
-  record_number_.store(cursor);
+  // update the vector size  
+  record_number_.store(reserved_position + new_record_size - skipped_entry);
 
   // For upsert, need to update the pk map, and delete the older version of the records.
   if (upsert) {
@@ -820,6 +837,12 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
 
   // Segment is modified.
   skip_sync_disk_.store(false);
+  
+  // Commit the WAL transaction on success
+  wal_txn->Commit();
+  
+  // Update snapshot version for queries
+  snapshot_manager_->IncrementVersion();
 
   auto msg = "{\"inserted\": " + std::to_string(new_record_size - skipped_entry) + ", \"skipped\": " + std::to_string(skipped_entry) + "}";
   auto statusCode = DB_SUCCESS;
@@ -1047,7 +1070,7 @@ bool TableSegmentMVP::NeedsCompaction(double threshold) const {
 }
 
 Status TableSegmentMVP::CompactSegment() {
-  std::unique_lock<std::mutex> lock(data_update_mutex_);
+  std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
   
   size_t deleted_count = deleted_->count(record_number_);
   if (deleted_count == 0) {

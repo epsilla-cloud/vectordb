@@ -2,6 +2,7 @@
 
 #include <boost/dynamic_bitset.hpp>
 #include <cstddef>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -49,10 +50,10 @@ class NsgIndex {
   size_t dimension;
   size_t ntotal;        // totabl nb of indexed vectors
   int32_t metric_type;  // enum Metric_Type
-  Distance* distance_;
+  std::unique_ptr<Distance> distance_;
 
   VectorColumnData ori_data_;
-  int64_t* ids_;
+  std::unique_ptr<int64_t[]> ids_;
   Graph nsg;   // final graph
   Graph knng;  // reset after build
 
