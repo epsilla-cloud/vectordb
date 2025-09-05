@@ -67,10 +67,17 @@ Status DBMVP::DeleteTable(const std::string& table_name) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
   
+  // Safely remove table with proper synchronization
+  std::shared_ptr<TableMVP> table_to_delete;
   {
     std::unique_lock<std::shared_mutex> lock(tables_mutex_);
-    tables_[table_index.value()] = nullptr;  // Set the shared_ptr to null
+    // Keep a reference to the table being deleted
+    table_to_delete = tables_[table_index.value()];
+    // Reset the shared_ptr in the vector (but the table still exists via table_to_delete)
+    tables_[table_index.value()].reset();
   }
+  
+  // Remove from name map after releasing the lock
   table_name_to_id_map_.erase(table_name);
 
   if (is_leader_) {

@@ -72,10 +72,17 @@ Status DBServer::UnloadDB(const std::string& db_name) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
   
+  // Safely remove database with proper synchronization
+  std::shared_ptr<DBMVP> db_to_unload;
   {
     std::unique_lock<std::shared_mutex> lock(dbs_mutex_);
-    dbs_[db_index.value()] = nullptr;  // Set the shared_ptr to null
+    // Keep a reference to the database being unloaded
+    db_to_unload = dbs_[db_index.value()];
+    // Reset the shared_ptr in the vector (but the DB still exists via db_to_unload)
+    dbs_[db_index.value()].reset();
   }
+  
+  // Remove from name map after releasing the lock
   db_name_to_id_map_.erase(db_name);
   return Status::OK();
 }
@@ -136,12 +143,23 @@ Status DBServer::GetStatistics(const std::string& db_name,
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
-  for (auto& table: db->tables_) {
-    vectordb::Json table_result;
-    table_result.LoadFromString("{}");
-    table_result.SetString("tableName", table->table_schema_.name_);
-    table_result.SetInt("totalRecords", table->GetRecordCount());
-    response.AddObjectToArray("result", table_result);
+  
+  // Create a snapshot of tables to avoid race conditions
+  std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(db->tables_mutex_);
+    tables_snapshot = db->tables_;  // Copy the vector while holding the lock
+  }
+  
+  // Now safely iterate over the snapshot without holding the lock
+  for (auto& table: tables_snapshot) {
+    if (table) {  // Check if table is not null
+      vectordb::Json table_result;
+      table_result.LoadFromString("{}");
+      table_result.SetString("tableName", table->table_schema_.name_);
+      table_result.SetInt("totalRecords", table->GetRecordCount());
+      response.AddObjectToArray("result", table_result);
+    }
   }
   return Status::OK();
 }

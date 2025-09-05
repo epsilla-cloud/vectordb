@@ -126,8 +126,12 @@ struct simd16uint16 : simd256bit {
         storeu((void*)bytes);
         char res[1000];
         char* ptr = res;
+        size_t remaining = sizeof(res);
         for (int i = 0; i < 16; i++) {
-            ptr += sprintf(ptr, fmt, bytes[i]);
+            int written = snprintf(ptr, remaining, fmt, bytes[i]);
+            if (written < 0 || written >= remaining) break;
+            ptr += written;
+            remaining -= written;
         }
         // strip last ,
         ptr[-1] = 0;
@@ -421,8 +425,12 @@ struct simd32uint8 : simd256bit {
         storeu((void*)bytes);
         char res[1000];
         char* ptr = res;
+        size_t remaining = sizeof(res);
         for (int i = 0; i < 32; i++) {
-            ptr += sprintf(ptr, fmt, bytes[i]);
+            int written = snprintf(ptr, remaining, fmt, bytes[i]);
+            if (written < 0 || written >= remaining) break;
+            ptr += written;
+            remaining -= written;
         }
         // strip last ,
         ptr[-1] = 0;
@@ -545,8 +553,12 @@ struct simd8uint32 : simd256bit {
         storeu((void*)bytes);
         char res[1000];
         char* ptr = res;
+        size_t remaining = sizeof(res);
         for (int i = 0; i < 8; i++) {
-            ptr += sprintf(ptr, fmt, bytes[i]);
+            int written = snprintf(ptr, remaining, fmt, bytes[i]);
+            if (written < 0 || written >= remaining) break;
+            ptr += written;
+            remaining -= written;
         }
         // strip last ,
         ptr[-1] = 0;
@@ -662,8 +674,12 @@ struct simd8float32 : simd256bit {
         storeu((void*)tab);
         char res[1000];
         char* ptr = res;
+        size_t remaining = sizeof(res);
         for (int i = 0; i < 8; i++) {
-            ptr += sprintf(ptr, "%g,", tab[i]);
+            int written = snprintf(ptr, remaining, "%g,", tab[i]);
+            if (written < 0 || written >= remaining) break;
+            ptr += written;
+            remaining -= written;
         }
         // strip last ,
         ptr[-1] = 0;
