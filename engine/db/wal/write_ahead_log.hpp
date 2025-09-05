@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include <chrono>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -85,8 +86,11 @@ class WriteAheadLog {
     fprintf(file_, "%ld %d %s\n", next, type, entry.c_str());
 #endif
     fflush(file_);
-    // Tradeoff of data consistency. We use fflush for now.
-    // fsync(fileno(file_));
+    // Ensure data is written to disk for durability
+    if (fsync(fileno(file_)) != 0) {
+      logger_.Warning("WAL fsync failed: " + std::string(strerror(errno)));
+      // Continue execution but log the warning
+    }
     return next;
   }
 

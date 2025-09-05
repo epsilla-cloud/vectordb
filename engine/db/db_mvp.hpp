@@ -4,10 +4,12 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <shared_mutex>
 
 #include "db/catalog/meta.hpp"
 #include "db/table_mvp.hpp"
 #include "utils/status.hpp"
+#include "utils/concurrent_map.hpp"
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
 
@@ -36,23 +38,32 @@ class DBMVP {
   Status Dump(const std::string& db_catalog_path);
 
   void SetWALEnabled(bool enabled) {
+    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
     for (auto table : tables_) {
-      table->SetWALEnabled(enabled);
+      if (table) {
+        table->SetWALEnabled(enabled);
+      }
     }
   }
 
   void SetLeader(bool is_leader) {
     is_leader_ = is_leader;
+    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
     for (auto table : tables_) {
-      table->SetLeader(is_leader);
+      if (table) {
+        table->SetLeader(is_leader);
+      }
     }
   }
 
  public:
   vectordb::engine::Logger logger_;
   std::string db_catalog_path_;                                   // The path to the db catalog.
-  // TODO: change to concurrent version.
-  std::unordered_map<std::string, size_t> table_name_to_id_map_;  // The table name to table id map.
+  // Thread-safe map for table name to id mapping
+  utils::ConcurrentUnorderedMap<std::string, size_t> table_name_to_id_map_;  // The table name to table id map.
+  
+  // Protect tables_ vector with shared_mutex
+  mutable std::shared_mutex tables_mutex_;
   std::vector<std::shared_ptr<TableMVP>> tables_;                    // The tables in this database.
   int64_t init_table_scale_;
   std::atomic<bool> is_leader_;

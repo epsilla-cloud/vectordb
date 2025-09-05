@@ -59,21 +59,20 @@ ANNGraphSegment::ANNGraphSegment(const std::string& db_catalog_path, int64_t tab
     // Read the starting id of the first record
     file.read(reinterpret_cast<char*>(&first_record_id_), sizeof(first_record_id_));
 
-    // Allocate memory for the offset array and the neighbor list array
-    offset_table_ = new int64_t[record_number_ + 1];
-    neighbor_list_ = new int64_t[record_number_];
+    // Allocate memory for the offset array
+    offset_table_ = std::make_unique<int64_t[]>(record_number_ + 1);
 
     // Read the offset array
-    file.read(reinterpret_cast<char*>(offset_table_), sizeof(int64_t) * (record_number_ + 1));
+    file.read(reinterpret_cast<char*>(offset_table_.get()), sizeof(int64_t) * (record_number_ + 1));
 
     // Get the total number of edges from the last element of offset_table_
     int64_t total_edges = offset_table_[record_number_];
 
     // Allocate memory for the neighbor list array with the correct size
-    neighbor_list_ = new int64_t[total_edges];
+    neighbor_list_ = std::make_unique<int64_t[]>(total_edges);
 
     // Read the neighbor list array
-    file.read(reinterpret_cast<char*>(neighbor_list_), sizeof(int64_t) * total_edges);
+    file.read(reinterpret_cast<char*>(neighbor_list_.get()), sizeof(int64_t) * total_edges);
 
     // Read the nagivation point
     file.read(reinterpret_cast<char*>(&navigation_point_), sizeof(navigation_point_));
@@ -87,9 +86,9 @@ ANNGraphSegment::ANNGraphSegment(const std::string& db_catalog_path, int64_t tab
     if (!mkdir_status.ok()) {
       throw mkdir_status.message();
     }
-    offset_table_ = new int64_t[record_number_ + 1];
+    offset_table_ = std::make_unique<int64_t[]>(record_number_ + 1);
     offset_table_[record_number_] = 0;
-    neighbor_list_ = new int64_t[record_number_];
+    neighbor_list_ = std::make_unique<int64_t[]>(record_number_);
     auto status = SaveANNGraph(db_catalog_path, table_id, field_id);
     if (!status.ok()) {
       throw status.message();
@@ -172,13 +171,13 @@ Status ANNGraphSegment::SaveANNGraph(const std::string& db_catalog_path, int64_t
   fwrite(&first_record_id_, sizeof(first_record_id_), 1, file);
 
   // Write the offset table
-  fwrite(offset_table_, sizeof(int64_t), record_number_ + 1, file);
+  fwrite(offset_table_.get(), sizeof(int64_t), record_number_ + 1, file);
 
   // Get the total number of edges from the last element of offset_table_
   int64_t total_edges = offset_table_[record_number_];
 
   // Write the neighbor list
-  fwrite(neighbor_list_, sizeof(int64_t), total_edges, file);
+  fwrite(neighbor_list_.get(), sizeof(int64_t), total_edges, file);
 
   // Write the navigation point
   fwrite(&navigation_point_, sizeof(navigation_point_), 1, file);
@@ -220,14 +219,9 @@ void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_column, int64
   int64_t total_graph_size = index_->Build(n, vector_column, nullptr, b_params);
 
   // Convert the graph.
-  if (offset_table_ != nullptr) {
-    delete[] offset_table_;
-  }
-  offset_table_ = new int64_t[n + 1];  // +1 for the last node.
-  if (neighbor_list_ != nullptr) {
-    delete[] neighbor_list_;
-  }
-  neighbor_list_ = new int64_t[total_graph_size];
+  // Smart pointers will automatically clean up old memory
+  offset_table_ = std::make_unique<int64_t[]>(n + 1);  // +1 for the last node.
+  neighbor_list_ = std::make_unique<int64_t[]>(total_graph_size);
   int64_t offset = 0;
   for (int64_t i = 0; i < n; ++i) {
     offset_table_[i] = offset;
@@ -257,12 +251,7 @@ void ANNGraphSegment::Debug() {
 }
 
 ANNGraphSegment::~ANNGraphSegment() {
-  if (offset_table_ != nullptr) {
-    delete[] offset_table_;
-  }
-  if (neighbor_list_ != nullptr) {
-    delete[] neighbor_list_;
-  }
+  // Smart pointers automatically clean up, no manual deletion needed
 }
 
 }  // namespace engine

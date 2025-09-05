@@ -163,18 +163,29 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
   if (server::CommonUtil::IsFileExist(path)) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-      throw std::runtime_error("Cannot open file: " + path);
+      logger_.Error("Cannot open table segment file: " + path);
+      // Continue with empty initialization instead of throwing
+      Init(table_schema, init_table_scale);
+      return;
     }
 
     // Read the number of records and the first record id
     file.read(reinterpret_cast<char*>(&record_number_), sizeof(record_number_));
     file.read(reinterpret_cast<char*>(&first_record_id_), sizeof(first_record_id_));
-    // If the table contains more records than the size limit, throw to avoid future core dump.
+    // If the table contains more records than the size limit, adjust the scale
     if (record_number_ > init_table_scale) {
-      file.close();
-      throw std::runtime_error("The table contains " + std::to_string(record_number_) +
-                               " records, which is larger than provided vector scale " +
-                               std::to_string(init_table_scale));
+      logger_.Warning("Table contains " + std::to_string(record_number_) +
+                     " records, larger than initial scale " + std::to_string(init_table_scale) +
+                     ". Adjusting scale automatically.");
+      // Adjust scale to accommodate existing data
+      size_t new_scale = record_number_ * 2;  // Double for growth room
+      Init(table_schema, new_scale);
+      
+      // Re-read from beginning
+      file.clear();
+      file.seekg(0);
+      file.read(reinterpret_cast<char*>(&record_number_), sizeof(record_number_));
+      file.read(reinterpret_cast<char*>(&first_record_id_), sizeof(first_record_id_));
     }
 
     // Read the bitset
@@ -1342,6 +1353,26 @@ Status TableSegmentMVP::Release() {
   vector_tables_.clear();
   deleted_.reset();
   return Status::OK();
+}
+
+// Factory method for safe loading from disk
+std::pair<Status, std::shared_ptr<TableSegmentMVP>> TableSegmentMVP::CreateFromDisk(
+    meta::TableSchema& table_schema,
+    const std::string& db_catalog_path,
+    int64_t init_table_scale,
+    std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service) {
+  
+  try {
+    auto segment = std::make_shared<TableSegmentMVP>(
+        table_schema, db_catalog_path, init_table_scale, embedding_service);
+    return {Status::OK(), segment};
+  } catch (const std::exception& e) {
+    return {Status(DB_UNEXPECTED_ERROR, "Failed to load table segment: " + std::string(e.what())), 
+            nullptr};
+  } catch (...) {
+    return {Status(DB_UNEXPECTED_ERROR, "Failed to load table segment: unknown error"), 
+            nullptr};
+  }
 }
 
 }  // namespace engine
