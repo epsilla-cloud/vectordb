@@ -1,4 +1,5 @@
 #include "db/index/nsg/nsg.hpp"
+#include "utils/safe_memory_ops.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -53,7 +54,13 @@ size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, con
       ids_[i] = i;
     }
   } else {
-    memcpy((void*)ids_.get(), (void*)ids, sizeof(int64_t) * ntotal);
+    // Safe memcpy with null check and bounds validation
+    if (ids_.get() == nullptr) {
+      throw std::runtime_error("NSG: ids_ not allocated");
+    }
+    utils::SafeMemoryOps::SafeMemcpy(
+        ids_.get(), ids, ntotal,
+        ntotal, ntotal);
   }
 
   search_length = parameters.search_length;

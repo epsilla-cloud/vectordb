@@ -1,4 +1,5 @@
 #include "db/execution/vec_search_executor.hpp"
+#include "utils/safe_memory_ops.hpp"
 
 #include <omp.h>
 
@@ -115,10 +116,16 @@ int64_t VecSearchExecutor::AddIntoQueue(
       return queue_capacity;
     }
   }
-  // Add into queue
-  memmove(reinterpret_cast<char *>(queue.data() + insert_loc + 1),
-          reinterpret_cast<char *>(queue.data() + insert_loc),
-          (queue_end - insert_loc) * sizeof(Candidate));
+  // Add into queue with bounds checking
+  size_t elements_to_move = queue_end - insert_loc;
+  if (elements_to_move > 0 && insert_loc + 1 + elements_to_move <= queue.size()) {
+    utils::SafeMemoryOps::SafeMemmove(
+        queue.data() + insert_loc + 1,
+        queue.data() + insert_loc,
+        elements_to_move,
+        queue.size() - insert_loc - 1,
+        queue.size() - insert_loc);
+  }
   queue[insert_loc] = cand;
   ++queue_size;
   return insert_loc - queue_start;
@@ -135,9 +142,15 @@ void VecSearchExecutor::AddIntoQueueAt(
   if (queue_size == queue_capacity) {
     --queue_size;
   }
-  memmove(reinterpret_cast<char *>(queue.data() + dest_index + 1),
-          reinterpret_cast<char *>(queue.data() + dest_index),
-          (queue_size - insert_index) * sizeof(Candidate));
+  size_t elements_to_move = queue_size - insert_index;
+  if (elements_to_move > 0 && dest_index + 1 + elements_to_move <= queue.size()) {
+    utils::SafeMemoryOps::SafeMemmove(
+        queue.data() + dest_index + 1,
+        queue.data() + dest_index,
+        elements_to_move,
+        queue.size() - dest_index - 1,
+        queue.size() - dest_index);
+  }
   queue[dest_index] = cand;
   ++queue_size;
 }
@@ -149,9 +162,15 @@ void VecSearchExecutor::InsertOneElementAt(
     const int64_t queue_start,
     const int64_t queue_size) {
   const int64_t dest_index = queue_start + insert_index;
-  memmove(reinterpret_cast<char *>(queue.data() + dest_index + 1),
-          reinterpret_cast<char *>(queue.data() + dest_index),
-          (queue_size - insert_index - 1) * sizeof(Candidate));
+  size_t elements_to_move = queue_size - insert_index - 1;
+  if (elements_to_move > 0 && dest_index + 1 + elements_to_move <= queue.size()) {
+    utils::SafeMemoryOps::SafeMemmove(
+        queue.data() + dest_index + 1,
+        queue.data() + dest_index,
+        elements_to_move,
+        queue.size() - dest_index - 1,
+        queue.size() - dest_index);
+  }
   queue[dest_index] = cand;
 }
 
@@ -733,23 +752,26 @@ bool VecSearchExecutor::BruteForceSearch(
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
-  float dist;
+  
+  // Use thread-local computation to avoid race conditions
   if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
-#pragma omp parallel for
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
           std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
           std::get<DenseVectorPtr>(query_data),
           dist_func_param_);
+      // Direct array write is safe with static scheduling
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   } else {
-#pragma omp parallel for
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
           *std::get<SparseVectorPtr>(vecData),
           *std::get<SparseVectorPtr>(query_data));
+      // Direct array write is safe with static scheduling
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   }
@@ -786,9 +808,10 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
-  float dist;
+  
+  // Use thread-local computation with static scheduling to avoid race conditions
   if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
-#pragma omp parallel for
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
@@ -796,13 +819,14 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
             std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
             std::get<DenseVectorPtr>(query_data),
             dist_func_param_);
+        // Direct array write is safe with static scheduling
         brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
       } else {
         brute_force_queue_[v_id - start] = Candidate(v_id, std::numeric_limits<float>::max(), true);
       }
     }
   } else {
-#pragma omp parallel for
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
@@ -810,6 +834,7 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
         float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
             *std::get<SparseVectorPtr>(vecData),
             *std::get<SparseVectorPtr>(query_data));
+        // Direct array write is safe with static scheduling
         brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
       } else {
         brute_force_queue_[v_id - start] = Candidate(v_id, std::numeric_limits<float>::max(), true);
