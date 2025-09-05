@@ -203,6 +203,51 @@ Status DBMVP::Release() {
   return Status::OK();
 }
 
+Status DBMVP::GetRecordCount(const std::string& table_name, vectordb::Json& result) {
+  // If table_name is empty, get count for all tables
+  if (table_name.empty()) {
+    size_t total_count = 0;
+    vectordb::Json table_counts;
+    table_counts.LoadFromString("{}");
+    
+    std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+    {
+      std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+      tables_snapshot = tables_;
+    }
+    
+    for (auto& table : tables_snapshot) {
+      if (table != nullptr) {
+        size_t table_record_count = table->GetRecordCount();
+        total_count += table_record_count;
+        
+        vectordb::Json table_info;
+        table_info.LoadFromString("{}");
+        table_info.SetInt("recordCount", table_record_count);
+        table_info.SetInt("capacity", table->GetCapacity());
+        table_counts.SetObject(table->table_schema_.name_, table_info);
+      }
+    }
+    
+    result.SetInt("totalRecords", total_count);
+    result.SetString("database", GetName());
+    result.SetObject("tables", table_counts);
+    return Status::OK();
+  }
+  
+  // Get specific table
+  auto table = GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  
+  result.SetInt("recordCount", table->GetRecordCount());
+  result.SetInt("capacity", table->GetCapacity());
+  result.SetString("database", GetName());
+  result.SetString("table", table_name);
+  return Status::OK();
+}
+
 Status DBMVP::Dump(const std::string& db_catalog_path) {
   // Loop through all tables and dump
   std::vector<std::shared_ptr<TableMVP>> tables_snapshot;

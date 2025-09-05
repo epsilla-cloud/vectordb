@@ -699,6 +699,10 @@ size_t TableMVP::GetRecordCount() {
   return table_segment_->GetRecordCount();
 }
 
+size_t TableMVP::GetCapacity() {
+  return table_segment_->size_limit_;
+}
+
 void TableMVP::SetLeader(bool is_leader) {
   wal_->SetLeader(is_leader);
   is_leader_ = is_leader;

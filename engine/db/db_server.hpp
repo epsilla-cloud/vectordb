@@ -127,6 +127,10 @@ class DBServer {
   Status Compact(const std::string& db_name = "", const std::string& table_name = "", double threshold = 0.3);
 
   Status SwapExecutors();
+  
+  Status GetRecordCount(const std::string& db_name, 
+                       const std::string& table_name,
+                       vectordb::Json& result);
 
   void InjectEmbeddingService(std::string& embedding_service_url) {
     embedding_service_ = std::make_shared<vectordb::engine::EmbeddingService>(embedding_service_url);

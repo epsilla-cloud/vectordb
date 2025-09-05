@@ -686,6 +686,59 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     return createResponse(Status::CODE_200, response.DumpToString());
   }
+  
+  // Get record count for database and/or table
+  ADD_CORS(GetRecordCount)
+  
+  ENDPOINT("GET", "/api/{db_name}/records/count", GetRecordCount,
+           PATH(String, db_name, "db_name"),
+           QUERY(String, table_name, "table", "")) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    
+    vectordb::Status count_status = db_server->GetRecordCount(
+        db_name, 
+        table_name ? std::string(table_name) : "", 
+        response);
+
+    if (!count_status.ok()) {
+      auto status_dto = StatusDto::createShared();
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = count_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Success");
+    
+    return createResponse(Status::CODE_200, response.DumpToString());
+  }
+  
+  // Get record count for all databases
+  ADD_CORS(GetAllRecordCount)
+  
+  ENDPOINT("GET", "/api/records/count", GetAllRecordCount,
+           QUERY(String, table_name, "table", "")) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    
+    vectordb::Status count_status = db_server->GetRecordCount(
+        "", 
+        table_name ? std::string(table_name) : "", 
+        response);
+
+    if (!count_status.ok()) {
+      auto status_dto = StatusDto::createShared();
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = count_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Success");
+    
+    return createResponse(Status::CODE_200, response.DumpToString());
+  }
 
   ADD_CORS(Query)
 

@@ -343,6 +343,48 @@ Status DBServer::SwapExecutors() {
   return Status::OK();
 }
 
+Status DBServer::GetRecordCount(const std::string& db_name, 
+                                const std::string& table_name,
+                                vectordb::Json& result) {
+  // If db_name is empty, get total count across all databases
+  if (db_name.empty()) {
+    size_t total_count = 0;
+    vectordb::Json db_counts;
+    db_counts.LoadFromString("{}");
+    
+    std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+    {
+      std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+      dbs_snapshot = dbs_;
+    }
+    
+    for (auto& db : dbs_snapshot) {
+      if (db != nullptr) {
+        vectordb::Json db_result;
+        db_result.LoadFromString("{}");
+        auto status = db->GetRecordCount(table_name, db_result);
+        if (status.ok()) {
+          size_t db_total = db_result.GetInt("totalRecords");
+          total_count += db_total;
+          db_counts.SetObject(db->GetName(), db_result);
+        }
+      }
+    }
+    
+    result.SetInt("totalRecords", total_count);
+    result.SetObject("databases", db_counts);
+    return Status::OK();
+  }
+  
+  // Get specific database
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  
+  return db->GetRecordCount(table_name, result);
+}
+
 Status DBServer::ListTables(const std::string& db_name, std::vector<std::string>& table_names) {
   auto db = GetDB(db_name);
   if (db == nullptr) {

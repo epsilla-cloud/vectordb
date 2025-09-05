@@ -36,6 +36,15 @@ class DBMVP {
   Status SwapExecutors();
   Status Release();
   Status Dump(const std::string& db_catalog_path);
+  Status GetRecordCount(const std::string& table_name, vectordb::Json& result);
+  std::string GetName() const { 
+    // Extract database name from catalog path
+    size_t last_slash = db_catalog_path_.find_last_of('/');
+    if (last_slash != std::string::npos) {
+      return db_catalog_path_.substr(last_slash + 1);
+    }
+    return db_catalog_path_;
+  }
 
   void SetWALEnabled(bool enabled) {
     // Use copy of vector to avoid holding lock during table operations
