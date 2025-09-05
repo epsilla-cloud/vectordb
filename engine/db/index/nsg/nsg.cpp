@@ -22,31 +22,29 @@ NsgIndex::NsgIndex(const size_t& dimension, const size_t& n, Metric_Type metric)
     : dimension(dimension), ntotal(n), metric_type(metric) {
   switch (metric) {
     case Metric_Type::Metric_Type_L2:
-      distance_ = new DistanceL2;
+      distance_ = std::make_unique<DistanceL2>();
       break;
     case Metric_Type::Metric_Type_IP:
-      distance_ = new DistanceIP;
+      distance_ = std::make_unique<DistanceIP>();
       break;
     case Metric_Type::Metric_Type_COSINE:
-      distance_ = new DistanceCosine;
+      distance_ = std::make_unique<DistanceCosine>();
       break;
     default:
-      distance_ = new DistanceL2;
+      distance_ = std::make_unique<DistanceL2>();
       break;
   }
 }
 
 NsgIndex::~NsgIndex() {
-  // delete[] ori_data_;
-  delete[] ids_;
-  delete distance_;
+  // Smart pointers automatically clean up
 }
 
 size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, const BuildParams& parameters) {
   logger_.Debug("NSG start build");
   ntotal = nb;
   // ori_data_ = new float[ntotal * dimension];
-  ids_ = new int64_t[ntotal];
+  ids_ = std::make_unique<int64_t[]>(ntotal);
   // TODO: Check if need to use memcpy
   ori_data_ = data;
   // memcpy((void*)ori_data_, (void*)data, sizeof(float) * ntotal * dimension);
@@ -55,7 +53,7 @@ size_t NsgIndex::Build(size_t nb, VectorColumnData data, const int64_t* ids, con
       ids_[i] = i;
     }
   } else {
-    memcpy((void*)ids_, (void*)ids, sizeof(int64_t) * ntotal);
+    memcpy((void*)ids_.get(), (void*)ids, sizeof(int64_t) * ntotal);
   }
 
   search_length = parameters.search_length;
