@@ -94,6 +94,7 @@ class TableMVP {
   Status Dump(const std::string &db_catalog_path);
 
   size_t GetRecordCount();
+  size_t GetCapacity();
 
   void SetWALEnabled(bool enabled) {
     wal_->SetEnabled(enabled);
