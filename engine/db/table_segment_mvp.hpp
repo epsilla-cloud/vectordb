@@ -25,9 +25,48 @@ namespace engine {
 struct AttributeTable {
  public:
   char* data;
-  AttributeTable(int64_t len) {
+  int64_t length;
+  
+  AttributeTable(int64_t len) : length(len) {
     data = new char[len];
   }
+  
+  // Copy constructor - deep copy
+  AttributeTable(const AttributeTable& other) : length(other.length) {
+    data = new char[length];
+    std::memcpy(data, other.data, length);
+  }
+  
+  // Move constructor
+  AttributeTable(AttributeTable&& other) noexcept 
+    : data(other.data), length(other.length) {
+    other.data = nullptr;
+    other.length = 0;
+  }
+  
+  // Copy assignment operator
+  AttributeTable& operator=(const AttributeTable& other) {
+    if (this != &other) {
+      delete[] data;
+      length = other.length;
+      data = new char[length];
+      std::memcpy(data, other.data, length);
+    }
+    return *this;
+  }
+  
+  // Move assignment operator
+  AttributeTable& operator=(AttributeTable&& other) noexcept {
+    if (this != &other) {
+      delete[] data;
+      data = other.data;
+      length = other.length;
+      other.data = nullptr;
+      other.length = 0;
+    }
+    return *this;
+  }
+  
   ~AttributeTable() {
     delete[] data;
   }

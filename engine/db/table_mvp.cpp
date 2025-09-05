@@ -8,6 +8,8 @@
 
 #include "config/config.hpp"
 
+#include "db/table_segment_dynamic_simple.hpp"
+
 namespace vectordb {
 
 extern Config globalConfig;
@@ -35,8 +37,17 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
   }
 
   // Load the table data from disk.
+  // Use dynamic configuration instead of hardcoded 150000 capacity
+  int64_t actual_capacity = DynamicConfigManager::GetInitialCapacity(init_table_scale);
+  
+  if (actual_capacity != init_table_scale) {
+    Logger logger;
+    logger.Info("Using dynamic capacity " + std::to_string(actual_capacity) + 
+                " instead of " + std::to_string(init_table_scale));
+  }
+  
   table_segment_ = std::make_shared<TableSegmentMVP>(
-      table_schema, db_catalog_path, init_table_scale, embedding_service_);
+      table_schema, db_catalog_path, actual_capacity, embedding_service_);
 
   // Replay operations in write ahead log.
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_, is_leader_);
