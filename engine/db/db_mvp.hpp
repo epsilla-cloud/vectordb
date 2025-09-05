@@ -38,8 +38,15 @@ class DBMVP {
   Status Dump(const std::string& db_catalog_path);
 
   void SetWALEnabled(bool enabled) {
-    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
-    for (auto table : tables_) {
+    // Use copy of vector to avoid holding lock during table operations
+    std::vector<std::shared_ptr<TableMVP>> tables_copy;
+    {
+      std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+      tables_copy = tables_;  // Copy the vector of shared_ptrs
+    }
+    
+    // Now iterate without holding the lock
+    for (auto table : tables_copy) {
       if (table) {
         table->SetWALEnabled(enabled);
       }
@@ -48,8 +55,16 @@ class DBMVP {
 
   void SetLeader(bool is_leader) {
     is_leader_ = is_leader;
-    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
-    for (auto table : tables_) {
+    
+    // Use copy of vector to avoid holding lock during table operations
+    std::vector<std::shared_ptr<TableMVP>> tables_copy;
+    {
+      std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+      tables_copy = tables_;  // Copy the vector of shared_ptrs
+    }
+    
+    // Now iterate without holding the lock
+    for (auto table : tables_copy) {
       if (table) {
         table->SetLeader(is_leader);
       }

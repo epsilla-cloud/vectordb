@@ -107,8 +107,15 @@ class DBServer {
     is_leader_ = is_leader;
     meta_->SetLeader(is_leader_);
     
-    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
-    for (auto db : dbs_) {
+    // Use copy of vector to avoid holding lock during DB operations
+    std::vector<std::shared_ptr<DBMVP>> dbs_copy;
+    {
+      std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+      dbs_copy = dbs_;  // Copy the vector of shared_ptrs
+    }
+    
+    // Now iterate without holding the lock
+    for (auto db : dbs_copy) {
       if (db) {
         db->SetLeader(is_leader);
       }
