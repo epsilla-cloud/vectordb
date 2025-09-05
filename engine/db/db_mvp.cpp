@@ -25,31 +25,53 @@ DBMVP::DBMVP(
       is_leader_,
       embedding_service_,
       headers);
-    tables_.push_back(table);
-    table_name_to_id_map_[database_schema.tables_[i].name_] = tables_.size() - 1;
+    
+    // Thread-safe insertion
+    size_t table_index;
+    {
+      std::unique_lock<std::shared_mutex> lock(tables_mutex_);
+      tables_.push_back(table);
+      table_index = tables_.size() - 1;
+    }
+    table_name_to_id_map_.insert_or_update(database_schema.tables_[i].name_, table_index);
   }
 }
 
 Status DBMVP::CreateTable(meta::TableSchema& table_schema) {
-  if (table_name_to_id_map_.find(table_schema.name_) != table_name_to_id_map_.end()) {
+  if (table_name_to_id_map_.contains(table_schema.name_)) {
     return Status(TABLE_ALREADY_EXISTS, "Table already exists: " + table_schema.name_);
   }
   std::unordered_map<std::string, std::string> headers;
   auto table = std::make_shared<TableMVP>(table_schema, db_catalog_path_, init_table_scale_, is_leader_, embedding_service_, headers);
-  tables_.push_back(table);
-  table_name_to_id_map_[table_schema.name_] = tables_.size() - 1;
+  
+  // Thread-safe insertion
+  size_t table_index;
+  {
+    std::unique_lock<std::shared_mutex> lock(tables_mutex_);
+    tables_.push_back(table);
+    table_index = tables_.size() - 1;
+  }
+  table_name_to_id_map_.insert_or_update(table_schema.name_, table_index);
   return Status::OK();
 }
 
 Status DBMVP::DeleteTable(const std::string& table_name) {
-  auto table_id = GetTable(table_name)->table_schema_.id_;
-
-  auto it = table_name_to_id_map_.find(table_name);
-  if (it == table_name_to_id_map_.end()) {
+  auto table = GetTable(table_name);
+  if (!table) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  tables_[it->second] = nullptr;  // Set the shared_ptr to null
-  table_name_to_id_map_.erase(it);
+  auto table_id = table->table_schema_.id_;
+
+  auto table_index = table_name_to_id_map_.find(table_name);
+  if (!table_index.has_value()) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+  
+  {
+    std::unique_lock<std::shared_mutex> lock(tables_mutex_);
+    tables_[table_index.value()] = nullptr;  // Set the shared_ptr to null
+  }
+  table_name_to_id_map_.erase(table_name);
 
   if (is_leader_) {
     // Delete table from disk.
@@ -62,25 +84,28 @@ Status DBMVP::DeleteTable(const std::string& table_name) {
 }
 
 std::vector<std::string> DBMVP::GetTables() {
-  std::vector<std::string> table_names;
-  for (const auto& entry : table_name_to_id_map_) {
-    table_names.push_back(entry.first);
-  }
-  return table_names;
+  return table_name_to_id_map_.keys();
 }
 
 std::shared_ptr<TableMVP> DBMVP::GetTable(const std::string& table_name) {
-  auto it = table_name_to_id_map_.find(table_name);
-  if (it == table_name_to_id_map_.end()) {
+  auto table_index = table_name_to_id_map_.find(table_name);
+  if (!table_index.has_value()) {
     return nullptr;  // Or throw an exception or return an error status, depending on your error handling strategy
   }
-  return tables_[it->second];
+  
+  std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+  return tables_[table_index.value()];
 }
 
 Status DBMVP::Rebuild() {
   // Loop through all tables and rebuild
-  for (int64_t i = 0; i < tables_.size(); ++i) {
-    std::shared_ptr<TableMVP> table = tables_[i];
+  std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+    tables_snapshot = tables_;  // Make a copy while holding lock
+  }
+  
+  for (auto& table : tables_snapshot) {
     if (table != nullptr) {
       auto status = table->Rebuild(db_catalog_path_);
       if (!status.ok()) {
@@ -94,8 +119,14 @@ Status DBMVP::Rebuild() {
 Status DBMVP::Compact(const std::string& table_name, double threshold) {
   if (table_name.empty()) {
     // Compact all tables
+    std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+    {
+      std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+      tables_snapshot = tables_;  // Make a copy while holding lock
+    }
+    
     int compacted_count = 0;
-    for (auto& table : tables_) {
+    for (auto& table : tables_snapshot) {
       if (table != nullptr && table->NeedsCompaction(threshold)) {
         auto status = table->Compact(threshold);
         if (status.ok()) {
@@ -108,12 +139,17 @@ Status DBMVP::Compact(const std::string& table_name, double threshold) {
     return Status(DB_SUCCESS, "Compacted " + std::to_string(compacted_count) + " tables");
   } else {
     // Compact specific table
-    auto it = table_name_to_id_map_.find(table_name);
-    if (it == table_name_to_id_map_.end()) {
+    auto table_index = table_name_to_id_map_.find(table_name);
+    if (!table_index.has_value()) {
       return Status(INVALID_NAME, "Table " + table_name + " does not exist");
     }
     
-    auto table = tables_[it->second];
+    std::shared_ptr<TableMVP> table;
+    {
+      std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+      table = tables_[table_index.value()];
+    }
+    
     if (table == nullptr) {
       return Status(DB_UNEXPECTED_ERROR, "Table " + table_name + " is null");
     }
@@ -124,8 +160,13 @@ Status DBMVP::Compact(const std::string& table_name, double threshold) {
 
 Status DBMVP::SwapExecutors() {
   // Loop through all tables and swap executors
-  for (int64_t i = 0; i < tables_.size(); ++i) {
-    std::shared_ptr<TableMVP> table = tables_[i];
+  std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+    tables_snapshot = tables_;  // Make a copy while holding lock
+  }
+  
+  for (auto& table : tables_snapshot) {
     if (table != nullptr) {
       auto status = table->SwapExecutors();
       if (!status.ok()) {
@@ -138,8 +179,13 @@ Status DBMVP::SwapExecutors() {
 
 Status DBMVP::Release() {
   // Loop through all tables and release
-  for (int64_t i = 0; i < tables_.size(); ++i) {
-    std::shared_ptr<TableMVP> table = tables_[i];
+  std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+    tables_snapshot = tables_;  // Make a copy while holding lock
+  }
+  
+  for (auto& table : tables_snapshot) {
     if (table != nullptr) {
       auto status = table->Release();
       if (!status.ok()) {
@@ -152,9 +198,14 @@ Status DBMVP::Release() {
 
 Status DBMVP::Dump(const std::string& db_catalog_path) {
   // Loop through all tables and dump
+  std::vector<std::shared_ptr<TableMVP>> tables_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+    tables_snapshot = tables_;  // Make a copy while holding lock
+  }
+  
   bool success = true;
-  for (int64_t i = 0; i < tables_.size(); ++i) {
-    std::shared_ptr<TableMVP> table = tables_[i];
+  for (auto& table : tables_snapshot) {
     if (table != nullptr) {
       auto status = table->Dump(db_catalog_path);
       if (!status.ok()) {

@@ -5,6 +5,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <shared_mutex>
 
 #include "db/catalog/meta.hpp"
 #include "db/db_mvp.hpp"
@@ -12,6 +13,7 @@
 #include "db/vector.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
+#include "utils/concurrent_map.hpp"
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
 
@@ -104,8 +106,12 @@ class DBServer {
   void SetLeader(bool is_leader) {
     is_leader_ = is_leader;
     meta_->SetLeader(is_leader_);
+    
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     for (auto db : dbs_) {
-      db->SetLeader(is_leader);
+      if (db) {
+        db->SetLeader(is_leader);
+      }
     }
   }
 
@@ -123,8 +129,11 @@ class DBServer {
  private:
   vectordb::engine::Logger logger_;
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
-  // TODO: change to concurrent version.
-  std::unordered_map<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.
+  // Thread-safe map for db name to index mapping
+  utils::ConcurrentUnorderedMap<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.
+  
+  // Protect dbs_ vector with shared_mutex
+  mutable std::shared_mutex dbs_mutex_;
   std::vector<std::shared_ptr<DBMVP>> dbs_;                    // The dbs.
   std::thread rebuild_thread_;
   bool stop_rebuild_thread_ = false;

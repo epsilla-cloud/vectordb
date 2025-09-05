@@ -37,14 +37,21 @@ Status DBServer::LoadDB(const std::string& db_name,
   try {
     meta::DatabaseSchema db_schema;
     meta_->GetDatabase(db_name, db_schema);
-    if (db_name_to_id_map_.find(db_name) != db_name_to_id_map_.end()) {
+    if (db_name_to_id_map_.contains(db_name)) {
       return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
     }
 
     auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_, embedding_service_, headers);
     db->SetWALEnabled(wal_enabled);
-    dbs_.push_back(db);
-    db_name_to_id_map_[db_schema.name_] = dbs_.size() - 1;
+    
+    // Thread-safe insertion
+    size_t db_index;
+    {
+      std::unique_lock<std::shared_mutex> lock(dbs_mutex_);
+      dbs_.push_back(db);
+      db_index = dbs_.size() - 1;
+    }
+    db_name_to_id_map_.insert_or_update(db_schema.name_, db_index);
     return Status::OK();
   } catch (std::exception& ex) {
     meta_->UnloadDatabase(db_name);
@@ -60,30 +67,43 @@ Status DBServer::UnloadDB(const std::string& db_name) {
   }
 
   // Unload database from memory.
-  auto it = db_name_to_id_map_.find(db_name);
-  if (it == db_name_to_id_map_.end()) {
+  auto db_index = db_name_to_id_map_.find(db_name);
+  if (!db_index.has_value()) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
-  dbs_[it->second] = nullptr;  // Set the shared_ptr to null
-  db_name_to_id_map_.erase(it);
+  
+  {
+    std::unique_lock<std::shared_mutex> lock(dbs_mutex_);
+    dbs_[db_index.value()] = nullptr;  // Set the shared_ptr to null
+  }
+  db_name_to_id_map_.erase(db_name);
   return Status::OK();
 }
 
 Status DBServer::ReleaseDB(const std::string& db_name) {
   // Release database from memory.
-  auto it = db_name_to_id_map_.find(db_name);
-  if (it == db_name_to_id_map_.end()) {
+  auto db_index = db_name_to_id_map_.find(db_name);
+  if (!db_index.has_value()) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
-  dbs_[it->second]->Release();
+  
+  std::shared_ptr<DBMVP> db;
+  {
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+    db = dbs_[db_index.value()];
+  }
+  
+  if (db) {
+    db->Release();
+  }
   return Status::OK();
 }
 
 Status DBServer::DumpDB(const std::string& db_name,
                         const std::string& db_catalog_path) {
   // Check that DB exists.
-  auto it = db_name_to_id_map_.find(db_name);
-  if (it == db_name_to_id_map_.end()) {
+  auto db_index = db_name_to_id_map_.find(db_name);
+  if (!db_index.has_value()) {
     return Status(DB_NOT_FOUND, "DB not found: " + db_name);
   }
   // Create the folder if not exist.
@@ -98,7 +118,15 @@ Status DBServer::DumpDB(const std::string& db_name,
     return status;
   }
   // Dump DB to disk.
-  std::shared_ptr<DBMVP> db = dbs_[it->second];
+  std::shared_ptr<DBMVP> db;
+  {
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+    db = dbs_[db_index.value()];
+  }
+  
+  if (!db) {
+    return Status(DB_UNEXPECTED_ERROR, "DB is null");
+  }
   return db->Dump(db_catalog_path);
 }
 
@@ -119,12 +147,14 @@ Status DBServer::GetStatistics(const std::string& db_name,
 }
 
 std::shared_ptr<DBMVP> DBServer::GetDB(const std::string& db_name) {
-  auto it = db_name_to_id_map_.find(db_name);
-  if (it == db_name_to_id_map_.end()) {
+  auto db_index = db_name_to_id_map_.find(db_name);
+  if (!db_index.has_value()) {
     return nullptr;  // Or throw an exception or return an error status,
                      // depending on your error handling strategy
   }
-  return dbs_[it->second];
+  
+  std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+  return dbs_[db_index.value()];
 }
 
 Status DBServer::CreateTable(const std::string& db_name,
@@ -228,8 +258,13 @@ Status DBServer::DropTable(const std::string& db_name,
 
 Status DBServer::Rebuild() {
   // Loop through all dbs and rebuild
-  for (int64_t i = 0; i < dbs_.size(); ++i) {
-    std::shared_ptr<DBMVP> db = dbs_[i];
+  std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+    dbs_snapshot = dbs_;  // Make a copy while holding lock
+  }
+  
+  for (auto& db : dbs_snapshot) {
     if (db != nullptr) {
       auto status = db->Rebuild();
       if (!status.ok()) {
@@ -243,8 +278,14 @@ Status DBServer::Rebuild() {
 Status DBServer::Compact(const std::string& db_name, const std::string& table_name, double threshold) {
   if (db_name.empty()) {
     // Compact all databases
+    std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+    {
+      std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+      dbs_snapshot = dbs_;  // Make a copy while holding lock
+    }
+    
     int compacted_count = 0;
-    for (auto& db : dbs_) {
+    for (auto& db : dbs_snapshot) {
       if (db != nullptr) {
         auto status = db->Compact(table_name, threshold);
         if (status.ok()) {
@@ -267,8 +308,13 @@ Status DBServer::Compact(const std::string& db_name, const std::string& table_na
 
 Status DBServer::SwapExecutors() {
   // Loop through all dbs and swap executors
-  for (int64_t i = 0; i < dbs_.size(); ++i) {
-    std::shared_ptr<DBMVP> db = dbs_[i];
+  std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+  {
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+    dbs_snapshot = dbs_;  // Make a copy while holding lock
+  }
+  
+  for (auto& db : dbs_snapshot) {
     if (db != nullptr) {
       auto status = db->SwapExecutors();
       if (!status.ok()) {

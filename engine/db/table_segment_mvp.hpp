@@ -37,8 +37,15 @@ class TableSegmentMVP {
  public:
   // Default constructor just for table level init.
   explicit TableSegmentMVP(meta::TableSchema& table_schema, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
-  // Load segment from disk.
+  // Load segment from disk - now private, use CreateFromDisk instead
   explicit TableSegmentMVP(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
+  
+  // Factory method for loading from disk (safer than constructor throwing)
+  static std::pair<Status, std::shared_ptr<TableSegmentMVP>> CreateFromDisk(
+      meta::TableSchema& table_schema, 
+      const std::string& db_catalog_path, 
+      int64_t init_table_scale, 
+      std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service);
 
   Status Init(meta::TableSchema& table_schema, int64_t size_limit);
 
