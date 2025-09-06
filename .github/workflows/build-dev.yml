@@ -2,7 +2,7 @@ name: Build Vectordb in dev
 
 on:
   push:
-    branches: [ "dev", "distritubed-*" ]
+    branches: [ "dev", "distritubed-*", "cc" ]
     paths: ['engine/Dockerfile', 'VERSION']
 
 jobs:
@@ -58,7 +58,7 @@ jobs:
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
                             --push \
-                            -t epsilla/vectordb:dev .
+                            -t epsilla/vectordb:dev-${IMAGE_TAG} .
 
         docker buildx build --build-arg="RELEASE_VERSION=v${RELEASE_TAG}-${IMAGE_TAG}" \
                             --platform linux/arm64 \
@@ -71,7 +71,7 @@ jobs:
                             --label "org.opencontainers.image.version"=${RELEASE_TAG} \
                             --pull \
                             --push \
-                            -t epsilla/vectordb:dev-arm64 .
+                            -t epsilla/vectordb:dev-arm64-${IMAGE_TAG} .
 
 
 
