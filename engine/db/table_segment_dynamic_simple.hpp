@@ -16,7 +16,7 @@ namespace engine {
 class DynamicConfigManager {
 public:
     struct Config {
-        size_t initial_capacity = 5000;      // Default 5000 instead of 150000
+        size_t initial_capacity = 5000;      // Default 5000
         size_t max_capacity = 100000000;     // Maximum 100 million
         double growth_factor = 2.0;          // Growth factor
         bool allow_dynamic = true;           // Whether to allow dynamic expansion
@@ -50,8 +50,7 @@ public:
             
             Logger logger;
             logger.Info("Dynamic memory configuration:");
-            logger.Info("  Initial capacity: " + std::to_string(config.initial_capacity) + 
-                       " (replacing hardcoded 150000)");
+            logger.Info("  Initial capacity: " + std::to_string(config.initial_capacity));
             logger.Info("  Max capacity: " + std::to_string(config.max_capacity));
             logger.Info("  Growth factor: " + std::to_string(config.growth_factor));
             
