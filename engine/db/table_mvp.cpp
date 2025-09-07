@@ -37,7 +37,7 @@ TableMVP::TableMVP(meta::TableSchema &table_schema,
   }
 
   // Load the table data from disk.
-  // Use dynamic configuration instead of hardcoded 150000 capacity
+  // Use dynamic configuration instead of hardcoded capacity
   int64_t actual_capacity = DynamicConfigManager::GetInitialCapacity(init_table_scale);
   
   if (actual_capacity != init_table_scale) {

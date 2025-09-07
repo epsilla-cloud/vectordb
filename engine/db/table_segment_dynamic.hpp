@@ -24,7 +24,7 @@ public:
         if (initial_cap) {
             config.initial_capacity = std::stoul(initial_cap);
         } else {
-            // Default value: 1000 instead of 150000
+            // Default value: 1000
             config.initial_capacity = 1000;
         }
         
@@ -100,8 +100,7 @@ public:
     static void LogConfig(const DynamicSegmentConfig& config) {
         Logger logger;
         logger.Info("Dynamic segment configuration:");
-        logger.Info("  Initial capacity: " + std::to_string(config.initial_capacity) + 
-                   " (legacy hardcoded: 150000)");
+        logger.Info("  Initial capacity: " + std::to_string(config.initial_capacity));
         logger.Info("  Max capacity: " + std::to_string(config.max_capacity));
         logger.Info("  Growth factor: " + std::to_string(config.growth_factor));
         logger.Info("  Expand threshold: " + std::to_string(config.expand_threshold * 100) + "%");
@@ -144,7 +143,7 @@ public:
         }
         
         logger_.Info("Created dynamic table segment with initial capacity " + 
-                    std::to_string(config.initial_capacity) + " (not hardcoded 150000)");
+                    std::to_string(config.initial_capacity));
     }
     
     /**
