@@ -7,7 +7,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <unordered_map>
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "logger/logger.hpp"
 #include "utils/status.hpp"
 
@@ -97,7 +97,7 @@ public:
     }
     
     // Register a segment for compaction monitoring
-    void RegisterSegment(std::shared_ptr<TableSegmentMVP> segment, const std::string& name) {
+    void RegisterSegment(std::shared_ptr<TableSegment> segment, const std::string& name) {
         std::lock_guard<std::mutex> lock(segments_mutex_);
         segments_[name] = segment;
         segment_stats_[name] = SegmentStats{};
@@ -278,7 +278,7 @@ private:
     }
     
     // Perform incremental compaction (non-blocking)
-    void PerformIncrementalCompaction(std::shared_ptr<TableSegmentMVP> segment, 
+    void PerformIncrementalCompaction(std::shared_ptr<TableSegment> segment, 
                                      size_t& records_reclaimed) {
         // Use copy-on-write strategy for zero downtime
         if (config_.use_copy_on_write) {
@@ -309,7 +309,7 @@ private:
     }
     
     // Perform full compaction
-    void PerformFullCompaction(std::shared_ptr<TableSegmentMVP> segment, 
+    void PerformFullCompaction(std::shared_ptr<TableSegment> segment, 
                               size_t& records_reclaimed) {
         // Use the existing CompactSegment method
         size_t before_count = segment->GetRecordCount();
@@ -387,7 +387,7 @@ private:
     std::condition_variable cv_;
     
     std::mutex segments_mutex_;
-    std::unordered_map<std::string, std::shared_ptr<TableSegmentMVP>> segments_;
+    std::unordered_map<std::string, std::shared_ptr<TableSegment>> segments_;
     std::unordered_map<std::string, SegmentStats> segment_stats_;
     
     std::mutex queue_mutex_;

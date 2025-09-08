@@ -41,7 +41,7 @@ Status DBServer::LoadDB(const std::string& db_name,
       return Status(DB_UNEXPECTED_ERROR, "DB already exists: " + db_name);
     }
 
-    auto db = std::make_shared<DBMVP>(db_schema, init_table_scale, is_leader_, embedding_service_, headers);
+    auto db = std::make_shared<Database>(db_schema, init_table_scale, is_leader_, embedding_service_, headers);
     db->SetWALEnabled(wal_enabled);
     
     // Thread-safe insertion
@@ -73,7 +73,7 @@ Status DBServer::UnloadDB(const std::string& db_name) {
   }
   
   // Safely remove database with proper synchronization
-  std::shared_ptr<DBMVP> db_to_unload;
+  std::shared_ptr<Database> db_to_unload;
   {
     std::unique_lock<std::shared_mutex> lock(dbs_mutex_);
     // Keep a reference to the database being unloaded
@@ -94,7 +94,7 @@ Status DBServer::ReleaseDB(const std::string& db_name) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
   
-  std::shared_ptr<DBMVP> db;
+  std::shared_ptr<Database> db;
   {
     std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     db = dbs_[db_index.value()];
@@ -125,7 +125,7 @@ Status DBServer::DumpDB(const std::string& db_name,
     return status;
   }
   // Dump DB to disk.
-  std::shared_ptr<DBMVP> db;
+  std::shared_ptr<Database> db;
   {
     std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     db = dbs_[db_index.value()];
@@ -164,7 +164,7 @@ Status DBServer::GetStatistics(const std::string& db_name,
   return Status::OK();
 }
 
-std::shared_ptr<DBMVP> DBServer::GetDB(const std::string& db_name) {
+std::shared_ptr<Database> DBServer::GetDB(const std::string& db_name) {
   auto db_index = db_name_to_id_map_.find(db_name);
   if (!db_index.has_value()) {
     return nullptr;  // Or throw an exception or return an error status,
@@ -276,7 +276,7 @@ Status DBServer::DropTable(const std::string& db_name,
 
 Status DBServer::Rebuild() {
   // Loop through all dbs and rebuild
-  std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+  std::vector<std::shared_ptr<Database>> dbs_snapshot;
   {
     std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     dbs_snapshot = dbs_;  // Make a copy while holding lock
@@ -296,7 +296,7 @@ Status DBServer::Rebuild() {
 Status DBServer::Compact(const std::string& db_name, const std::string& table_name, double threshold) {
   if (db_name.empty()) {
     // Compact all databases
-    std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+    std::vector<std::shared_ptr<Database>> dbs_snapshot;
     {
       std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
       dbs_snapshot = dbs_;  // Make a copy while holding lock
@@ -326,7 +326,7 @@ Status DBServer::Compact(const std::string& db_name, const std::string& table_na
 
 Status DBServer::SwapExecutors() {
   // Loop through all dbs and swap executors
-  std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+  std::vector<std::shared_ptr<Database>> dbs_snapshot;
   {
     std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     dbs_snapshot = dbs_;  // Make a copy while holding lock
@@ -352,7 +352,7 @@ Status DBServer::GetRecordCount(const std::string& db_name,
     vectordb::Json db_counts;
     db_counts.LoadFromString("{}");
     
-    std::vector<std::shared_ptr<DBMVP>> dbs_snapshot;
+    std::vector<std::shared_ptr<Database>> dbs_snapshot;
     {
       std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
       dbs_snapshot = dbs_;
@@ -430,14 +430,30 @@ Status DBServer::Delete(
     const std::string& table_name,
     vectordb::Json& pkList,
     const std::string& filter) {
+  
+  // Log deletion request received at DBServer level
+  size_t pk_count = pkList.GetSize();
+  std::string log_msg = "[DBServer] Delete request received for db=" + db_name + 
+                       ", table=" + table_name;
+  if (pk_count > 0) {
+    log_msg += ", primaryKeys=" + std::to_string(pk_count) + " items";
+  }
+  if (!filter.empty()) {
+    log_msg += ", filter=[" + filter + "]";
+  }
+  logger_.Debug(log_msg);
+  
   auto db = GetDB(db_name);
   if (db == nullptr) {
+    logger_.Error("[DBServer] Database not found: " + db_name);
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
   auto table = db->GetTable(table_name);
   if (table == nullptr) {
+    logger_.Error("[DBServer] Table not found: " + table_name + " in db: " + db_name);
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
+  
   // Semantic check primary keys list.
   if (pkList.GetSize() > 0) {
     int pkIdx = 0;
@@ -447,6 +463,7 @@ Status DBServer::Delete(
       }
     }
     if (pkIdx == table->table_schema_.fields_.size()) {
+      logger_.Error("[DBServer] Primary key field not found in table: " + table_name);
       return Status(DB_UNEXPECTED_ERROR, "Primary key not found: " + table_name);
     }
 
@@ -454,9 +471,13 @@ Status DBServer::Delete(
     auto pkField = table->table_schema_.fields_[pkIdx];
     size_t pkListSize = pkList.GetSize();
     if (pkListSize == 0) {
-      logger_.Info("No pk to delete.");
+      logger_.Info("[DBServer] No primary keys provided for deletion.");
       return Status::OK();
     }
+    
+    logger_.Debug("[DBServer] Validating " + std::to_string(pkListSize) + " primary keys of type: " + 
+                 std::to_string(static_cast<int>(pkField.field_type_)));
+    
     switch (pkField.field_type_) {
       case meta::FieldType::INT1:  // fall through
       case meta::FieldType::INT2:  // fall through
@@ -464,6 +485,8 @@ Status DBServer::Delete(
       case meta::FieldType::INT8:
         for (int i = 0; i < pkListSize; i++) {
           if (!pkList.GetArrayElement(i).IsNumber()) {
+            logger_.Error("[DBServer] Primary key type mismatch at position " + std::to_string(i) + 
+                         " - expected number");
             return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
           }
         }
@@ -471,23 +494,46 @@ Status DBServer::Delete(
       case meta::FieldType::STRING:
         for (int i = 0; i < pkListSize; i++) {
           if (!pkList.GetArrayElement(i).IsString()) {
+            logger_.Error("[DBServer] Primary key type mismatch at position " + std::to_string(i) + 
+                         " - expected string");
             return Status(DB_UNEXPECTED_ERROR, "Primary key type mismatch at field position " + std::to_string(i));
           }
         }
         break;
       default:
+        logger_.Error("[DBServer] Unexpected primary key type: " + 
+                     std::to_string(static_cast<int>(pkField.field_type_)));
         return Status(DB_UNEXPECTED_ERROR, "unexpected Primary key type.");
     }
+    
+    logger_.Debug("[DBServer] Primary key validation completed successfully");
   }
 
   // Filter validation
   std::vector<query::expr::ExprNodePtr> expr_nodes;
+  if (!filter.empty()) {
+    logger_.Debug("[DBServer] Validating filter expression: " + filter);
+  }
   Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
   if (!expr_parse_status.ok()) {
+    logger_.Error("[DBServer] Filter validation failed: " + expr_parse_status.message());
     return expr_parse_status;
   }
-
-  return table->Delete(pkList, filter, expr_nodes);
+  
+  if (!filter.empty()) {
+    logger_.Debug("[DBServer] Filter validation completed successfully");
+  }
+  
+  logger_.Debug("[DBServer] Forwarding deletion request to table layer");
+  auto result = table->Delete(pkList, filter, expr_nodes);
+  
+  if (result.ok()) {
+    logger_.Debug("[DBServer] Table deletion completed successfully: " + result.message());
+  } else {
+    logger_.Error("[DBServer] Table deletion failed: " + result.message());
+  }
+  
+  return result;
 }
 
 vectordb::query::expr::NodeType getAggregationNodeType(std::string &str, std::string& agg_nut_expr) {

@@ -14,7 +14,7 @@
 #include "db/ann_graph_segment.hpp"
 #include "db/execution/candidate.hpp"
 #include "db/index/space_l2.hpp"
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "db/vector.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
@@ -186,7 +186,7 @@ class VecSearchExecutor {
       const int64_t end,
       const ConcurrentBitset& deleted,
       vectordb::query::expr::ExprEvaluator& expr_evaluator,
-      vectordb::engine::TableSegmentMVP* table_segment,
+      vectordb::engine::TableSegment* table_segment,
       const int root_node_index);
   bool PreFilterBruteForceSearch(
       const VectorPtr query_data,
@@ -194,18 +194,18 @@ class VecSearchExecutor {
       const int64_t end,
       const ConcurrentBitset& deleted,
       vectordb::query::expr::ExprEvaluator& expr_evaluator,
-      vectordb::engine::TableSegmentMVP* table_segment,
+      vectordb::engine::TableSegment* table_segment,
       const int root_node_index);
   Status Search(
       const VectorPtr query_data,
-      vectordb::engine::TableSegmentMVP* table_segment,
+      vectordb::engine::TableSegment* table_segment,
       const size_t limit,
       std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes,
       int64_t& result_size);
 
   Status SearchByAttribute(
       meta::TableSchema& table_schema,
-      vectordb::engine::TableSegmentMVP* table_segment,
+      vectordb::engine::TableSegment* table_segment,
       const size_t skip,
       const size_t limit,
       vectordb::Json& primary_keys,

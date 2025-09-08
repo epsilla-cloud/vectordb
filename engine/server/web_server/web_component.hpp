@@ -10,6 +10,10 @@
 #include <oatpp/parser/json/mapping/Serializer.hpp>
 #include <oatpp/web/server/HttpConnectionHandler.hpp>
 #include <oatpp/web/server/HttpRouter.hpp>
+#include <oatpp-swagger/Controller.hpp>
+
+#include "swagger_component.hpp"
+#include "controller/CustomSwaggerController.hpp"
 
 namespace vectordb {
 namespace server {
@@ -18,10 +22,11 @@ namespace web {
 class WebComponent {
 
   public:
-    explicit WebComponent(uint16_t port): port_(port) {}
+    explicit WebComponent(uint16_t port): port_(port), swaggerComponent_() {}
 
   private:
     const uint16_t port_;
+    SwaggerComponent swaggerComponent_;
 
   public:
     OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::network::ServerConnectionProvider>, server_connection_provider)
@@ -58,6 +63,16 @@ class WebComponent {
         deserializerConfig->allowUnknownFields = false;
         return oatpp::parser::json::mapping::ObjectMapper::createShared(serializerConfig, deserializerConfig);
     }());
+    
+    /**
+     * @brief Create Custom Swagger UI controller with /api/docs endpoints
+     */
+    std::shared_ptr<CustomSwaggerController> createSwaggerController(const std::shared_ptr<oatpp::web::server::api::ApiController>& apiController) {
+        OATPP_COMPONENT(std::shared_ptr<oatpp::swagger::DocumentInfo>, documentInfo);
+        OATPP_COMPONENT(std::shared_ptr<oatpp::swagger::Resources>, resources);
+        
+        return CustomSwaggerController::createShared(apiController->getEndpoints(), documentInfo, resources);
+    }
 };
 
 } // name space web

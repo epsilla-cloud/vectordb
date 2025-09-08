@@ -7,7 +7,7 @@
 #include <shared_mutex>
 
 #include "db/catalog/meta.hpp"
-#include "db/table_mvp.hpp"
+#include "db/table.hpp"
 #include "utils/status.hpp"
 #include "utils/concurrent_map.hpp"
 #include "services/embedding_service.hpp"
@@ -16,21 +16,30 @@
 namespace vectordb {
 namespace engine {
 
-class DBMVP {
+/**
+ * @brief Database class - manages tables within a database instance
+ * 
+ * This class represents a database container that manages multiple tables.
+ * It handles WAL coordination, supports leader/follower replication,
+ * and provides table lifecycle management.
+ * 
+ * Renamed from DBMVP to follow standard naming conventions.
+ */
+class Database {
  public:
-  explicit DBMVP(
+  explicit Database(
     meta::DatabaseSchema& database_schema,
     int64_t init_table_scale,
     bool is_leader,
     std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service,
     std::unordered_map<std::string, std::string> &headers);
 
-  ~DBMVP() {}
+  ~Database() {}
 
   Status CreateTable(meta::TableSchema& table_schema);
   Status DeleteTable(const std::string& table_name);
   std::vector<std::string> GetTables();
-  std::shared_ptr<TableMVP> GetTable(const std::string& table_name);
+  std::shared_ptr<Table> GetTable(const std::string& table_name);
   Status Rebuild();
   Status Compact(const std::string& table_name = "", double threshold = 0.3);
   Status SwapExecutors();
@@ -48,7 +57,7 @@ class DBMVP {
 
   void SetWALEnabled(bool enabled) {
     // Use copy of vector to avoid holding lock during table operations
-    std::vector<std::shared_ptr<TableMVP>> tables_copy;
+    std::vector<std::shared_ptr<Table>> tables_copy;
     {
       std::shared_lock<std::shared_mutex> lock(tables_mutex_);
       tables_copy = tables_;  // Copy the vector of shared_ptrs
@@ -66,7 +75,7 @@ class DBMVP {
     is_leader_ = is_leader;
     
     // Use copy of vector to avoid holding lock during table operations
-    std::vector<std::shared_ptr<TableMVP>> tables_copy;
+    std::vector<std::shared_ptr<Table>> tables_copy;
     {
       std::shared_lock<std::shared_mutex> lock(tables_mutex_);
       tables_copy = tables_;  // Copy the vector of shared_ptrs
@@ -88,13 +97,17 @@ class DBMVP {
   
   // Protect tables_ vector with shared_mutex
   mutable std::shared_mutex tables_mutex_;
-  std::vector<std::shared_ptr<TableMVP>> tables_;                    // The tables in this database.
+  std::vector<std::shared_ptr<Table>> tables_;                    // The tables in this database.
   int64_t init_table_scale_;
   std::atomic<bool> is_leader_;
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 };
 
-using DBMVPPtr = std::shared_ptr<DBMVP>;
+using DatabasePtr = std::shared_ptr<Database>;
+
+// Backward compatibility typedef
+using DBMVP = Database;
+using DBMVPPtr = DatabasePtr;
 
 }  // namespace engine
 }  // namespace vectordb

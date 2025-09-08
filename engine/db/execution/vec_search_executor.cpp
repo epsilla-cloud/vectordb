@@ -747,7 +747,7 @@ bool VecSearchExecutor::BruteForceSearch(
     const int64_t end,
     const ConcurrentBitset &deleted,
     vectordb::query::expr::ExprEvaluator &expr_evaluator,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const int root_node_index) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
@@ -803,7 +803,7 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
     const int64_t end,
     const ConcurrentBitset &deleted,
     vectordb::query::expr::ExprEvaluator &expr_evaluator,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const int root_node_index) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
@@ -865,7 +865,7 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
 
 Status VecSearchExecutor::Search(
     const VectorPtr query_data,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const size_t limit,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     int64_t &result_size) {
@@ -969,7 +969,7 @@ Status VecSearchExecutor::Search(
 
 Status VecSearchExecutor::SearchByAttribute(
     meta::TableSchema &table_schema,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const size_t skip,
     const size_t raw_limit,
     vectordb::Json &primary_keys,

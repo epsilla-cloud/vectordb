@@ -15,8 +15,8 @@ namespace vectordb {
 namespace engine {
 
 // Forward declarations
-class DBMVP;
-class TableMVP;
+class Database;
+class Table;
 
 /**
  * Advanced rebuild manager with incremental and priority-based rebuilding
@@ -196,7 +196,7 @@ public:
     }
     
     // Check if a table needs rebuild
-    bool NeedsRebuild(const std::shared_ptr<TableMVP>& table,
+    bool NeedsRebuild(const std::shared_ptr<Table>& table,
                       int64_t current_records,
                       int64_t graph_records,
                       int64_t modifications) {

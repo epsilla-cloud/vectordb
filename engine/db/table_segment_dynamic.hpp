@@ -1,7 +1,7 @@
 #pragma once
 
 #include "db/dynamic_segment.hpp"
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include <memory>
 #include <string>
 #include <cstdlib>

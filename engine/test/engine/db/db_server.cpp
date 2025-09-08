@@ -759,7 +759,7 @@ TEST(DbServer, RebuildDenseVector) {
   vectordb::Json schemaObj;
 
   // read schema
-  std::ifstream schemaStream("engine/db/testdata/dense_schema_1.json");
+  std::ifstream schemaStream("../test/engine/db/testdata/dense_schema_1.json");
   std::string schema;
   schemaStream.seekg(0, std::ios::end);
   schema.reserve(schemaStream.tellg());

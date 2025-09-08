@@ -12,7 +12,7 @@
 #include "query/expr/expr_types.hpp"
 #include "utils/status.hpp"
 #include "utils/json.hpp"
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 
 namespace vectordb {
 namespace engine {
