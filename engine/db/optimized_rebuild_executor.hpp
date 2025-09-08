@@ -5,7 +5,7 @@
 #include <vector>
 #include <thread>
 #include <future>
-#include "db/table_mvp.hpp"
+#include "db/table.hpp"
 #include "db/ann_graph_segment.hpp"
 #include "logger/logger.hpp"
 #include "utils/status.hpp"
@@ -60,7 +60,7 @@ public:
     /**
      * Optimized table rebuild with parallel processing
      */
-    Status RebuildTable(std::shared_ptr<TableMVP> table,
+    Status RebuildTable(std::shared_ptr<Table> table,
                        const std::string& db_catalog_path,
                        RebuildProgress* progress = nullptr) {
         if (!table) {
@@ -136,7 +136,7 @@ public:
     }
 
 private:
-    Status PrepareRebuild(std::shared_ptr<TableMVP> table,
+    Status PrepareRebuild(std::shared_ptr<Table> table,
                          const std::string& db_catalog_path,
                          RebuildProgress* progress) {
         if (progress) {
@@ -160,7 +160,7 @@ private:
         return Status::OK();
     }
     
-    Status SaveTableData(std::shared_ptr<TableMVP> table,
+    Status SaveTableData(std::shared_ptr<Table> table,
                         const std::string& db_catalog_path,
                         RebuildProgress* progress) {
         if (progress) {
@@ -178,7 +178,7 @@ private:
         return Status::OK();
     }
     
-    Status RebuildIndices(std::shared_ptr<TableMVP> table,
+    Status RebuildIndices(std::shared_ptr<Table> table,
                          const std::string& db_catalog_path,
                          RebuildProgress* progress) {
         int64_t record_number = table->table_segment_->record_number_;
@@ -244,7 +244,7 @@ private:
         return Status::OK();
     }
     
-    Status RebuildSingleIndex(std::shared_ptr<TableMVP> table,
+    Status RebuildSingleIndex(std::shared_ptr<Table> table,
                              size_t field_idx,
                              int64_t ann_idx,
                              int64_t record_number,
@@ -299,7 +299,7 @@ private:
         return Status::OK();
     }
     
-    Status SwapExecutors(std::shared_ptr<TableMVP> table,
+    Status SwapExecutors(std::shared_ptr<Table> table,
                         RebuildProgress* progress) {
         if (progress) {
             progress->current_operation = "Swapping executors";
@@ -338,7 +338,7 @@ private:
         return Status::OK();
     }
     
-    Status VerifyRebuild(std::shared_ptr<TableMVP> table,
+    Status VerifyRebuild(std::shared_ptr<Table> table,
                         RebuildProgress* progress) {
         if (progress) {
             progress->current_operation = "Verifying rebuild";
@@ -350,7 +350,7 @@ private:
         return Status::OK();
     }
     
-    void CleanupAfterRebuild(std::shared_ptr<TableMVP> table,
+    void CleanupAfterRebuild(std::shared_ptr<Table> table,
                              const std::string& db_catalog_path,
                              RebuildProgress* progress) {
         if (progress) {
@@ -371,7 +371,7 @@ private:
                type == meta::FieldType::SPARSE_VECTOR_DOUBLE;
     }
     
-    bool NeedsRebuild(std::shared_ptr<TableMVP> table, int64_t index, int64_t record_number) {
+    bool NeedsRebuild(std::shared_ptr<Table> table, int64_t index, int64_t record_number) {
         if (record_number < globalConfig.MinimalGraphSize) {
             return false;
         }
@@ -389,7 +389,7 @@ private:
         return true;
     }
     
-    bool CanUseIncrementalRebuild(std::shared_ptr<TableMVP> table, int64_t index, int64_t record_number) {
+    bool CanUseIncrementalRebuild(std::shared_ptr<Table> table, int64_t index, int64_t record_number) {
         if (!options_.enable_incremental) {
             return false;
         }
@@ -401,7 +401,7 @@ private:
         return change_ratio < 0.3;  // Less than 30% change
     }
     
-    VectorColumnData GetVectorColumnData(std::shared_ptr<TableMVP> table, const meta::Field& field) {
+    VectorColumnData GetVectorColumnData(std::shared_ptr<Table> table, const meta::Field& field) {
         if (field.field_type_ == meta::FieldType::VECTOR_FLOAT || 
             field.field_type_ == meta::FieldType::VECTOR_DOUBLE) {
             return table->table_segment_->vector_tables_[
@@ -415,7 +415,7 @@ private:
     }
     
     std::shared_ptr<execution::ExecutorPool> CreateExecutorPool(
-        std::shared_ptr<TableMVP> table,
+        std::shared_ptr<Table> table,
         const meta::Field& field,
         int64_t ann_idx) {
         

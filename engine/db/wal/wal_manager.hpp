@@ -133,7 +133,7 @@ public:
      */
     Status Replay(meta::TableSchema& table_schema,
                   std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-                  std::shared_ptr<TableSegmentMVP> segment) {
+                  std::shared_ptr<TableSegment> segment) {
         try {
             if (wal_) {
                 wal_->Replay(table_schema, field_name_type_map, segment);

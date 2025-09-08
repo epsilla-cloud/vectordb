@@ -6,7 +6,7 @@
 #include <vector>
 #include <string>
 #include <atomic>
-#include "db/db_mvp.hpp"
+#include "db/database.hpp"
 #include "utils/concurrent_unordered_map.hpp"
 #include "logger/logger.hpp"
 
@@ -22,12 +22,12 @@ namespace engine {
 class FineGrainedDBManager {
 public:
     struct DBEntry {
-        std::shared_ptr<DBMVP> db;
+        std::shared_ptr<Database> db;
         mutable std::shared_mutex mutex;  // Per-database lock
         std::atomic<bool> is_active{true};
         std::atomic<int64_t> access_count{0};
         
-        DBEntry(std::shared_ptr<DBMVP> database) : db(std::move(database)) {}
+        DBEntry(std::shared_ptr<Database> database) : db(std::move(database)) {}
     };
     
     FineGrainedDBManager() : next_db_id_(0) {}
@@ -35,7 +35,7 @@ public:
     /**
      * @brief Add a new database with fine-grained locking
      */
-    Status AddDatabase(const std::string& db_name, std::shared_ptr<DBMVP> db) {
+    Status AddDatabase(const std::string& db_name, std::shared_ptr<Database> db) {
         // First check if database already exists (read lock on map)
         {
             std::shared_lock<std::shared_mutex> map_lock(map_mutex_);
@@ -65,7 +65,7 @@ public:
     /**
      * @brief Get database with fine-grained read lock
      */
-    std::shared_ptr<DBMVP> GetDatabase(const std::string& db_name) {
+    std::shared_ptr<Database> GetDatabase(const std::string& db_name) {
         std::shared_ptr<DBEntry> entry;
         
         // Get entry with minimal lock on map

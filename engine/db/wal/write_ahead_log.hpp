@@ -11,7 +11,7 @@
 #include <ctime>
 
 #include "db/catalog/meta_types.hpp"
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
@@ -97,7 +97,7 @@ class WriteAheadLog {
   void Replay(
     meta::TableSchema &table_schema,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    std::shared_ptr<TableSegmentMVP> segment,
+    std::shared_ptr<TableSegment> segment,
     std::unordered_map<std::string, std::string> &headers
   ) {
     std::vector<std::filesystem::path> files;
@@ -191,7 +191,7 @@ class WriteAheadLog {
   void ApplyEntry(
     meta::TableSchema &table_schema,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    std::shared_ptr<TableSegmentMVP> segment,
+    std::shared_ptr<TableSegment> segment,
     int64_t global_id,
     LogEntryType &type,
     std::string &content,

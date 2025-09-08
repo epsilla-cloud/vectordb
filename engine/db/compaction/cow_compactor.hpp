@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <chrono>
 
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "utils/status.hpp"
 #include "logger/logger.hpp"
 

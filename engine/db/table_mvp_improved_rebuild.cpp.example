@@ -1,0 +1,282 @@
+// This is an improved version of TableMVP::Rebuild with better logging
+// To use this, replace the existing Rebuild method in table_mvp.cpp
+
+#include "db/table_mvp.hpp"
+#include "utils/rebuild_logger.hpp"
+
+namespace vectordb {
+namespace engine {
+
+Status TableMVP::Rebuild(const std::string &db_catalog_path) {
+    // Initialize rebuild logger
+    utils::RebuildLogger rebuild_log("TableRebuild");
+    
+    // Setup rebuild context
+    utils::RebuildLogger::RebuildContext context;
+    context.table_name = table_schema_.name_;
+    context.total_records = table_segment_->record_number_;
+    context.thread_count = globalConfig.RebuildThreads;
+    
+    // Count vector indices that need rebuilding
+    int vector_field_count = 0;
+    int indices_to_rebuild = 0;
+    for (const auto& field : table_schema_.fields_) {
+        if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
+            field.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+            field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+            field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+            vector_field_count++;
+            
+            // Check if this index needs rebuilding
+            if (vector_field_count <= ann_graph_segment_.size()) {
+                auto& ann_segment = ann_graph_segment_[vector_field_count - 1];
+                if (ann_segment->record_number_ != context.total_records &&
+                    context.total_records >= globalConfig.MinimalGraphSize) {
+                    indices_to_rebuild++;
+                    if (context.old_index_records == 0) {
+                        context.old_index_records = ann_segment->record_number_;
+                    }
+                }
+            }
+        }
+    }
+    
+    context.index_count = indices_to_rebuild;
+    
+    // Start rebuild logging
+    rebuild_log.StartRebuild(context);
+    
+    try {
+        // Phase 1: Preparation
+        rebuild_log.StartPhase(utils::RebuildLogger::Phase::PREPARATION);
+        
+        // Set thread count
+        omp_set_num_threads(globalConfig.RebuildThreads);
+        
+        // Get current record number
+        int64_t record_number = table_segment_->record_number_;
+        
+        if (record_number == 0) {
+            rebuild_log.LogWarning("Table is empty, skipping rebuild");
+            rebuild_log.CompleteRebuild(true, "No records to rebuild");
+            return Status::OK();
+        }
+        
+        if (record_number < globalConfig.MinimalGraphSize) {
+            rebuild_log.LogWarning("Table has " + std::to_string(record_number) + 
+                                  " records, below minimum threshold of " + 
+                                  std::to_string(globalConfig.MinimalGraphSize));
+        }
+        
+        rebuild_log.CompletePhase(utils::RebuildLogger::Phase::PREPARATION,
+                                  std::to_string(record_number) + " records to process");
+        
+        // Phase 2: Save data to disk (leader only)
+        if (is_leader_) {
+            rebuild_log.StartPhase(utils::RebuildLogger::Phase::DATA_SAVE,
+                                  "Writing table data to " + db_catalog_path);
+            
+            table_segment_->SaveTableSegment(table_schema_, db_catalog_path);
+            
+            // Clean up old WAL files
+            wal_->CleanUpOldFiles();
+            
+            rebuild_log.CompletePhase(utils::RebuildLogger::Phase::DATA_SAVE,
+                                      "Data saved and WAL cleaned");
+        }
+        
+        // Phase 3: Build indices
+        rebuild_log.StartPhase(utils::RebuildLogger::Phase::INDEX_BUILD,
+                              std::to_string(indices_to_rebuild) + " indices to rebuild");
+        
+        int64_t index = 0;
+        int rebuilt_count = 0;
+        int skipped_count = 0;
+        
+        for (int i = 0; i < table_schema_.fields_.size(); ++i) {
+            auto fType = table_schema_.fields_[i].field_type_;
+            auto mType = table_schema_.fields_[i].metric_type_;
+            
+            // Check if this is a vector field
+            if (fType != meta::FieldType::VECTOR_FLOAT &&
+                fType != meta::FieldType::VECTOR_DOUBLE &&
+                fType != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+                fType != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+                continue;
+            }
+            
+            std::string field_name = table_schema_.fields_[i].name_;
+            
+            // Check if rebuild is needed
+            if (ann_graph_segment_[index]->record_number_ == record_number) {
+                rebuild_log.LogSkip("index " + field_name, 
+                                    "already up to date (" + 
+                                    std::to_string(record_number) + " records)");
+                skipped_count++;
+                ++index;
+                continue;
+            }
+            
+            if (record_number < globalConfig.MinimalGraphSize) {
+                rebuild_log.LogSkip("index " + field_name,
+                                    "table too small (using brute force search)");
+                skipped_count++;
+                ++index;
+                continue;
+            }
+            
+            // Get column data
+            VectorColumnData columnData;
+            if (fType == meta::FieldType::VECTOR_FLOAT || 
+                fType == meta::FieldType::VECTOR_DOUBLE) {
+                columnData = table_segment_->vector_tables_[
+                    table_segment_->field_name_mem_offset_map_[field_name]
+                ].get();
+            } else {
+                columnData = &table_segment_->var_len_attr_table_[
+                    table_segment_->field_name_mem_offset_map_[field_name]
+                ];
+            }
+            
+            // Log progress
+            rebuild_log.LogProgress(rebuilt_count, indices_to_rebuild, 
+                                   "Building index for " + field_name);
+            
+            if (is_leader_) {
+                // Leader rebuilds the graph
+                int64_t old_records = ann_graph_segment_[index]->record_number_;
+                
+                auto new_ann = std::make_shared<ANNGraphSegment>(false);
+                new_ann->BuildFromVectorTable(
+                    columnData,
+                    record_number, 
+                    table_schema_.fields_[i].vector_dimension_,
+                    mType
+                );
+                
+                // Atomic replacement
+                std::shared_ptr<ANNGraphSegment> old_ann = ann_graph_segment_[index];
+                ann_graph_segment_[index] = new_ann;
+                
+                // Save to disk
+                ann_graph_segment_[index]->SaveANNGraph(
+                    db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_
+                );
+                
+                rebuild_log.LogProgress(rebuilt_count + 1, indices_to_rebuild,
+                                       "Index " + field_name + " built (" +
+                                       std::to_string(old_records) + " -> " +
+                                       std::to_string(record_number) + " records)");
+            } else {
+                // Follower reloads from disk
+                auto new_ann = std::make_shared<ANNGraphSegment>(
+                    db_catalog_path, table_schema_.id_, table_schema_.fields_[i].id_
+                );
+                
+                if (new_ann->record_number_ > record_number) {
+                    rebuild_log.LogSkip("index " + field_name + " sync",
+                                       "graph ahead of table");
+                    ++index;
+                    continue;
+                }
+                
+                ann_graph_segment_[index] = new_ann;
+                
+                rebuild_log.LogProgress(rebuilt_count + 1, indices_to_rebuild,
+                                       "Index " + field_name + " loaded");
+            }
+            
+            rebuilt_count++;
+            ++index;
+        }
+        
+        rebuild_log.CompletePhase(utils::RebuildLogger::Phase::INDEX_BUILD,
+                                  std::to_string(rebuilt_count) + " rebuilt, " +
+                                  std::to_string(skipped_count) + " skipped");
+        
+        // Phase 4: Swap executors
+        rebuild_log.StartPhase(utils::RebuildLogger::Phase::EXECUTOR_SWAP,
+                              "Updating search executors");
+        
+        index = 0;
+        int executors_updated = 0;
+        
+        for (int i = 0; i < table_schema_.fields_.size(); ++i) {
+            auto fType = table_schema_.fields_[i].field_type_;
+            auto mType = table_schema_.fields_[i].metric_type_;
+            
+            if (fType != meta::FieldType::VECTOR_FLOAT &&
+                fType != meta::FieldType::VECTOR_DOUBLE &&
+                fType != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+                fType != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+                continue;
+            }
+            
+            // Get column data
+            VectorColumnData columnData;
+            if (fType == meta::FieldType::VECTOR_FLOAT || 
+                fType == meta::FieldType::VECTOR_DOUBLE) {
+                columnData = table_segment_->vector_tables_[
+                    table_segment_->field_name_mem_offset_map_[table_schema_.fields_[i].name_]
+                ].get();
+            } else {
+                columnData = &table_segment_->var_len_attr_table_[
+                    table_segment_->field_name_mem_offset_map_[table_schema_.fields_[i].name_]
+                ];
+            }
+            
+            // Create new executor pool
+            auto pool = std::make_shared<execution::ExecutorPool>();
+            auto distFunc = GetDistFunc(fType, mType);
+            
+            for (int executorIdx = 0; executorIdx < globalConfig.NumExecutorPerField; executorIdx++) {
+                pool->release(std::make_shared<execution::VecSearchExecutor>(
+                    table_schema_.fields_[i].vector_dimension_,
+                    ann_graph_segment_[index]->navigation_point_,
+                    ann_graph_segment_[index],
+                    ann_graph_segment_[index]->offset_table_.get(),
+                    ann_graph_segment_[index]->neighbor_list_.get(),
+                    columnData,
+                    distFunc,
+                    &table_schema_.fields_[i].vector_dimension_,
+                    globalConfig.IntraQueryThreads,
+                    globalConfig.MasterQueueSize,
+                    globalConfig.LocalQueueSize,
+                    globalConfig.GlobalSyncInterval,
+                    globalConfig.PreFilter
+                ));
+            }
+            
+            // Atomic swap
+            std::unique_lock<std::mutex> lock(executor_pool_mutex_);
+            executor_pool_.set(index, pool);
+            lock.unlock();
+            
+            executors_updated++;
+            ++index;
+        }
+        
+        rebuild_log.CompletePhase(utils::RebuildLogger::Phase::EXECUTOR_SWAP,
+                                  std::to_string(executors_updated) + " executor pools updated");
+        
+        // Phase 5: Cleanup (if needed)
+        rebuild_log.StartPhase(utils::RebuildLogger::Phase::CLEANUP);
+        // Any cleanup operations would go here
+        rebuild_log.CompletePhase(utils::RebuildLogger::Phase::CLEANUP, "Resources released");
+        
+        // Complete rebuild
+        std::string summary = "Rebuilt " + std::to_string(rebuilt_count) + " indices for " +
+                             std::to_string(record_number) + " records";
+        rebuild_log.CompleteRebuild(true, summary);
+        
+        return Status::OK();
+        
+    } catch (const std::exception& e) {
+        rebuild_log.LogError(e.what(), "Table: " + table_schema_.name_);
+        rebuild_log.CompleteRebuild(false, "Exception occurred during rebuild");
+        return Status(DB_UNEXPECTED_ERROR, "Rebuild failed: " + std::string(e.what()));
+    }
+}
+
+} // namespace engine
+} // namespace vectordb

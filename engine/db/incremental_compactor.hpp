@@ -5,7 +5,7 @@
 #include <condition_variable>
 #include <queue>
 #include <memory>
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "logger/logger.hpp"
 #include "utils/status.hpp"
 
@@ -76,7 +76,7 @@ public:
     }
     
     // Register a segment for compaction monitoring
-    void RegisterSegment(std::shared_ptr<TableSegmentMVP> segment, const std::string& segment_name) {
+    void RegisterSegment(std::shared_ptr<TableSegment> segment, const std::string& segment_name) {
         std::lock_guard<std::mutex> lock(segments_mutex_);
         segments_[segment_name] = segment;
         logger_.Debug("Registered segment for compaction: " + segment_name);
@@ -95,7 +95,7 @@ public:
     }
     
     // Perform incremental compaction on a segment
-    Status CompactSegmentIncremental(TableSegmentMVP* segment) {
+    Status CompactSegmentIncremental(TableSegment* segment) {
         if (segment == nullptr) {
             return Status(DB_UNEXPECTED_ERROR, "Null segment provided for compaction");
         }
@@ -164,7 +164,7 @@ private:
         size_t new_segment_size;
     };
     
-    CompactionPlan CreateCompactionPlan(TableSegmentMVP* segment, size_t deleted_count) {
+    CompactionPlan CreateCompactionPlan(TableSegment* segment, size_t deleted_count) {
         CompactionPlan plan;
         size_t total_records = segment->record_number_.load();
         plan.new_segment_size = total_records - deleted_count;
@@ -197,7 +197,7 @@ private:
         return plan;
     }
     
-    Status ExecuteCompactionPlan(TableSegmentMVP* segment, const CompactionPlan& plan) {
+    Status ExecuteCompactionPlan(TableSegment* segment, const CompactionPlan& plan) {
         if (plan.records_to_move == 0) {
             return Status::OK();
         }
@@ -283,7 +283,7 @@ private:
         return Status::OK();
     }
     
-    void UpdatePrimaryKeyMapping(TableSegmentMVP* segment, size_t old_idx, size_t new_idx) {
+    void UpdatePrimaryKeyMapping(TableSegment* segment, size_t old_idx, size_t new_idx) {
         if (segment->pk_field_idx_ == nullptr) {
             return;  // No primary key
         }
@@ -343,7 +343,7 @@ private:
             }
             
             // Check all registered segments for compaction needs
-            std::vector<std::pair<std::string, std::shared_ptr<TableSegmentMVP>>> to_compact;
+            std::vector<std::pair<std::string, std::shared_ptr<TableSegment>>> to_compact;
             {
                 std::lock_guard<std::mutex> seg_lock(segments_mutex_);
                 for (const auto& [name, segment] : segments_) {
@@ -384,7 +384,7 @@ private:
     std::condition_variable cv_;
     
     std::mutex segments_mutex_;
-    std::unordered_map<std::string, std::shared_ptr<TableSegmentMVP>> segments_;
+    std::unordered_map<std::string, std::shared_ptr<TableSegment>> segments_;
     
     mutable std::mutex stats_mutex_;
     CompactionStats stats_;

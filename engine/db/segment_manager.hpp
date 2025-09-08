@@ -7,7 +7,7 @@
 #include <shared_mutex>
 #include <thread>
 #include <functional>
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "db/catalog/meta.hpp"
 #include "logger/logger.hpp"
 #include "utils/status.hpp"
@@ -116,14 +116,14 @@ private:
     // Internal segment wrapper
     struct Segment {
         size_t segment_id;
-        std::shared_ptr<TableSegmentMVP> segment;
+        std::shared_ptr<TableSegment> segment;
         std::atomic<size_t> record_count;
         std::atomic<size_t> deleted_count;
         std::chrono::steady_clock::time_point created_time;
         std::chrono::steady_clock::time_point last_modified;
         mutable std::shared_mutex mutex;  // Per-segment read-write lock
         
-        Segment(size_t id, std::shared_ptr<TableSegmentMVP> seg)
+        Segment(size_t id, std::shared_ptr<TableSegment> seg)
             : segment_id(id), segment(seg), record_count(0), deleted_count(0) {
             created_time = std::chrono::steady_clock::now();
             last_modified = created_time;
@@ -293,7 +293,7 @@ private:
     std::shared_ptr<Segment> CreateNewSegment(size_t shard_id) {
         size_t segment_id = next_segment_id_.fetch_add(1);
         
-        auto segment_mvp = std::make_shared<TableSegmentMVP>(
+        auto segment_mvp = std::make_shared<TableSegment>(
             table_schema_, 
             segment_config_.optimal_segment_size,
             nullptr  // embedding_service can be passed here
@@ -317,7 +317,7 @@ private:
         std::unique_lock<std::shared_mutex> lock2(seg2->mutex);
         
         // Create new merged segment
-        auto merged_segment = std::make_shared<TableSegmentMVP>(
+        auto merged_segment = std::make_shared<TableSegment>(
             table_schema_,
             segment_config_.optimal_segment_size,
             nullptr

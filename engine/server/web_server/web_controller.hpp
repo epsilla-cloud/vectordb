@@ -12,9 +12,9 @@
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/catalog/meta.hpp"
-#include "db/db_mvp.hpp"
+#include "db/database.hpp"
 #include "db/db_server.hpp"
-#include "db/table_mvp.hpp"
+#include "db/table.hpp"
 #include "db/vector.hpp"
 #include "server/web_server/dto/db_dto.hpp"
 #include "server/web_server/dto/status_dto.hpp"
@@ -648,9 +648,11 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     vectordb::Json pks;
     pks.LoadFromString("[]");
+    size_t pk_count = 0;
     if (requestBody.HasMember("primaryKeys")) {
       pks = requestBody.GetArray("primaryKeys");
-      if (pks.GetSize() == 0) {
+      pk_count = pks.GetSize();
+      if (pk_count == 0) {
         dto->statusCode = Status::CODE_400.code;
         dto->message = "If the primaryKeys field is provided, it cannot be empty.";
         return createDtoResponse(Status::CODE_400, dto);
@@ -668,14 +670,34 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     auto table = requestBody.GetString("table");
+    
+    // Log deletion request details
+    std::string log_msg = "[WEB] Starting deletion request for db=" + db_name + 
+                         ", table=" + table;
+    if (pk_count > 0) {
+      log_msg += ", primaryKeys=" + std::to_string(pk_count) + " items";
+    }
+    if (!filter.empty()) {
+      log_msg += ", filter=[" + filter + "]";
+    }
+    OATPP_LOGD("WebController", "%s", log_msg.c_str());
+    
     auto status = db_server->Delete(db_name, table, pks, filter);
     if (status.ok()) {
+      // Log successful deletion
+      OATPP_LOGD("WebController", "[WEB] Deletion completed successfully for db=%s, table=%s, result=%s", 
+                 db_name->c_str(), table.c_str(), status.message().c_str());
+      
       vectordb::Json response;
       response.LoadFromString("{\"result\": " + status.message() + "}");
       response.SetInt("statusCode", Status::CODE_200.code);
       response.SetString("message", "Delete data from " + table + " successfully.");
       return createResponse(Status::CODE_200, response.DumpToString());
     } else {
+      // Log deletion failure
+      OATPP_LOGE("WebController", "[WEB] Deletion failed for db=%s, table=%s, error=%s", 
+                 db_name->c_str(), table.c_str(), status.message().c_str());
+      
       dto->statusCode = Status::CODE_400.code;
       dto->message = status.message();
       return createDtoResponse(Status::CODE_400, dto);

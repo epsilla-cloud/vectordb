@@ -8,8 +8,8 @@
 #include <shared_mutex>
 
 #include "db/catalog/meta.hpp"
-#include "db/db_mvp.hpp"
-#include "db/table_mvp.hpp"
+#include "db/database.hpp"
+#include "db/table.hpp"
 #include "db/vector.hpp"
 #include "query/expr/expr.hpp"
 #include "utils/status.hpp"
@@ -36,7 +36,7 @@ class DBServer {
   Status CreateTable(const std::string& db_name, meta::TableSchema& table_schema, size_t& table_id);
   Status CreateTable(const std::string& db_name, const std::string& table_schema_json, size_t& table_id);
   Status DropTable(const std::string& db_name, const std::string& table_name);
-  std::shared_ptr<DBMVP> GetDB(const std::string& db_name);
+  std::shared_ptr<Database> GetDB(const std::string& db_name);
   Status ListTables(const std::string& db_name, std::vector<std::string>& table_names);
   Status Insert(const std::string& db_name, const std::string& table_name, vectordb::Json& records, std::unordered_map<std::string, std::string> &headers, bool upsert = false);
   Status InsertPrepare(const std::string& db_name, const std::string& table_name, vectordb::Json& pks, vectordb::Json& result);
@@ -108,7 +108,7 @@ class DBServer {
     meta_->SetLeader(is_leader_);
     
     // Use copy of vector to avoid holding lock during DB operations
-    std::vector<std::shared_ptr<DBMVP>> dbs_copy;
+    std::vector<std::shared_ptr<Database>> dbs_copy;
     {
       std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
       dbs_copy = dbs_;  // Copy the vector of shared_ptrs
@@ -145,7 +145,7 @@ class DBServer {
   
   // Protect dbs_ vector with shared_mutex
   mutable std::shared_mutex dbs_mutex_;
-  std::vector<std::shared_ptr<DBMVP>> dbs_;                    // The dbs.
+  std::vector<std::shared_ptr<Database>> dbs_;                    // The dbs.
   std::thread rebuild_thread_;
   bool stop_rebuild_thread_ = false;
   bool rebuild_started_ = false;

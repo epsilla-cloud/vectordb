@@ -63,4 +63,7 @@ install_module "oatpp" "oatpp" "1.3.0"
 # Install oatpp-curl
 install_module "epsilla-cloud" "oatpp-curl" "epsilla"
 
+# Install oatpp-swagger
+install_module "oatpp" "oatpp-swagger" "1.3.0"
+
 ##########################################################
