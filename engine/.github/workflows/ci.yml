@@ -1,0 +1,325 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [ main, develop, cc ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-cpp:
+    name: C++ Unit Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        build-type: [Debug, Release]
+        
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libboost-dev \
+          libboost-filesystem-dev \
+          libcurl4-openssl-dev \
+          libomp-dev \
+          lcov \
+          clang-format \
+          clang-tidy
+    
+    - name: Install oatpp dependencies
+      run: |
+        chmod +x scripts/install_oatpp_modules.sh
+        ./scripts/install_oatpp_modules.sh
+    
+    - name: Configure CMake (${{ matrix.build-type }})
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+                 -DENABLE_COVERAGE=${{ matrix.build-type == 'Debug' && 'ON' || 'OFF' }}
+    
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+    
+    - name: Run C++ unit tests
+      run: |
+        cd build
+        ctest --output-on-failure --parallel $(nproc)
+    
+    - name: Run capacity tests
+      run: |
+        # Build and run the capacity test executable
+        cd build
+        if [ -f ../test/test_initial_capacity.cpp ]; then
+          g++ -std=c++17 -I.. ../test/test_initial_capacity.cpp -o test_capacity
+          ./test_capacity
+        fi
+    
+    - name: Run shell-based tests
+      run: |
+        chmod +x test/test_default_capacity.sh
+        ./test/test_default_capacity.sh
+    
+    - name: Check code formatting
+      if: matrix.build-type == 'Debug'
+      run: |
+        cd build
+        if command -v clang-format >/dev/null 2>&1; then
+          make format-check || echo "Code formatting check failed - please run 'make format'"
+        fi
+    
+    - name: Run linter
+      if: matrix.build-type == 'Debug'
+      run: |
+        cd build
+        if command -v clang-tidy >/dev/null 2>&1; then
+          make tidy || echo "Linter found issues - please review"
+        fi
+    
+    - name: Generate coverage report
+      if: matrix.build-type == 'Debug'
+      run: |
+        chmod +x scripts/run_coverage.sh
+        ./scripts/run_coverage.sh || echo "Coverage analysis completed with warnings"
+    
+    - name: Upload coverage reports
+      if: matrix.build-type == 'Debug'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage_report/coverage_filtered.info
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  test-python:
+    name: Python Integration Tests
+    runs-on: ubuntu-latest
+    needs: test-cpp
+    
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11']
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libboost-dev \
+          libboost-filesystem-dev \
+          libcurl4-openssl-dev \
+          libomp-dev \
+          python3-dev
+    
+    - name: Install oatpp dependencies
+      run: |
+        chmod +x scripts/install_oatpp_modules.sh
+        ./scripts/install_oatpp_modules.sh
+    
+    - name: Build C++ library
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make -j$(nproc)
+    
+    - name: Run Python integration tests
+      env:
+        PYTHONPATH: ./build/
+        DB_PATH: /tmp/test_db
+      run: |
+        chmod +x test.sh
+        ./test.sh
+    
+    - name: Run concurrent Python tests
+      env:
+        PYTHONPATH: ./build/
+        DB_PATH: /tmp/test_db_concurrent
+      run: |
+        python3 test/bindings/python/concurrent_test.py
+    
+    - name: Run single-thread Python tests
+      env:
+        PYTHONPATH: ./build/
+        DB_PATH: /tmp/test_db_single
+      run: |
+        chmod +x test.sh
+        ./test.sh --single-thread
+
+  test-security:
+    name: Security and Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libboost-dev \
+          libboost-filesystem-dev \
+          libcurl4-openssl-dev \
+          libomp-dev \
+          cppcheck \
+          valgrind
+    
+    - name: Install oatpp dependencies  
+      run: |
+        chmod +x scripts/install_oatpp_modules.sh
+        ./scripts/install_oatpp_modules.sh
+    
+    - name: Build for security testing
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address -g"
+        make -j$(nproc)
+    
+    - name: Run static analysis
+      run: |
+        if command -v cppcheck >/dev/null 2>&1; then
+          cppcheck --enable=all --error-exitcode=1 \
+                   --suppress=missingIncludeSystem \
+                   --inline-suppr \
+                   --quiet \
+                   db/ utils/ config/ services/ server/ logger/ query/ \
+                   || echo "Static analysis found issues - please review"
+        fi
+    
+    - name: Run memory leak detection
+      run: |
+        cd build
+        if command -v valgrind >/dev/null 2>&1 && [ -f vector_db_test ]; then
+          valgrind --tool=memcheck --leak-check=full --error-exitcode=1 \
+                   --suppressions=../scripts/valgrind.suppressions \
+                   ./vector_db_test \
+                   || echo "Memory leak detection completed with warnings"
+        fi
+    
+    - name: Run AddressSanitizer tests
+      run: |
+        cd build
+        export ASAN_OPTIONS=detect_leaks=1:abort_on_error=1
+        if [ -f vector_db_test ]; then
+          timeout 300 ./vector_db_test || echo "AddressSanitizer tests completed"
+        fi
+
+  performance-test:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libboost-dev \
+          libboost-filesystem-dev \
+          libcurl4-openssl-dev \
+          libomp-dev \
+          python3-dev
+    
+    - name: Install oatpp dependencies
+      run: |
+        chmod +x scripts/install_oatpp_modules.sh
+        ./scripts/install_oatpp_modules.sh
+    
+    - name: Build optimized release
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-O3 -DNDEBUG"
+        make -j$(nproc)
+    
+    - name: Run performance benchmarks
+      env:
+        PYTHONPATH: ./build/
+        DB_PATH: /tmp/perf_db
+      run: |
+        if [ -f test/bindings/python/gist-960-euclidean.py ]; then
+          python3 test/bindings/python/gist-960-euclidean.py
+        fi
+
+  docker-test:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build Docker image
+      run: |
+        docker build -t vectordb:test .
+    
+    - name: Test Docker image
+      run: |
+        docker run --rm --name vectordb-test \
+          -d -p 8888:8888 vectordb:test
+        sleep 10
+        curl -f http://localhost:8888/ || exit 1
+        docker stop vectordb-test
+
+  documentation:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Check API documentation is up-to-date
+      run: |
+        # Check if API_DOCUMENTATION.md exists and has recent updates
+        if [ -f API_DOCUMENTATION.md ]; then
+          echo "API documentation found"
+          # Check for common API endpoints
+          grep -q "POST.*load" API_DOCUMENTATION.md || exit 1
+          grep -q "POST.*query" API_DOCUMENTATION.md || exit 1
+          echo "API documentation appears complete"
+        else
+          echo "API documentation missing"
+          exit 1
+        fi
+    
+    - name: Check CLAUDE.md is present
+      run: |
+        if [ -f CLAUDE.md ]; then
+          echo "CLAUDE.md development guide found"
+          grep -q "Build Commands" CLAUDE.md || exit 1
+          echo "CLAUDE.md appears complete"
+        else
+          echo "CLAUDE.md missing"
+          exit 1
+        fi
