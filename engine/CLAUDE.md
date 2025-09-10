@@ -42,19 +42,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Performance**: Faster deletions, but uses more memory over time
 - **Use Case**: Frequent deletions with occasional compaction
 
-### Hard Delete (并发安全版本)
+### Hard Delete (Concurrent Safe Version)
 - **Mode**: `SOFT_DELETE=false` 
 - **Behavior**: Records are physically removed from memory immediately with concurrent safety
 - **Performance**: Slower deletions due to data shifting, but immediate memory reclaim
 - **Concurrency**: Thread-safe batch deletion with exclusive locking
 - **Use Case**: Memory-constrained environments or when immediate space reclaim is needed
 
-#### Hard Delete 并发安全特性
-- **Batch Processing**: 批量删除避免单个记录处理时的竞争条件
-- **Exclusive Locking**: 使用独占锁防止删除期间的并发访问
-- **Primary Key Index Rebuild**: 删除后重建主键索引确保一致性
-- **Data Compaction**: 一次性数据压缩减少内存碎片
-- **Atomic Operations**: 记录计数和状态更新的原子操作
+#### Hard Delete Concurrent Safety Features
+- **Batch Processing**: Batch deletion avoids race conditions on individual records
+- **Exclusive Locking**: Uses exclusive locks to prevent concurrent access during deletion
+- **Primary Key Index Rebuild**: Rebuilds primary key index after deletion to ensure consistency
+- **Data Compaction**: One-time data compaction reduces memory fragmentation
+- **Atomic Operations**: Atomic operations for record count and state updates
 
 ### Configuration
 - Set via environment variable: `export SOFT_DELETE=false`
