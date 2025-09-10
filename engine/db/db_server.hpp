@@ -27,6 +27,30 @@ class DBServer {
   DBServer();
 
   ~DBServer();
+  
+  // WAL flush management
+  void StartWALFlushThread();
+  void StopWALFlushThread();
+  Status FlushAllWAL();
+  
+  // WAL flush statistics
+  struct WALFlushStats {
+    uint64_t total_flushes;
+    uint64_t successful_flushes;
+    uint64_t failed_flushes;
+    uint64_t last_flush_time;
+    uint64_t total_flush_duration_ms;
+  };
+  
+  WALFlushStats GetWALFlushStats() const {
+    WALFlushStats stats;
+    stats.total_flushes = wal_flush_stats_total_flushes_.load();
+    stats.successful_flushes = wal_flush_stats_successful_flushes_.load();
+    stats.failed_flushes = wal_flush_stats_failed_flushes_.load();
+    stats.last_flush_time = wal_flush_stats_last_flush_time_.load();
+    stats.total_flush_duration_ms = wal_flush_stats_total_duration_ms_.load();
+    return stats;
+  }
 
   Status LoadDB(const std::string& db_name, const std::string& db_catalog_path, int64_t init_table_scale, bool wal_enabled, std::unordered_map<std::string, std::string> &headers);
   Status UnloadDB(const std::string& db_name);
@@ -150,6 +174,21 @@ class DBServer {
   bool stop_rebuild_thread_ = false;
   bool rebuild_started_ = false;
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
+  
+  // WAL flush thread management
+  std::thread wal_flush_thread_;
+  std::atomic<bool> stop_wal_flush_thread_{false};
+  std::atomic<bool> wal_flush_thread_started_{false};
+  
+  // WAL flush statistics (using atomic for thread safety)
+  std::atomic<uint64_t> wal_flush_stats_total_flushes_{0};
+  std::atomic<uint64_t> wal_flush_stats_successful_flushes_{0};
+  std::atomic<uint64_t> wal_flush_stats_failed_flushes_{0};
+  std::atomic<uint64_t> wal_flush_stats_last_flush_time_{0};
+  std::atomic<uint64_t> wal_flush_stats_total_duration_ms_{0};
+  
+  // Private WAL flush worker
+  void WALFlushWorker();
 
   // periodically in a separate thread
   void RebuildPeriodically() {

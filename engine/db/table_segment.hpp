@@ -20,6 +20,7 @@
 #include "utils/status.hpp"
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
+#include "config/config.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -96,6 +97,20 @@ class TableSegment {
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
 
   Status Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id);
+  
+  // Hard delete methods - physically remove data instead of marking as deleted
+  Status HardDelete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id);
+  Status SafeHardDeleteByID(size_t id); // Concurrency-safe version
+  Status HardDeleteByStringPK(const std::string& pk, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index);
+  
+  // Batch hard delete for better concurrency control
+  Status BatchHardDelete(const std::vector<size_t>& ids_to_delete);
+  
+  // Helper methods for concurrent hard delete
+  Status CompactDataStructures(const std::vector<size_t>& sorted_ids);
+  void RebuildPrimaryKeyIndex();
+  
+  // HardDeleteByIntPK is implemented inline below
 
   // Convert a primary key to an internal id
   bool PK2ID(Json& record, size_t& id);
@@ -184,6 +199,23 @@ class TableSegment {
         logger_.Debug("[TableSegment] Marked record id=" + std::to_string(result) + 
                      " as deleted in bitset and removed INT pk=" + std::to_string(pk) + " from index");
         return Status::OK();
+      } else {
+        logger_.Debug("[TableSegment] Record with INT pk=" + std::to_string(pk) + 
+                     " found at id=" + std::to_string(result) + " but skipped by filter");
+      }
+    } else {
+      logger_.Debug("[TableSegment] Record with INT pk=" + std::to_string(pk) + " not found in primary key index");
+    }
+    return Status(RECORD_NOT_FOUND, "Record with primary key not exist or skipped by filter: " + std::to_string(pk));
+  }
+
+  template <typename T>
+  Status HardDeleteByIntPK(T pk, vectordb::query::expr::ExprEvaluator& evaluator, int filter_root_index) {
+    size_t result = 0;
+    auto found = primary_key_.getKey(pk, result);
+    if (found) {
+      if (evaluator.LogicalEvaluate(filter_root_index, result)) {
+        return SafeHardDeleteByID(result); // Use safe concurrent version
       } else {
         logger_.Debug("[TableSegment] Record with INT pk=" + std::to_string(pk) + 
                      " found at id=" + std::to_string(result) + " but skipped by filter");

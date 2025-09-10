@@ -88,8 +88,10 @@ class WriteAheadLog {
     fflush(file_);
     // Ensure data is written to disk for durability
     if (fsync(fileno(file_)) != 0) {
-      logger_.Warning("WAL fsync failed: " + std::string(strerror(errno)));
-      // Continue execution but log the warning
+      std::string error_msg = "Critical: WAL fsync failed: " + std::string(strerror(errno));
+      logger_.Error(error_msg);
+      // For critical operations, throw exception to prevent data loss
+      throw std::runtime_error(error_msg);
     }
     return next;
   }
@@ -177,6 +179,17 @@ class WriteAheadLog {
 
   void SetEnabled(bool enabled) {
     enabled_ = enabled;
+  }
+
+  void Flush() {
+    if (file_ != nullptr) {
+      fflush(file_);
+      // Force sync to disk - critical for data safety
+      if (fsync(fileno(file_)) != 0) {
+        logger_.Error("Critical: WAL fsync failed during flush: " + std::string(strerror(errno)));
+        throw std::runtime_error("WAL flush failed: " + std::string(strerror(errno)));
+      }
+    }
   }
 
   void SetLeader(bool is_leader) {

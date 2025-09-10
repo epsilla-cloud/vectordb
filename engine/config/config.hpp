@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic> // Include for std::atomic
+#include <cctype> // Include for ::tolower
 #include <cstddef>
 #include <cstdlib> // Include for std::getenv and std::atoi
 #include <exception>
@@ -25,6 +26,11 @@ struct Config {
   std::atomic<int> NumExecutorPerField{16};
   std::atomic<int> RebuildThreads;
   std::atomic<bool> PreFilter{false};
+  std::atomic<bool> SoftDelete{true};
+  
+  // WAL auto-flush configuration
+  std::atomic<int> WALFlushInterval{30};  // Default: flush every 30 seconds
+  std::atomic<bool> WALAutoFlush{true};   // Enable/disable auto flush
   
   // Constructor to initialize thread counts based on hardware
   Config() {
@@ -50,9 +56,43 @@ struct Config {
     // Use up to 4 threads for rebuild to avoid overwhelming the system
     RebuildThreads.store(static_cast<int>(std::min(hw_threads, 4u)), std::memory_order_release);
     
+    // Check environment variable for soft delete mode
+    const char* env_soft_delete = std::getenv("SOFT_DELETE");
+    bool soft_delete_enabled = true; // Default to soft delete
+    if (env_soft_delete != nullptr) {
+      std::string env_value(env_soft_delete);
+      // Convert to lowercase for case-insensitive comparison
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      soft_delete_enabled = (env_value == "true" || env_value == "1" || env_value == "yes");
+      printf("[Config] Using SOFT_DELETE=%s from environment (soft delete %s)\n", 
+             env_soft_delete, soft_delete_enabled ? "enabled" : "disabled");
+    }
+    SoftDelete.store(soft_delete_enabled, std::memory_order_release);
+    
+    // Check environment variable for WAL flush interval
+    const char* env_wal_interval = std::getenv("WAL_FLUSH_INTERVAL");
+    if (env_wal_interval != nullptr) {
+      int interval = std::atoi(env_wal_interval);
+      if (interval >= 5 && interval <= 3600) {  // Between 5 seconds and 1 hour
+        WALFlushInterval.store(interval, std::memory_order_release);
+        printf("[Config] Using WAL_FLUSH_INTERVAL=%d seconds from environment\n", interval);
+      }
+    }
+    
+    // Check environment variable for WAL auto flush
+    const char* env_wal_auto = std::getenv("WAL_AUTO_FLUSH");
+    if (env_wal_auto != nullptr) {
+      std::string env_value(env_wal_auto);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool auto_flush = (env_value == "true" || env_value == "1" || env_value == "yes");
+      WALAutoFlush.store(auto_flush, std::memory_order_release);
+      printf("[Config] Using WAL_AUTO_FLUSH=%s from environment\n", auto_flush ? "true" : "false");
+    }
+    
     // Log the configuration
-    printf("[Config] Initialized with IntraQueryThreads=%d, RebuildThreads=%d (detected %u hardware threads)\n", 
-           IntraQueryThreads.load(), RebuildThreads.load(), hw_threads);
+    printf("[Config] Initialized with IntraQueryThreads=%d, RebuildThreads=%d, SoftDelete=%s, WALFlushInterval=%ds (detected %u hardware threads)\n", 
+           IntraQueryThreads.load(), RebuildThreads.load(), SoftDelete.load() ? "true" : "false", 
+           WALFlushInterval.load(), hw_threads);
   }
 
   // Setter method for IntraQueryThreads
@@ -113,6 +153,14 @@ struct Config {
     if (json.HasMember("PreFilter")) {
       PreFilter.store(json.GetBool("PreFilter"));
     }
+    if (json.HasMember("SoftDelete")) {
+      setSoftDelete(json.GetBool("SoftDelete"));
+    }
+  }
+  
+  // Setter method for SoftDelete mode
+  void setSoftDelete(bool value) {
+    SoftDelete.store(value, std::memory_order_release);
   }
   
   // Get current configuration as JSON for debugging
@@ -126,6 +174,7 @@ struct Config {
     config.SetInt("NumExecutorPerField", NumExecutorPerField.load(std::memory_order_acquire));
     config.SetInt("RebuildThreads", RebuildThreads.load(std::memory_order_acquire));
     config.SetBool("PreFilter", PreFilter.load(std::memory_order_acquire));
+    config.SetBool("SoftDelete", SoftDelete.load(std::memory_order_acquire));
     return config;
   }
 };
