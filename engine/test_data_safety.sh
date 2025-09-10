@@ -1,21 +1,21 @@
 #!/bin/bash
 
-echo "=== VectorDB数据安全性测试 ==="
+echo "=== VectorDB Data Safety Test ==="
 echo ""
-echo "本测试验证DB unload时的数据持久化改进"
+echo "This test verifies data persistence improvements during DB unload"
 echo ""
 
-# 测试目录
+# Test directory
 TEST_DIR="/tmp/vectordb_safety_demo"
 rm -rf $TEST_DIR
 mkdir -p $TEST_DIR
 
-echo "1. 启动VectorDB服务器..."
+echo "1. Starting VectorDB server..."
 ./vectordb -d $TEST_DIR &
 SERVER_PID=$!
 sleep 2
 
-echo "2. 创建测试数据库和表..."
+echo "2. Creating test database and table..."
 curl -X POST "http://localhost:8888/api/load" \
   -H "Content-Type: application/json" \
   -d '{
@@ -25,7 +25,7 @@ curl -X POST "http://localhost:8888/api/load" \
   }' 2>/dev/null
 
 echo ""
-echo "3. 创建表结构..."
+echo "3. Creating table schema..."
 curl -X POST "http://localhost:8888/api/safety_test_db/schema/tables" \
   -H "Content-Type: application/json" \
   -d '{
@@ -37,7 +37,7 @@ curl -X POST "http://localhost:8888/api/safety_test_db/schema/tables" \
   }' 2>/dev/null
 
 echo ""
-echo "4. 插入测试数据..."
+echo "4. Inserting test data..."
 for i in {1..10}; do
   VECTOR=$(python3 -c "import json; print(json.dumps([0.5] * 128))")
   curl -X POST "http://localhost:8888/api/safety_test_db/data/insert" \
@@ -49,17 +49,17 @@ for i in {1..10}; do
 done
 
 echo ""
-echo "5. 查询记录数(unload前)..."
+echo "5. Querying record count (before unload)..."
 COUNT_BEFORE=$(curl -s "http://localhost:8888/api/safety_test_db/records/count?table=test_table" | grep -o '"count":[0-9]*' | cut -d: -f2)
-echo "   记录数: $COUNT_BEFORE"
+echo "   Record count: $COUNT_BEFORE"
 
 echo ""
-echo "6. Unload数据库(触发WAL flush和元数据保存)..."
+echo "6. Unloading database (triggers WAL flush and metadata save)..."
 curl -X POST "http://localhost:8888/api/safety_test_db/unload" 2>/dev/null
 sleep 1
 
 echo ""
-echo "7. 重新加载数据库..."
+echo "7. Reloading database..."
 curl -X POST "http://localhost:8888/api/load" \
   -H "Content-Type: application/json" \
   -d '{
@@ -69,34 +69,34 @@ curl -X POST "http://localhost:8888/api/load" \
   }' 2>/dev/null
 
 echo ""
-echo "8. 查询记录数(reload后)..."
+echo "8. Querying record count (after reload)..."
 COUNT_AFTER=$(curl -s "http://localhost:8888/api/safety_test_db/records/count?table=test_table" | grep -o '"count":[0-9]*' | cut -d: -f2)
-echo "   记录数: $COUNT_AFTER"
+echo "   Record count: $COUNT_AFTER"
 
 echo ""
-echo "=== 测试结果 ==="
+echo "=== Test Results ==="
 if [ "$COUNT_BEFORE" = "$COUNT_AFTER" ] && [ -n "$COUNT_AFTER" ]; then
-  echo "✓ 数据安全性测试通过！"
-  echo "  Unload前记录数: $COUNT_BEFORE"
-  echo "  Reload后记录数: $COUNT_AFTER"
-  echo "  所有数据成功持久化"
+  echo "✓ Data safety test passed!"
+  echo "  Record count before unload: $COUNT_BEFORE"
+  echo "  Record count after reload: $COUNT_AFTER"
+  echo "  All data successfully persisted"
 else
-  echo "✗ 数据安全性测试失败！"
-  echo "  Unload前记录数: $COUNT_BEFORE"
-  echo "  Reload后记录数: $COUNT_AFTER"
-  echo "  数据可能丢失"
+  echo "✗ Data safety test failed!"
+  echo "  Record count before unload: $COUNT_BEFORE"
+  echo "  Record count after reload: $COUNT_AFTER"
+  echo "  Data may be lost"
 fi
 
 echo ""
-echo "9. 清理测试环境..."
+echo "9. Cleaning up test environment..."
 kill $SERVER_PID 2>/dev/null
 rm -rf $TEST_DIR
 
 echo ""
-echo "=== 数据安全改进说明 ==="
-echo "✓ UnloadDB时自动刷新WAL - 确保所有写入操作持久化"
-echo "✓ UnloadDB时保存元数据 - 确保表结构和配置持久化"
-echo "✓ WAL fsync失败抛异常 - 防止静默数据丢失"
-echo "✓ 优雅关闭机制 - 确保数据完整性"
+echo "=== Data Safety Improvements Description ==="
+echo "✓ Auto-flush WAL during UnloadDB - Ensures all write operations are persisted"
+echo "✓ Save metadata during UnloadDB - Ensures table structure and configuration are persisted"
+echo "✓ Throw exception on WAL fsync failure - Prevents silent data loss"
+echo "✓ Graceful shutdown mechanism - Ensures data integrity"
 echo ""
-echo "测试完成！"
+echo "Test completed!"
