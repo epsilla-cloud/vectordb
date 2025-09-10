@@ -55,6 +55,52 @@ jobs:
       run: |
         cd build
         ctest --output-on-failure --parallel $(nproc)
+        
+    - name: Run API Integration Tests
+      if: matrix.build-type == 'Release'
+      run: |
+        # Install Python dependencies
+        python3 -m pip install requests
+        
+        cd build
+        # Start VectorDB server in background
+        export WAL_AUTO_FLUSH=true
+        export WAL_FLUSH_INTERVAL=5
+        ./vectordb -d /tmp/ci_vectordb &
+        SERVER_PID=$!
+        
+        # Wait for server to start
+        echo "Waiting for server to start..."
+        for i in {1..15}; do
+          if curl -s http://localhost:8888/api/health > /dev/null 2>&1; then
+            echo "Server started successfully"
+            break
+          fi
+          sleep 1
+        done
+        
+        # Verify server is healthy
+        if ! curl -s http://localhost:8888/api/health > /dev/null 2>&1; then
+          echo "Server failed to start properly"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
+        fi
+        
+        # Run API tests
+        cd ..
+        python3 test/api/ci_api_test.py
+        API_TEST_RESULT=$?
+        
+        # Stop server gracefully
+        kill $SERVER_PID 2>/dev/null || true
+        wait $SERVER_PID 2>/dev/null || true
+        
+        if [ $API_TEST_RESULT -eq 0 ]; then
+          echo "✅ API integration tests passed"
+        else
+          echo "❌ API integration tests failed"
+          exit 1
+        fi
     
     - name: Run capacity tests
       run: |
