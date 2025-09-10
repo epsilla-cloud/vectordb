@@ -1,0 +1,62 @@
+# Valgrind suppressions for vectordb
+
+# OpenMP suppressions
+{
+   openmp_thread_create
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_*
+   obj:*/libomp.so*
+}
+
+{
+   openmp_data_race
+   Helgrind:Race
+   obj:*/libomp.so*
+}
+
+# Boost suppressions
+{
+   boost_filesystem_leak
+   Memcheck:Leak
+   fun:malloc
+   obj:*/libboost_filesystem.so*
+}
+
+# Standard library suppressions
+{
+   std_thread_leak
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_*
+   fun:std::thread::*
+}
+
+# Google Test suppressions
+{
+   gtest_leak
+   Memcheck:Leak
+   fun:malloc
+   obj:*/libgtest*
+}
+
+# Curl suppressions
+{
+   curl_ssl_init
+   Memcheck:Leak
+   fun:malloc
+   obj:*/libssl.so*
+   obj:*/libcurl.so*
+}
+
+{
+   curl_global_init
+   Memcheck:Leak
+   fun:malloc
+   fun:CRYPTO_malloc
+   obj:*/libcurl.so*
+}

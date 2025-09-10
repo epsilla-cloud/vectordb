@@ -30,8 +30,7 @@ public:
       .setLicenseName("Apache License 2.0")
       .setLicenseUrl("https://www.apache.org/licenses/LICENSE-2.0")
       .addServer("http://localhost:8888", "Local development server")
-      .addServer("https://vectordb.epsilla.com", "Production server")
-      .addSecurityScheme("ApiKeyAuth", oatpp::swagger::DocumentInfo::SecuritySchemeApiKey::create("X-API-Key", "header"));
+      .addServer("https://vectordb.epsilla.com", "Production server");
     
     return builder.build();
   }());

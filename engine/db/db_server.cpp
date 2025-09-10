@@ -2,9 +2,11 @@
 
 #include <iostream>
 #include <string>
+#include <chrono>
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/execution/aggregation.hpp"
+#include "config/config.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -12,6 +14,11 @@ namespace engine {
 DBServer::DBServer() {
   // Initialize the meta database
   meta_ = std::make_shared<meta::BasicMetaImpl>();
+  
+  // Start WAL flush thread if auto-flush is enabled
+  if (vectordb::globalConfig.WALAutoFlush.load()) {
+    StartWALFlushThread();
+  }
 }
 
 DBServer::~DBServer() {
@@ -22,6 +29,9 @@ DBServer::~DBServer() {
   if (rebuild_thread_.joinable()) {
     rebuild_thread_.join();
   }
+  
+  // Stop WAL flush thread
+  StopWALFlushThread();
 }
 
 Status DBServer::LoadDB(const std::string& db_name,
@@ -60,6 +70,36 @@ Status DBServer::LoadDB(const std::string& db_name,
 }
 
 Status DBServer::UnloadDB(const std::string& db_name) {
+  // Get database instance before unloading
+  auto db_index = db_name_to_id_map_.find(db_name);
+  if (!db_index.has_value()) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  
+  std::shared_ptr<Database> db_to_unload;
+  {
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+    db_to_unload = dbs_[db_index.value()];
+  }
+  
+  if (db_to_unload) {
+    // Critical: Flush WAL before unloading to ensure data persistence
+    logger_.Info("Flushing WAL before unloading database: " + db_name);
+    auto flush_status = db_to_unload->FlushAllWAL();
+    if (!flush_status.ok()) {
+      logger_.Error("Failed to flush WAL for database " + db_name + ": " + flush_status.message());
+      // Continue with unload but log the error
+    }
+    
+    // Save metadata to disk
+    logger_.Info("Saving metadata before unloading database: " + db_name);
+    auto dump_status = db_to_unload->Dump(db_to_unload->db_catalog_path_);
+    if (!dump_status.ok()) {
+      logger_.Warning("Failed to save metadata for database " + db_name + ": " + dump_status.message());
+      // Continue with unload but log the warning
+    }
+  }
+  
   // Unload database from meta.
   vectordb::Status status = meta_->UnloadDatabase(db_name);
   if (!status.ok()) {
@@ -67,23 +107,17 @@ Status DBServer::UnloadDB(const std::string& db_name) {
   }
 
   // Unload database from memory.
-  auto db_index = db_name_to_id_map_.find(db_name);
-  if (!db_index.has_value()) {
-    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
-  }
-  
   // Safely remove database with proper synchronization
-  std::shared_ptr<Database> db_to_unload;
   {
     std::unique_lock<std::shared_mutex> lock(dbs_mutex_);
-    // Keep a reference to the database being unloaded
-    db_to_unload = dbs_[db_index.value()];
-    // Reset the shared_ptr in the vector (but the DB still exists via db_to_unload)
+    // Reset the shared_ptr in the vector
     dbs_[db_index.value()].reset();
   }
   
   // Remove from name map after releasing the lock
   db_name_to_id_map_.erase(db_name);
+  
+  logger_.Info("Successfully unloaded database: " + db_name);
   return Status::OK();
 }
 
@@ -812,6 +846,129 @@ Status DBServer::Project(const std::string& db_name,
   std::vector<int64_t> ids;
   std::vector<double> distances;
   return table->SearchByAttribute(query_fields, primary_keys, expr_nodes, skip, limit, project, facet_executors, facets);
+}
+
+void DBServer::StartWALFlushThread() {
+  if (wal_flush_thread_started_.load()) {
+    logger_.Info("WAL flush thread already started");
+    return;
+  }
+  
+  stop_wal_flush_thread_ = false;
+  wal_flush_thread_started_ = true;
+  wal_flush_thread_ = std::thread(&DBServer::WALFlushWorker, this);
+  
+  logger_.Info("WAL auto-flush thread started with interval: " + 
+               std::to_string(vectordb::globalConfig.WALFlushInterval.load()) + " seconds");
+}
+
+void DBServer::StopWALFlushThread() {
+  if (!wal_flush_thread_started_.load()) {
+    return;
+  }
+  
+  logger_.Info("Stopping WAL flush thread...");
+  stop_wal_flush_thread_ = true;
+  
+  if (wal_flush_thread_.joinable()) {
+    wal_flush_thread_.join();
+  }
+  
+  wal_flush_thread_started_ = false;
+  logger_.Info("WAL flush thread stopped");
+}
+
+Status DBServer::FlushAllWAL() {
+  auto start_time = std::chrono::steady_clock::now();
+  
+  wal_flush_stats_total_flushes_++;
+  
+  // Get copy of databases to avoid holding lock during flush
+  std::vector<std::shared_ptr<Database>> dbs_copy;
+  {
+    std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
+    dbs_copy = dbs_;
+  }
+  
+  bool any_error = false;
+  int total_dbs = 0;
+  int successful_dbs = 0;
+  
+  // Flush WAL for each database
+  for (auto db : dbs_copy) {
+    if (db) {
+      total_dbs++;
+      auto status = db->FlushAllWAL();
+      if (status.ok()) {
+        successful_dbs++;
+      } else {
+        logger_.Error("Failed to flush WAL for database: " + status.message());
+        any_error = true;
+      }
+    }
+  }
+  
+  auto end_time = std::chrono::steady_clock::now();
+  auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+  
+  // Update statistics
+  if (any_error) {
+    wal_flush_stats_failed_flushes_++;
+  } else {
+    wal_flush_stats_successful_flushes_++;
+  }
+  
+  wal_flush_stats_last_flush_time_ = std::chrono::system_clock::now().time_since_epoch().count();
+  wal_flush_stats_total_duration_ms_ += duration_ms;
+  
+  logger_.Info("WAL flush completed: " + std::to_string(successful_dbs) + "/" + 
+               std::to_string(total_dbs) + " databases flushed in " + 
+               std::to_string(duration_ms) + "ms");
+  
+  if (any_error) {
+    return Status(DB_UNEXPECTED_ERROR, "Some WAL flushes failed");
+  }
+  
+  return Status::OK();
+}
+
+void DBServer::WALFlushWorker() {
+  logger_.Info("WAL flush worker thread started");
+  
+  while (!stop_wal_flush_thread_.load()) {
+    // Get flush interval from config (may change at runtime)
+    int flush_interval_seconds = vectordb::globalConfig.WALFlushInterval.load();
+    
+    // Sleep for the configured interval
+    for (int i = 0; i < flush_interval_seconds && !stop_wal_flush_thread_.load(); ++i) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    // Check if we should stop
+    if (stop_wal_flush_thread_.load()) {
+      break;
+    }
+    
+    // Check if auto-flush is still enabled
+    if (!vectordb::globalConfig.WALAutoFlush.load()) {
+      logger_.Debug("WAL auto-flush disabled, skipping flush");
+      continue;
+    }
+    
+    // Perform the flush
+    logger_.Debug("Performing periodic WAL flush...");
+    auto status = FlushAllWAL();
+    
+    if (!status.ok()) {
+      logger_.Warning("Periodic WAL flush encountered errors: " + status.message());
+    }
+  }
+  
+  // Perform final flush before exiting
+  logger_.Info("Performing final WAL flush before thread exit...");
+  FlushAllWAL();
+  
+  logger_.Info("WAL flush worker thread exited");
 }
 
 }  // namespace engine

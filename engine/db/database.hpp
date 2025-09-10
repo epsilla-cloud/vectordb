@@ -89,6 +89,31 @@ class Database {
     }
   }
 
+  Status FlushAllWAL() {
+    logger_.Info("Flushing all WAL for database: " + GetName());
+    
+    // Use copy of vector to avoid holding lock during table operations
+    std::vector<std::shared_ptr<Table>> tables_copy;
+    {
+      std::shared_lock<std::shared_mutex> lock(tables_mutex_);
+      tables_copy = tables_;  // Copy the vector of shared_ptrs
+    }
+    
+    // Flush WAL for each table
+    for (auto table : tables_copy) {
+      if (table) {
+        auto status = table->FlushWAL();
+        if (!status.ok()) {
+          logger_.Error("Failed to flush WAL for table: " + status.message());
+          return status;
+        }
+      }
+    }
+    
+    logger_.Info("Successfully flushed all WAL for database: " + GetName());
+    return Status::OK();
+  }
+
  public:
   vectordb::engine::Logger logger_;
   std::string db_catalog_path_;                                   // The path to the db catalog.

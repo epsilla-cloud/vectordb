@@ -5,7 +5,7 @@
 int main() {
     using namespace vectordb::engine;
     
-    // 测试1：硬编码的150000应该被替换为5000
+    // Test 1: Hardcoded 150000 should be replaced with 5000
     {
         auto config = DynamicConfigManager::GetConfig(150000);
         std::cout << "Test 1 - Hardcoded 150000:" << std::endl;
@@ -18,7 +18,7 @@ int main() {
         }
     }
     
-    // 测试2：环境变量覆盖
+    // Test 2: Environment variable override
     {
         setenv("EPSILLA_INITIAL_CAPACITY", "8000", 1);
         auto config = DynamicConfigManager::GetConfig(150000);
@@ -33,7 +33,7 @@ int main() {
         unsetenv("EPSILLA_INITIAL_CAPACITY");
     }
     
-    // 测试3：非150000的值保持不变
+    // Test 3: Non-150000 values remain unchanged
     {
         auto config = DynamicConfigManager::GetConfig(10000);
         std::cout << "\nTest 3 - Custom value (10000):" << std::endl;
@@ -46,7 +46,7 @@ int main() {
         }
     }
     
-    // 测试4：GetInitialCapacity函数
+    // Test 4: GetInitialCapacity function
     {
         int64_t capacity = DynamicConfigManager::GetInitialCapacity(150000);
         std::cout << "\nTest 4 - GetInitialCapacity(150000):" << std::endl;

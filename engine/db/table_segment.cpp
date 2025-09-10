@@ -4,7 +4,9 @@
 
 #include <cstdio>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <numeric>
 #include <vector>
 
 #include "utils/common_util.hpp"
@@ -351,6 +353,15 @@ bool TableSegment::isEntryDeleted(int64_t id) const {
 }
 
 Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id) {
+  // Check if hard delete is enabled via configuration
+  bool use_soft_delete = vectordb::globalConfig.SoftDelete.load(std::memory_order_acquire);
+  
+  if (!use_soft_delete) {
+    logger_.Debug("[TableSegment] Hard delete mode enabled, using HardDelete method");
+    return HardDelete(records, filter_nodes, wal_id);
+  }
+  
+  logger_.Debug("[TableSegment] Soft delete mode enabled, using standard delete (mark as deleted)");
   std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
 
   // Log deletion request at segment level
@@ -542,7 +553,330 @@ Status TableSegment::DeleteByID(
     deleted_->set(id);
     return Status::OK();
   }
-  return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + id);
+  return Status(RECORD_NOT_FOUND, "Record skipped by filter: " + std::to_string(id));
+}
+
+// Concurrency-Safe Hard Delete Implementation
+Status TableSegment::HardDelete(Json& records, std::vector<vectordb::query::expr::ExprNodePtr>& filter_nodes, int64_t wal_id) {
+  // Use exclusive lock to prevent any concurrent access during hard delete
+  std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
+
+  // Log deletion request at segment level
+  size_t pk_list_size = records.GetSize();
+  bool has_filter = !filter_nodes.empty();
+  
+  logger_.Debug("[TableSegment] Starting CONCURRENT-SAFE HARD deletion in segment, wal_id=" + std::to_string(wal_id) + 
+               ", primaryKeys=" + std::to_string(pk_list_size) + " items" +
+               (has_filter ? ", with_filter=true" : ", with_filter=false"));
+
+  wal_global_id_ = wal_id;
+  std::vector<size_t> records_to_delete; // Collect IDs to delete
+  
+  vectordb::query::expr::ExprEvaluator expr_evaluator(
+      filter_nodes,
+      field_name_mem_offset_map_,
+      primitive_offset_,
+      var_len_attr_num_,
+      attribute_table_.get(),
+      var_len_attr_table_);
+  int filter_root_index = filter_nodes.size() - 1;
+
+  // Phase 1: Collect all record IDs to delete (no modifications yet)
+  if (pk_list_size > 0) {
+    logger_.Debug("[TableSegment] Collecting records to hard delete by primary key list");
+    
+    for (auto i = 0; i < pk_list_size; ++i) {
+      auto pkField = records.GetArrayElement(i);
+      size_t record_id = 0;
+      bool found = false;
+      
+      if (isIntPK()) {
+        auto pk = pkField.GetInt();
+        switch (pkType()) {
+          case meta::FieldType::INT1:
+            found = primary_key_.getKey(static_cast<int8_t>(pk), record_id);
+            break;
+          case meta::FieldType::INT2:
+            found = primary_key_.getKey(static_cast<int16_t>(pk), record_id);
+            break;
+          case meta::FieldType::INT4:
+            found = primary_key_.getKey(static_cast<int32_t>(pk), record_id);
+            break;
+          case meta::FieldType::INT8:
+            found = primary_key_.getKey(static_cast<int64_t>(pk), record_id);
+            break;
+        }
+      } else if (isStringPK()) {
+        auto pk = pkField.GetString();
+        found = primary_key_.getKey(pk, record_id);
+      }
+      
+      if (found && !deleted_->test(record_id)) {
+        if (expr_evaluator.LogicalEvaluate(filter_root_index, record_id)) {
+          records_to_delete.push_back(record_id);
+        }
+      }
+    }
+  } else {
+    logger_.Debug("[TableSegment] Collecting records to hard delete by filter");
+    
+    // Collect record IDs to delete by filter
+    for (size_t id = 0; id < record_number_.load(); ++id) {
+      if (!deleted_->test(id)) { // Skip already deleted records
+        if (expr_evaluator.LogicalEvaluate(filter_root_index, id)) {
+          records_to_delete.push_back(id);
+        }
+      }
+    }
+  }
+  
+  if (records_to_delete.empty()) {
+    logger_.Debug("[TableSegment] No records found to delete");
+    return Status::OK();
+  }
+  
+  // Phase 2: Sort IDs in descending order to avoid index shifting issues
+  std::sort(records_to_delete.begin(), records_to_delete.end(), std::greater<size_t>());
+  
+  logger_.Debug("[TableSegment] Hard deleting " + std::to_string(records_to_delete.size()) + 
+               " records in batch mode for concurrency safety");
+  
+  // Phase 3: Perform batch hard delete with proper concurrency control
+  return BatchHardDelete(records_to_delete);
+}
+
+// Batch Hard Delete - Concurrent-safe implementation 
+Status TableSegment::BatchHardDelete(const std::vector<size_t>& sorted_ids) {
+  // sorted_ids should be in descending order to avoid index shifting issues
+  
+  if (sorted_ids.empty()) {
+    return Status::OK();
+  }
+  
+  logger_.Debug("[TableSegment] Starting batch hard delete of " + std::to_string(sorted_ids.size()) + " records");
+  
+  // Phase 1: Mark records as deleted first (provides atomicity with soft delete fallback)
+  for (size_t id : sorted_ids) {
+    deleted_->set(id);
+  }
+  
+  // Phase 2: Remove from primary key index (do this before data movement)
+  for (size_t id : sorted_ids) {
+    // Remove primary key mapping
+    if (isStringPK()) {
+      auto pk = std::get<std::string>(var_len_attr_table_[field_id_mem_offset_map_[pkFieldIdx()]][id]);
+      primary_key_.removeKey(pk);
+      logger_.Debug("[TableSegment] Removed STRING pk=" + pk + " from index for record id=" + std::to_string(id));
+    } else if (isIntPK()) {
+      size_t pk_offset = primitive_offset_ + field_id_mem_offset_map_[pkFieldIdx()];
+      switch (pkType()) {
+        case meta::FieldType::INT1: {
+          int8_t pk;
+          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int8_t));
+          primary_key_.removeKey(pk);
+          logger_.Debug("[TableSegment] Removed INT8 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
+          break;
+        }
+        case meta::FieldType::INT2: {
+          int16_t pk;
+          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int16_t));
+          primary_key_.removeKey(pk);
+          logger_.Debug("[TableSegment] Removed INT16 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
+          break;
+        }
+        case meta::FieldType::INT4: {
+          int32_t pk;
+          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int32_t));
+          primary_key_.removeKey(pk);
+          logger_.Debug("[TableSegment] Removed INT32 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
+          break;
+        }
+        case meta::FieldType::INT8: {
+          int64_t pk;
+          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int64_t));
+          primary_key_.removeKey(pk);
+          logger_.Debug("[TableSegment] Removed INT64 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
+          break;
+        }
+      }
+    }
+  }
+  
+  // Phase 3: Compact data structures in one pass to minimize data movement
+  Status compact_status = CompactDataStructures(sorted_ids);
+  if (!compact_status.ok()) {
+    logger_.Error("[TableSegment] Data compaction failed: " + compact_status.message());
+    return compact_status;
+  }
+  
+  // Phase 4: Update record count atomically
+  record_number_.fetch_sub(sorted_ids.size(), std::memory_order_release);
+  
+  // Phase 5: Rebuild primary key index with new IDs
+  RebuildPrimaryKeyIndex();
+  
+  logger_.Debug("[TableSegment] Batch hard delete completed successfully. New record count: " + 
+               std::to_string(record_number_.load()));
+  
+  return Status::OK();
+}
+
+// Efficiently compact data structures by removing multiple records in one pass
+Status TableSegment::CompactDataStructures(const std::vector<size_t>& sorted_ids) {
+  // sorted_ids are in descending order
+  size_t total_records = record_number_.load();
+  
+  logger_.Debug("[TableSegment] Compacting data structures, removing " + std::to_string(sorted_ids.size()) + 
+               " records from " + std::to_string(total_records) + " total records");
+  
+  // Convert to ascending order for easier processing
+  std::vector<size_t> ascending_ids = sorted_ids;
+  std::sort(ascending_ids.begin(), ascending_ids.end());
+  
+  // Calculate new positions for each record after compaction
+  std::vector<size_t> new_positions(total_records);
+  size_t del_idx = 0;
+  size_t new_pos = 0;
+  
+  for (size_t old_pos = 0; old_pos < total_records; ++old_pos) {
+    if (del_idx < ascending_ids.size() && old_pos == ascending_ids[del_idx]) {
+      // This record will be deleted
+      del_idx++;
+      new_positions[old_pos] = SIZE_MAX; // Mark as deleted
+    } else {
+      new_positions[old_pos] = new_pos++;
+    }
+  }
+  
+  // Compact attribute data
+  size_t record_size = primitive_offset_;
+  char* attr_data = attribute_table_.get();
+  size_t write_pos = 0;
+  
+  for (size_t read_pos = 0; read_pos < total_records; ++read_pos) {
+    if (new_positions[read_pos] != SIZE_MAX) {
+      if (write_pos != read_pos) {
+        std::memmove(attr_data + write_pos * record_size,
+                     attr_data + read_pos * record_size,
+                     record_size);
+      }
+      write_pos++;
+    }
+  }
+  
+  // Compact vector data for each vector field
+  for (size_t v = 0; v < vector_tables_.size() && v < vector_dims_.size(); ++v) {
+    if (vector_tables_[v]) {
+      size_t vec_dim = vector_dims_[v];
+      float* vec_data = vector_tables_[v].get();
+      size_t write_pos = 0;
+      
+      for (size_t read_pos = 0; read_pos < total_records; ++read_pos) {
+        if (new_positions[read_pos] != SIZE_MAX) {
+          if (write_pos != read_pos) {
+            std::memmove(vec_data + write_pos * vec_dim,
+                         vec_data + read_pos * vec_dim,
+                         vec_dim * sizeof(float));
+          }
+          write_pos++;
+        }
+      }
+    }
+  }
+  
+  // Compact variable length attributes - simplified approach
+  for (auto& var_len_table : var_len_attr_table_) {
+    // Process in reverse order to maintain indices
+    for (auto it = ascending_ids.rbegin(); it != ascending_ids.rend(); ++it) {
+      size_t id_to_remove = *it;
+      if (id_to_remove < var_len_table.size()) {
+        var_len_table.erase(var_len_table.begin() + id_to_remove);
+      }
+    }
+  }
+  
+  logger_.Debug("[TableSegment] Data compaction completed successfully");
+  return Status::OK();
+}
+
+// Rebuild primary key index after data compaction
+void TableSegment::RebuildPrimaryKeyIndex() {
+  logger_.Debug("[TableSegment] Rebuilding primary key index after hard delete");
+  
+  // Clear existing index
+  primary_key_.clear();
+  
+  size_t current_records = record_number_.load();
+  
+  // Rebuild index with new record IDs
+  for (size_t id = 0; id < current_records; ++id) {
+    if (!deleted_->test(id)) {
+      if (isStringPK()) {
+        auto pk = std::get<std::string>(var_len_attr_table_[field_id_mem_offset_map_[pkFieldIdx()]][id]);
+        primary_key_.addKeyIfNotExist(pk, id);
+      } else if (isIntPK()) {
+        size_t pk_offset = primitive_offset_ + field_id_mem_offset_map_[pkFieldIdx()];
+        switch (pkType()) {
+          case meta::FieldType::INT1: {
+            int8_t pk;
+            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int8_t));
+            primary_key_.addKeyIfNotExist(pk, id);
+            break;
+          }
+          case meta::FieldType::INT2: {
+            int16_t pk;
+            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int16_t));
+            primary_key_.addKeyIfNotExist(pk, id);
+            break;
+          }
+          case meta::FieldType::INT4: {
+            int32_t pk;
+            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int32_t));
+            primary_key_.addKeyIfNotExist(pk, id);
+            break;
+          }
+          case meta::FieldType::INT8: {
+            int64_t pk;
+            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int64_t));
+            primary_key_.addKeyIfNotExist(pk, id);
+            break;
+          }
+        }
+      }
+    }
+  }
+  
+  logger_.Debug("[TableSegment] Primary key index rebuilt successfully");
+}
+
+// Legacy method - now redirects to safe batch version
+Status TableSegment::SafeHardDeleteByID(size_t id) {
+  if (id >= record_number_.load() || deleted_->test(id)) {
+    return Status(RECORD_NOT_FOUND, "Record not found or already deleted: " + std::to_string(id));
+  }
+  
+  // Use batch delete for concurrency safety even for single record
+  std::vector<size_t> single_id = {id};
+  return BatchHardDelete(single_id);
+}
+
+Status TableSegment::HardDeleteByStringPK(
+    const std::string& pk,
+    vectordb::query::expr::ExprEvaluator& evaluator,
+    int filter_root_index) {
+  size_t result = 0;
+  auto found = primary_key_.getKey(pk, result);
+  if (found) {
+    if (evaluator.LogicalEvaluate(filter_root_index, result)) {
+      return SafeHardDeleteByID(result); // Use safe concurrent version
+    } else {
+      logger_.Debug("[TableSegment] Record with STRING pk=" + pk + 
+                   " found at id=" + std::to_string(result) + " but skipped by filter");
+    }
+  } else {
+    logger_.Debug("[TableSegment] Record with STRING pk=" + pk + " not found in primary key index");
+  }
+  return Status(RECORD_NOT_FOUND, "Record with primary key not exist or skipped by filter: " + pk);
 }
 
 Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers, bool upsert) {

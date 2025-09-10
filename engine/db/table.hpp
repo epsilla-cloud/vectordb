@@ -116,6 +116,22 @@ class Table {
     wal_->SetEnabled(enabled);
   }
 
+  Status FlushWAL() {
+    if (!wal_) {
+      return Status::OK();  // No WAL configured
+    }
+    
+    // Force flush WAL to disk
+    try {
+      // Get current WAL file handle and force fsync
+      // This ensures all buffered writes are persisted
+      wal_->Flush();
+      return Status::OK();
+    } catch (const std::exception& e) {
+      return Status(DB_UNEXPECTED_ERROR, "Failed to flush WAL: " + std::string(e.what()));
+    }
+  }
+
   void SetLeader(bool is_leader);
 
   ~Table();
