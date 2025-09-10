@@ -22,15 +22,16 @@ public:
     oatpp::swagger::DocumentInfo::Builder builder;
     
     builder
-      .setTitle("VectorDB REST API")
-      .setDescription("High-performance vector database REST API")
-      .setVersion("1.0.0")
-      .setContactName("VectorDB Team")
+      .setTitle("Epsilla VectorDB REST API")
+      .setDescription("High-performance vector database with similarity search capabilities. Supports dense and sparse vectors, multiple embedding providers, and real-time indexing.")
+      .setVersion("1.2.0")
+      .setContactName("Epsilla Team")
       .setContactUrl("https://github.com/epsilla-cloud/vectordb")
       .setLicenseName("Apache License 2.0")
       .setLicenseUrl("https://www.apache.org/licenses/LICENSE-2.0")
       .addServer("http://localhost:8888", "Local development server")
-      .addServer("https://api.vectordb.com", "Production server");
+      .addServer("https://vectordb.epsilla.com", "Production server")
+      .addSecurityScheme("ApiKeyAuth", oatpp::swagger::DocumentInfo::SecuritySchemeApiKey::create("X-API-Key", "header"));
     
     return builder.build();
   }());
@@ -40,7 +41,7 @@ public:
    */
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::swagger::Resources>, swaggerResources)([] {
     // Use the correct path to swagger resources
-    return oatpp::swagger::Resources::streamResources("/home/eric/code/vectordb/engine/build/dependencies/include/oatpp-1.3.0/bin/oatpp-swagger/res");
+    return oatpp::swagger::Resources::streamResources("build/dependencies/include/oatpp-1.3.0/bin/oatpp-swagger/res");
   }());
 
 };
