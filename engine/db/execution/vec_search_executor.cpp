@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <atomic>
 #include <numeric>
+#include <cstdlib>  // For std::getenv
+#include <cstdio>   // For fprintf
 
 #include "query/expr/expr.hpp"
 #include "utils/atomic_counter.hpp"
@@ -66,11 +68,26 @@ VecSearchExecutor::VecSearchExecutor(
       prefilter_enabled_(prefilter_enabled) {
   ann_index_ = ann_index;
   
-  // Log thread configuration for debugging
+  // Log thread configuration for debugging - only in debug builds or when explicitly enabled
+#ifdef DEBUG
   static std::atomic<int> executor_count(0);
   int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
-  printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld)\n", 
+  printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld)\n",
          executor_id, num_threads_, dimension_, total_indexed_vector_);
+#else
+  // In production, only log if explicitly enabled via environment variable
+  static bool log_enabled = std::getenv("VECTORDB_LOG_EXECUTOR") != nullptr;
+  if (log_enabled) {
+    static std::atomic<int> executor_count(0);
+    static std::atomic<int> log_count(0);
+    // Sample logging: only log every 100th instance to reduce overhead
+    if (log_count.fetch_add(1) % 100 == 0) {
+      int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
+      fprintf(stderr, "[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld) [SAMPLED]\n",
+              executor_id, num_threads_, dimension_, total_indexed_vector_);
+    }
+  }
+#endif
   
   for (int q_i = 0; q_i < num_threads; ++q_i) {
     local_queues_starts_[q_i] = q_i * L_local;

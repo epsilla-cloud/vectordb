@@ -357,20 +357,33 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
   bool use_soft_delete = vectordb::globalConfig.SoftDelete.load(std::memory_order_acquire);
   
   if (!use_soft_delete) {
+#ifdef DEBUG
     logger_.Debug("[TableSegment] Hard delete mode enabled, using HardDelete method");
+#endif
     return HardDelete(records, filter_nodes, wal_id);
   }
-  
+
+#ifdef DEBUG
   logger_.Debug("[TableSegment] Soft delete mode enabled, using standard delete (mark as deleted)");
+#endif
   std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
 
   // Log deletion request at segment level
   size_t pk_list_size = records.GetSize();
   bool has_filter = !filter_nodes.empty();
-  
-  logger_.Debug("[TableSegment] Starting deletion in segment, wal_id=" + std::to_string(wal_id) + 
+
+  // Only log deletion summary for large batches or in debug mode
+#ifdef DEBUG
+  logger_.Debug("[TableSegment] Starting deletion in segment, wal_id=" + std::to_string(wal_id) +
                ", primaryKeys=" + std::to_string(pk_list_size) + " items" +
                (has_filter ? ", with_filter=true" : ", with_filter=false"));
+#else
+  // In production, only log significant batches
+  if (pk_list_size > 100) {
+    logger_.Info("[TableSegment] Batch deletion: wal_id=" + std::to_string(wal_id) +
+                ", count=" + std::to_string(pk_list_size));
+  }
+#endif
 
   wal_global_id_ = wal_id;
   size_t deleted_record = 0;
@@ -385,62 +398,90 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
 
   if (pk_list_size > 0) {
     // Delete by the pk list.
+#ifdef DEBUG
     logger_.Debug("[TableSegment] Deleting by primary key list (" + std::to_string(pk_list_size) + " keys)");
+#endif
     
+    // Track deletion statistics for batch logging
+    size_t successfully_deleted = 0;
+    size_t failed_deletions = 0;
+
     for (auto i = 0; i < pk_list_size; ++i) {
       auto pkField = records.GetArrayElement(i);
       bool item_deleted = false;
-      
+
       if (isIntPK()) {
         auto pk = pkField.GetInt();
         switch (pkType()) {
           case meta::FieldType::INT1:
             item_deleted = DeleteByIntPK(static_cast<int8_t>(pk), expr_evaluator, filter_root_index).ok();
+#ifdef DEBUG
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT1 pk=" + std::to_string(pk));
             } else {
               logger_.Debug("[TableSegment] Record with INT1 pk=" + std::to_string(pk) + " not found or skipped by filter");
             }
+#endif
             break;
           case meta::FieldType::INT2:
             item_deleted = DeleteByIntPK(static_cast<int16_t>(pk), expr_evaluator, filter_root_index).ok();
+#ifdef DEBUG
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT2 pk=" + std::to_string(pk));
             } else {
               logger_.Debug("[TableSegment] Record with INT2 pk=" + std::to_string(pk) + " not found or skipped by filter");
             }
+#endif
             break;
           case meta::FieldType::INT4:
             item_deleted = DeleteByIntPK(static_cast<int32_t>(pk), expr_evaluator, filter_root_index).ok();
+#ifdef DEBUG
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT4 pk=" + std::to_string(pk));
             } else {
               logger_.Debug("[TableSegment] Record with INT4 pk=" + std::to_string(pk) + " not found or skipped by filter");
             }
+#endif
             break;
           case meta::FieldType::INT8:
             item_deleted = DeleteByIntPK(static_cast<int64_t>(pk), expr_evaluator, filter_root_index).ok();
+#ifdef DEBUG
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT8 pk=" + std::to_string(pk));
             } else {
               logger_.Debug("[TableSegment] Record with INT8 pk=" + std::to_string(pk) + " not found or skipped by filter");
             }
+#endif
             break;
         }
       } else if (isStringPK()) {
         auto pk = pkField.GetString();
         item_deleted = DeleteByStringPK(pk, expr_evaluator, filter_root_index).ok();
+#ifdef DEBUG
         if (item_deleted) {
           logger_.Debug("[TableSegment] Deleted record with STRING pk=" + pk);
         } else {
           logger_.Debug("[TableSegment] Record with STRING pk=" + pk + " not found or skipped by filter");
         }
+#endif
       }
-      
+
       if (item_deleted) {
         deleted_record++;
+        successfully_deleted++;
+      } else {
+        failed_deletions++;
       }
     }
+
+    // Log batch summary instead of individual operations in production
+#ifndef DEBUG
+    if (pk_list_size > 0) {
+      logger_.Info("[TableSegment] Batch deletion completed: requested=" + std::to_string(pk_list_size) +
+                  ", deleted=" + std::to_string(successfully_deleted) +
+                  ", not_found=" + std::to_string(failed_deletions));
+    }
+#endif
   } else {
     // Delete by scanning the whole segment.
     logger_.Debug("[TableSegment] Deleting by scanning entire segment (filter-only deletion), total_records=" + 
