@@ -7,6 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # ref: https://stackoverflow.com/questions/55275743/cmake-build-types-release-debug-etc-compiler-flags
 set(CMAKE_CXX_FLAGS_INIT "-g")
 
+# Configure debug logging based on build type
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_definitions(-DDEBUG)
+  message(STATUS "Debug logging enabled (build type: Debug)")
+else()
+  message(STATUS "Debug logging disabled for better performance (build type: ${CMAKE_BUILD_TYPE})")
+endif()
+
+# Optional: Allow enabling debug logging in release builds via option
+option(ENABLE_DEBUG_LOGGING "Enable debug logging in release builds (impacts performance)" OFF)
+if(ENABLE_DEBUG_LOGGING)
+  add_definitions(-DDEBUG_LOGGING_ENABLED)
+  message(WARNING "Debug logging enabled in release build - this will impact performance!")
+endif()
+
 # Suppress Boost deprecated header warnings
 add_compile_definitions(BOOST_ALLOW_DEPRECATED_HEADERS)
 add_compile_definitions(BOOST_HEADER_DEPRECATED=)
