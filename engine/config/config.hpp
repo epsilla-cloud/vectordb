@@ -89,10 +89,42 @@ struct Config {
       printf("[Config] Using WAL_AUTO_FLUSH=%s from environment\n", auto_flush ? "true" : "false");
     }
     
-    // Log the configuration
-    printf("[Config] Initialized with IntraQueryThreads=%d, RebuildThreads=%d, SoftDelete=%s, WALFlushInterval=%ds (detected %u hardware threads)\n", 
-           IntraQueryThreads.load(), RebuildThreads.load(), SoftDelete.load() ? "true" : "false", 
-           WALFlushInterval.load(), hw_threads);
+    // Log the configuration - print all important settings
+    printf("\n");
+    printf("================================================================================\n");
+    printf("                        VectorDB Configuration Summary                         \n");
+    printf("================================================================================\n");
+    printf(" Thread Configuration:\n");
+    printf("   - Hardware Threads Detected : %u\n", hw_threads);
+    printf("   - Intra-Query Threads       : %d\n", IntraQueryThreads.load());
+    printf("   - Rebuild Threads           : %d\n", RebuildThreads.load());
+    printf("   - Executors Per Field       : %d\n", NumExecutorPerField.load());
+    printf("\n");
+    printf(" Queue Configuration:\n");
+    printf("   - Master Queue Size         : %d\n", MasterQueueSize.load());
+    printf("   - Local Queue Size          : %d\n", LocalQueueSize.load());
+    printf("\n");
+    printf(" Deletion Configuration:\n");
+    printf("   - Soft Delete Mode          : %s %s\n",
+           SoftDelete.load() ? "ENABLED" : "DISABLED",
+           SoftDelete.load() ? "(⚠️ Monitor memory in K8s)" : "(✓ Safe for K8s)");
+    printf("\n");
+    printf(" WAL Configuration:\n");
+    printf("   - WAL Flush Interval        : %d seconds\n", WALFlushInterval.load());
+    printf("   - WAL Auto Flush            : %s\n", WALAutoFlush.load() ? "ENABLED" : "DISABLED");
+    printf("\n");
+    printf(" Other Settings:\n");
+    printf("   - Pre-Filter                : %s\n", PreFilter.load() ? "ENABLED" : "DISABLED");
+    printf("   - Global Sync Interval      : %d\n", GlobalSyncInterval.load());
+    printf("   - Minimal Graph Size        : %d\n", MinimalGraphSize.load());
+    printf("\n");
+    printf(" Environment Variables:\n");
+    printf("   - SOFT_DELETE               : %s\n", env_soft_delete ? env_soft_delete : "(not set, using default)");
+    printf("   - WAL_FLUSH_INTERVAL        : %s\n", env_wal_interval ? env_wal_interval : "(not set, using default)");
+    printf("   - WAL_AUTO_FLUSH            : %s\n", env_wal_auto ? env_wal_auto : "(not set, using default)");
+    printf("   - EPSILLA_INTRA_QUERY_THREADS: %s\n", env_threads ? env_threads : "(not set, using default)");
+    printf("================================================================================\n");
+    printf("\n");
   }
 
   // Setter method for IntraQueryThreads
@@ -175,6 +207,8 @@ struct Config {
     config.SetInt("RebuildThreads", RebuildThreads.load(std::memory_order_acquire));
     config.SetBool("PreFilter", PreFilter.load(std::memory_order_acquire));
     config.SetBool("SoftDelete", SoftDelete.load(std::memory_order_acquire));
+    config.SetInt("WALFlushInterval", WALFlushInterval.load(std::memory_order_acquire));
+    config.SetBool("WALAutoFlush", WALAutoFlush.load(std::memory_order_acquire));
     return config;
   }
 };

@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS_INIT "-g")
 
 # Configure debug logging based on build type
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_definitions(-DDEBUG)
+  add_definitions(-DVECTORDB_DEBUG_BUILD)
   message(STATUS "Debug logging enabled (build type: Debug)")
 else()
   message(STATUS "Debug logging disabled for better performance (build type: ${CMAKE_BUILD_TYPE})")
