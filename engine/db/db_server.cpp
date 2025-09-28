@@ -917,13 +917,22 @@ Status DBServer::FlushAllWAL() {
   } else {
     wal_flush_stats_successful_flushes_++;
   }
-  
+
   wal_flush_stats_last_flush_time_ = std::chrono::system_clock::now().time_since_epoch().count();
   wal_flush_stats_total_duration_ms_ += duration_ms;
-  
-  logger_.Info("WAL flush completed: " + std::to_string(successful_dbs) + "/" + 
-               std::to_string(total_dbs) + " databases flushed in " + 
-               std::to_string(duration_ms) + "ms");
+
+  // Only log if there were databases to flush or if there was an error
+  if (total_dbs > 0 || any_error) {
+    logger_.Info("WAL flush completed: " + std::to_string(successful_dbs) + "/" +
+                 std::to_string(total_dbs) + " databases flushed in " +
+                 std::to_string(duration_ms) + "ms");
+  } else {
+    // Log less frequently when idle (every 10th flush)
+    static int idle_flush_count = 0;
+    if (++idle_flush_count % 10 == 0) {
+      logger_.Debug("WAL flush: No databases to flush (idle)");
+    }
+  }
   
   if (any_error) {
     return Status(DB_UNEXPECTED_ERROR, "Some WAL flushes failed");
@@ -954,9 +963,8 @@ void DBServer::WALFlushWorker() {
       logger_.Debug("WAL auto-flush disabled, skipping flush");
       continue;
     }
-    
-    // Perform the flush
-    logger_.Debug("Performing periodic WAL flush...");
+
+    // Perform the flush (logging is handled inside FlushAllWAL)
     auto status = FlushAllWAL();
     
     if (!status.ok()) {

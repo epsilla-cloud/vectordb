@@ -69,7 +69,7 @@ VecSearchExecutor::VecSearchExecutor(
   ann_index_ = ann_index;
   
   // Log thread configuration for debugging - only in debug builds or when explicitly enabled
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
   static std::atomic<int> executor_count(0);
   int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
   printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld)\n",

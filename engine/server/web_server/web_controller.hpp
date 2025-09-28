@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <thread>
+#include <cstdlib>
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/catalog/meta.hpp"
@@ -1230,8 +1232,65 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
+  ADD_CORS(GetConfig)
+
+  ENDPOINT_INFO(GetConfig) {
+    info->summary = "Get Runtime Configuration";
+    info->description = "Retrieve the current runtime configuration of VectorDB including thread settings, queue sizes, deletion mode, WAL configuration, and environment variables";
+    info->addResponse<Object<StatusDto>>(Status::CODE_200, "application/json", "Configuration retrieved successfully");
+    info->addTag("Configuration");
+  }
+  ENDPOINT("GET", "api/config", GetConfig) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    // Get runtime configuration
+    vectordb::Json config = globalConfig.getConfigAsJson();
+
+    // Add environment variable information
+    vectordb::Json envVars;
+    envVars.LoadFromString("{}");
+
+    // Check and add environment variables
+    const char* soft_delete_env = std::getenv("SOFT_DELETE");
+    envVars.SetString("SOFT_DELETE", soft_delete_env ? soft_delete_env : "(not set)");
+
+    const char* wal_interval_env = std::getenv("WAL_FLUSH_INTERVAL");
+    envVars.SetString("WAL_FLUSH_INTERVAL", wal_interval_env ? wal_interval_env : "(not set)");
+
+    const char* wal_auto_env = std::getenv("WAL_AUTO_FLUSH");
+    envVars.SetString("WAL_AUTO_FLUSH", wal_auto_env ? wal_auto_env : "(not set)");
+
+    const char* threads_env = std::getenv("EPSILLA_INTRA_QUERY_THREADS");
+    envVars.SetString("EPSILLA_INTRA_QUERY_THREADS", threads_env ? threads_env : "(not set)");
+
+    // Build response
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Get configuration successfully.");
+    response.SetObject("config", config);
+    response.SetObject("environmentVariables", envVars);
+
+    // Add hardware info
+    vectordb::Json hardwareInfo;
+    hardwareInfo.LoadFromString("{}");
+    unsigned int hw_threads = std::thread::hardware_concurrency();
+    hardwareInfo.SetInt("hardwareThreads", hw_threads ? hw_threads : 4);
+    response.SetObject("hardware", hardwareInfo);
+
+    return createResponse(Status::CODE_200, response.DumpToString());
+  }
+
   ADD_CORS(UpdateConfig)
 
+  ENDPOINT_INFO(UpdateConfig) {
+    info->summary = "Update Runtime Configuration";
+    info->description = "Update the runtime configuration of VectorDB. Supports dynamic configuration changes for thread counts, queue sizes, and other operational parameters";
+    info->addConsumes<String>("application/json");
+    info->addResponse<Object<StatusDto>>(Status::CODE_200, "application/json", "Configuration updated successfully");
+    info->addResponse<Object<StatusDto>>(Status::CODE_400, "application/json", "Invalid configuration payload");
+    info->addResponse<Object<StatusDto>>(Status::CODE_500, "application/json", "Configuration update failed");
+    info->addTag("Configuration");
+  }
   ENDPOINT("POST", "api/config", UpdateConfig, BODY_STRING(String, body)) {
     vectordb::Json parsedBody;
     auto dto = StatusDto::createShared();

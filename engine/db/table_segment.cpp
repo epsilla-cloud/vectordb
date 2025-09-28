@@ -357,13 +357,13 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
   bool use_soft_delete = vectordb::globalConfig.SoftDelete.load(std::memory_order_acquire);
   
   if (!use_soft_delete) {
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
     logger_.Debug("[TableSegment] Hard delete mode enabled, using HardDelete method");
 #endif
     return HardDelete(records, filter_nodes, wal_id);
   }
 
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
   logger_.Debug("[TableSegment] Soft delete mode enabled, using standard delete (mark as deleted)");
 #endif
   std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
@@ -373,7 +373,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
   bool has_filter = !filter_nodes.empty();
 
   // Only log deletion summary for large batches or in debug mode
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
   logger_.Debug("[TableSegment] Starting deletion in segment, wal_id=" + std::to_string(wal_id) +
                ", primaryKeys=" + std::to_string(pk_list_size) + " items" +
                (has_filter ? ", with_filter=true" : ", with_filter=false"));
@@ -398,7 +398,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
 
   if (pk_list_size > 0) {
     // Delete by the pk list.
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
     logger_.Debug("[TableSegment] Deleting by primary key list (" + std::to_string(pk_list_size) + " keys)");
 #endif
     
@@ -415,7 +415,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
         switch (pkType()) {
           case meta::FieldType::INT1:
             item_deleted = DeleteByIntPK(static_cast<int8_t>(pk), expr_evaluator, filter_root_index).ok();
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT1 pk=" + std::to_string(pk));
             } else {
@@ -425,7 +425,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
             break;
           case meta::FieldType::INT2:
             item_deleted = DeleteByIntPK(static_cast<int16_t>(pk), expr_evaluator, filter_root_index).ok();
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT2 pk=" + std::to_string(pk));
             } else {
@@ -435,7 +435,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
             break;
           case meta::FieldType::INT4:
             item_deleted = DeleteByIntPK(static_cast<int32_t>(pk), expr_evaluator, filter_root_index).ok();
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT4 pk=" + std::to_string(pk));
             } else {
@@ -445,7 +445,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
             break;
           case meta::FieldType::INT8:
             item_deleted = DeleteByIntPK(static_cast<int64_t>(pk), expr_evaluator, filter_root_index).ok();
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
             if (item_deleted) {
               logger_.Debug("[TableSegment] Deleted record with INT8 pk=" + std::to_string(pk));
             } else {
@@ -457,7 +457,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
       } else if (isStringPK()) {
         auto pk = pkField.GetString();
         item_deleted = DeleteByStringPK(pk, expr_evaluator, filter_root_index).ok();
-#ifdef DEBUG
+#ifdef VECTORDB_DEBUG_BUILD
         if (item_deleted) {
           logger_.Debug("[TableSegment] Deleted record with STRING pk=" + pk);
         } else {
