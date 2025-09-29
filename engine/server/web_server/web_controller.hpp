@@ -28,6 +28,7 @@
 #include "utils/status.hpp"
 #include "utils/constants.hpp"
 #include "config/config.hpp"
+#include "db/compaction_manager.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -578,7 +579,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.LoadFromString("{\"result\": " + insert_status.message() + "}");
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Insert data to " + table_name + " successfully.");
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(InsertRecordsPrepare)
@@ -624,7 +627,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "");
     response.SetObject("result", result);
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(DeleteRecordsByPK)
@@ -694,7 +699,9 @@ class WebController : public oatpp::web::server::api::ApiController {
       response.LoadFromString("{\"result\": " + status.message() + "}");
       response.SetInt("statusCode", Status::CODE_200.code);
       response.SetString("message", "Delete data from " + table + " successfully.");
-      return createResponse(Status::CODE_200, response.DumpToString());
+      auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
     } else {
       // Log deletion failure
       OATPP_LOGE("WebController", "[WEB] Deletion failed for db=%s, table=%s, error=%s", 
@@ -735,7 +742,9 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_500, status_dto);
     }
 
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
   
   // Get record count for database and/or table
@@ -762,7 +771,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Success");
     
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
   
   // Get record count for all databases
@@ -788,7 +799,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Success");
     
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(Query)
@@ -1010,7 +1023,9 @@ class WebController : public oatpp::web::server::api::ApiController {
       final_result.SetObject("facets", facets);
       response.SetObject("result", final_result);
     }
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(Project)
@@ -1109,7 +1124,9 @@ class WebController : public oatpp::web::server::api::ApiController {
       response.SetObject("result", final_result);
     }
     
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(Rebuild)
@@ -1277,7 +1294,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     hardwareInfo.SetInt("hardwareThreads", hw_threads ? hw_threads : 4);
     response.SetObject("hardware", hardwareInfo);
 
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(UpdateConfig)
@@ -1317,6 +1336,103 @@ class WebController : public oatpp::web::server::api::ApiController {
     dto->statusCode = Status::CODE_200.code;
     dto->message = std::string("Config updated successfully.");
     return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(GetStats)
+
+  ENDPOINT_INFO(GetStats) {
+    info->summary = "Get Compaction Statistics";
+    info->description = "Retrieve compaction statistics including deleted vector ratios, compaction counts, and memory freed";
+    info->addResponse<String>(Status::CODE_200, "application/json", "Statistics retrieved successfully");
+    info->addTag("Compaction");
+  }
+  ENDPOINT("GET", "api/stats", GetStats) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    // Get compaction statistics from CompactionManager
+    auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+    vectordb::Json stats = compactionMgr.GetAllStatsAsJson();
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Get statistics successfully.");
+    response.SetObject("stats", stats);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(TriggerCompaction)
+
+  ENDPOINT_INFO(TriggerCompaction) {
+    info->summary = "Trigger Manual Compaction";
+    info->description = "Manually trigger compaction for a specific table or all tables to reclaim memory from soft-deleted vectors";
+    info->addConsumes<String>("application/json");
+    info->addResponse<Object<StatusDto>>(Status::CODE_200, "application/json", "Compaction triggered successfully");
+    info->addResponse<Object<StatusDto>>(Status::CODE_400, "application/json", "Invalid request");
+    info->addResponse<Object<StatusDto>>(Status::CODE_500, "application/json", "Compaction failed");
+    info->addTag("Compaction");
+  }
+  ENDPOINT("POST", "api/compact", TriggerCompaction, BODY_STRING(String, body)) {
+    auto dto = StatusDto::createShared();
+
+    if (!body || body->length() == 0) {
+      // Compact all tables if no body provided
+      auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+      auto status = compactionMgr.CompactAllTables();
+
+      dto->statusCode = status.ok() ? Status::CODE_200.code : Status::CODE_500.code;
+      dto->message = status.ok() ? "All tables compacted successfully" : status.message();
+    } else {
+      // Parse body for specific table
+      vectordb::Json parsedBody;
+      auto valid = parsedBody.LoadFromString(body);
+      if (!valid) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid JSON payload";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+
+      std::string table_name = parsedBody.GetString("table");
+      auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+
+      if (table_name.empty()) {
+        auto status = compactionMgr.CompactAllTables();
+        dto->statusCode = status.ok() ? Status::CODE_200.code : Status::CODE_500.code;
+        dto->message = status.ok() ? "All tables compacted successfully" : status.message();
+      } else {
+        auto status = compactionMgr.CompactTable(table_name);
+        dto->statusCode = status.ok() ? Status::CODE_200.code : Status::CODE_500.code;
+        dto->message = status.ok() ? "Table " + table_name + " compacted successfully" : status.message();
+      }
+    }
+
+    return createDtoResponse(dto->statusCode == 200 ? Status::CODE_200 : Status::CODE_500, dto);
+  }
+
+  ADD_CORS(GetCompactionStatus)
+
+  ENDPOINT_INFO(GetCompactionStatus) {
+    info->summary = "Get Compaction Status";
+    info->description = "Check if compaction is currently running";
+    info->addResponse<String>(Status::CODE_200, "application/json", "Status retrieved successfully");
+    info->addTag("Compaction");
+  }
+  ENDPOINT("GET", "api/compact/status", GetCompactionStatus) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+    bool isCompacting = compactionMgr.IsCompacting();
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Get compaction status successfully.");
+    response.SetBool("isCompacting", isCompacting);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
 /**

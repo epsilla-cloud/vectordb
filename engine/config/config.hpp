@@ -31,6 +31,13 @@ struct Config {
   // WAL auto-flush configuration
   std::atomic<int> WALFlushInterval{30};  // Default: flush every 30 seconds
   std::atomic<bool> WALAutoFlush{true};   // Enable/disable auto flush
+
+  // Compaction configuration (inspired by Qdrant and Milvus best practices)
+  std::atomic<bool> AutoCompaction{true};        // Enable automatic compaction (default: true)
+  std::atomic<double> CompactionThreshold{0.2};  // Trigger compaction when 20% deleted (default: 0.2)
+  std::atomic<int> CompactionInterval{3600};     // Check interval in seconds (default: 1 hour)
+  std::atomic<int> MinVectorsForCompaction{1000}; // Minimum vectors to trigger compaction (default: 1000)
+  std::atomic<int> CompactionMaxDuration{1800};   // Maximum compaction duration in seconds (default: 30 min)
   
   // Constructor to initialize thread counts based on hardware
   Config() {
@@ -88,6 +95,34 @@ struct Config {
       WALAutoFlush.store(auto_flush, std::memory_order_release);
       printf("[Config] Using WAL_AUTO_FLUSH=%s from environment\n", auto_flush ? "true" : "false");
     }
+
+    // Check environment variables for compaction configuration
+    const char* env_auto_compact = std::getenv("AUTO_COMPACTION");
+    if (env_auto_compact != nullptr) {
+      std::string env_value(env_auto_compact);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool auto_compact = (env_value == "true" || env_value == "1" || env_value == "yes");
+      AutoCompaction.store(auto_compact, std::memory_order_release);
+      printf("[Config] Using AUTO_COMPACTION=%s from environment\n", auto_compact ? "true" : "false");
+    }
+
+    const char* env_compact_thresh = std::getenv("COMPACTION_THRESHOLD");
+    if (env_compact_thresh != nullptr) {
+      double threshold = std::atof(env_compact_thresh);
+      if (threshold >= 0.05 && threshold <= 0.5) {  // Between 5% and 50%
+        CompactionThreshold.store(threshold, std::memory_order_release);
+        printf("[Config] Using COMPACTION_THRESHOLD=%.2f from environment\n", threshold);
+      }
+    }
+
+    const char* env_compact_interval = std::getenv("COMPACTION_INTERVAL");
+    if (env_compact_interval != nullptr) {
+      int interval = std::atoi(env_compact_interval);
+      if (interval >= 60 && interval <= 86400) {  // Between 1 minute and 24 hours
+        CompactionInterval.store(interval, std::memory_order_release);
+        printf("[Config] Using COMPACTION_INTERVAL=%d seconds from environment\n", interval);
+      }
+    }
     
     // Log the configuration - print all important settings
     printf("\n");
@@ -112,6 +147,12 @@ struct Config {
     printf(" WAL Configuration:\n");
     printf("   - WAL Flush Interval        : %d seconds\n", WALFlushInterval.load());
     printf("   - WAL Auto Flush            : %s\n", WALAutoFlush.load() ? "ENABLED" : "DISABLED");
+    printf("\n");
+    printf(" Compaction Configuration:\n");
+    printf("   - Auto Compaction           : %s\n", AutoCompaction.load() ? "ENABLED" : "DISABLED");
+    printf("   - Compaction Threshold      : %.1f%% deleted\n", CompactionThreshold.load() * 100);
+    printf("   - Compaction Interval       : %d seconds\n", CompactionInterval.load());
+    printf("   - Min Vectors               : %d\n", MinVectorsForCompaction.load());
     printf("\n");
     printf(" Other Settings:\n");
     printf("   - Pre-Filter                : %s\n", PreFilter.load() ? "ENABLED" : "DISABLED");
@@ -209,6 +250,11 @@ struct Config {
     config.SetBool("SoftDelete", SoftDelete.load(std::memory_order_acquire));
     config.SetInt("WALFlushInterval", WALFlushInterval.load(std::memory_order_acquire));
     config.SetBool("WALAutoFlush", WALAutoFlush.load(std::memory_order_acquire));
+    config.SetBool("AutoCompaction", AutoCompaction.load(std::memory_order_acquire));
+    config.SetDouble("CompactionThreshold", CompactionThreshold.load(std::memory_order_acquire));
+    config.SetInt("CompactionInterval", CompactionInterval.load(std::memory_order_acquire));
+    config.SetInt("MinVectorsForCompaction", MinVectorsForCompaction.load(std::memory_order_acquire));
+    config.SetInt("CompactionMaxDuration", CompactionMaxDuration.load(std::memory_order_acquire));
     return config;
   }
 };

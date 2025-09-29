@@ -6,6 +6,8 @@
 #include <oatpp-swagger/Model.hpp>
 #include <oatpp-swagger/Resources.hpp>
 #include <oatpp-swagger/Generator.hpp>
+#include <string>
+#include <vector>
 
 namespace vectordb {
 namespace server {
@@ -66,23 +68,73 @@ public:
   }
   
   ENDPOINT("GET", "/api/docs", getUIRoot) {
-    if(m_resources->isStreaming()) {
-      auto body = std::make_shared<oatpp::web::protocol::http::outgoing::StreamingBody>(
-        m_resources->getResourceStream("index.html")
-      );
-      return OutgoingResponse::createShared(Status::CODE_200, body);
+    // Serve custom index.html with correct paths for /api/docs
+    std::string htmlContent = R"(
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>VectorDB API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="/api/docs/swagger-ui.css" >
+    <link rel="icon" type="image/png" href="/api/docs/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/api/docs/favicon-16x16.png" sizes="16x16" />
+    <style>
+      html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+      *, *:before, *:after { box-sizing: inherit; }
+      body { margin:0; background: #fafafa; }
+    </style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="/api/docs/swagger-ui-bundle.js" charset="UTF-8"> </script>
+    <script src="/api/docs/swagger-ui-standalone-preset.js" charset="UTF-8"> </script>
+    <script>
+    window.onload = function() {
+      const ui = SwaggerUIBundle({
+        url: "/api-docs/oas-3.0.0.json",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [ SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset ],
+        plugins: [ SwaggerUIBundle.plugins.DownloadUrl ],
+        layout: "StandaloneLayout"
+      })
+      window.ui = ui
     }
-    return createResponse(Status::CODE_200, m_resources->getResource("index.html"));
+    </script>
+  </body>
+</html>
+)";
+
+    auto response = createResponse(Status::CODE_200, htmlContent);
+    response->putHeader("Content-Type", "text/html");
+    return response;
   }
-  
+
   ENDPOINT("GET", "/api/docs/{filename}", getUIResource, PATH(String, filename)) {
+    // Set correct content type based on file extension
+    oatpp::String contentType = "application/octet-stream";
+    if (filename->find(".css") != std::string::npos) {
+      contentType = "text/css";
+    } else if (filename->find(".js") != std::string::npos) {
+      contentType = "application/javascript";
+    } else if (filename->find(".png") != std::string::npos) {
+      contentType = "image/png";
+    } else if (filename->find(".html") != std::string::npos) {
+      contentType = "text/html";
+    }
+
     if(m_resources->isStreaming()) {
       auto body = std::make_shared<oatpp::web::protocol::http::outgoing::StreamingBody>(
         m_resources->getResourceStream(filename->c_str())
       );
-      return OutgoingResponse::createShared(Status::CODE_200, body);
+      auto response = OutgoingResponse::createShared(Status::CODE_200, body);
+      response->putHeader("Content-Type", contentType);
+      return response;
     }
-    return createResponse(Status::CODE_200, m_resources->getResource(filename->c_str()));
+
+    auto response = createResponse(Status::CODE_200, m_resources->getResource(filename->c_str()));
+    response->putHeader("Content-Type", contentType);
+    return response;
   }
   
 #include OATPP_CODEGEN_END(ApiController)

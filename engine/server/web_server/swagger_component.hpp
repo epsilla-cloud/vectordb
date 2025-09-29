@@ -39,7 +39,7 @@ public:
    * @brief Swagger UI resources configuration
    */
   OATPP_CREATE_COMPONENT(std::shared_ptr<oatpp::swagger::Resources>, swaggerResources)([] {
-    // Use the correct path to swagger resources
+    // Use the correct path to swagger resources - relative to where the server is run
     return oatpp::swagger::Resources::streamResources("build/dependencies/include/oatpp-1.3.0/bin/oatpp-swagger/res");
   }());
 
