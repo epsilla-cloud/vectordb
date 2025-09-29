@@ -117,6 +117,7 @@ class Database {
  public:
   vectordb::engine::Logger logger_;
   std::string db_catalog_path_;                                   // The path to the db catalog.
+  meta::DatabaseSchema database_schema_;                          // The database schema.
   // Thread-safe map for table name to id mapping
   utils::ConcurrentUnorderedMap<std::string, size_t> table_name_to_id_map_;  // The table name to table id map.
   

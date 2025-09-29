@@ -7,6 +7,7 @@
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/execution/aggregation.hpp"
 #include "config/config.hpp"
+#include "db/compaction_manager.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -18,6 +19,13 @@ DBServer::DBServer() {
   // Start WAL flush thread if auto-flush is enabled
   if (vectordb::globalConfig.WALAutoFlush.load()) {
     StartWALFlushThread();
+  }
+
+  // Start compaction manager if auto-compaction is enabled
+  if (vectordb::globalConfig.AutoCompaction.load()) {
+    logger_.Info("Starting automatic compaction manager");
+    auto& compactionMgr = CompactionManager::GetInstance();
+    compactionMgr.Start();
   }
 }
 
@@ -32,6 +40,10 @@ DBServer::~DBServer() {
   
   // Stop WAL flush thread
   StopWALFlushThread();
+
+  // Stop compaction manager
+  auto& compactionMgr = CompactionManager::GetInstance();
+  compactionMgr.Stop();
 }
 
 Status DBServer::LoadDB(const std::string& db_name,
