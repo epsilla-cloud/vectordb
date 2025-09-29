@@ -1,5 +1,7 @@
 #include "db/database.hpp"
 
+#include "db/compaction_manager.hpp"
+#include "config/config.hpp"
 #include "utils/common_util.hpp"
 
 namespace vectordb {
@@ -10,7 +12,8 @@ Database::Database(
   int64_t init_table_scale,
   bool is_leader,
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service,
-  std::unordered_map<std::string, std::string> &headers) {
+  std::unordered_map<std::string, std::string> &headers)
+  : database_schema_(database_schema), logger_() {
   embedding_service_ = embedding_service;
   is_leader_ = is_leader;
   // Here you might want to initialize your database based on the provided schema
@@ -34,6 +37,14 @@ Database::Database(
       table_index = tables_.size() - 1;
     }
     table_name_to_id_map_.insert_or_update(database_schema.tables_[i].name_, table_index);
+
+    // Register table with CompactionManager if auto-compaction is enabled
+    if (vectordb::globalConfig.AutoCompaction.load()) {
+      auto& compaction_mgr = CompactionManager::GetInstance();
+      std::string full_table_name = database_schema.name_ + "." + database_schema.tables_[i].name_;
+      compaction_mgr.RegisterTable(full_table_name, table);
+      logger_.Debug("Registered table " + full_table_name + " with CompactionManager");
+    }
   }
 }
 
@@ -52,6 +63,15 @@ Status Database::CreateTable(meta::TableSchema& table_schema) {
     table_index = tables_.size() - 1;
   }
   table_name_to_id_map_.insert_or_update(table_schema.name_, table_index);
+
+  // Register table with CompactionManager if auto-compaction is enabled
+  if (vectordb::globalConfig.AutoCompaction.load()) {
+    auto& compaction_mgr = CompactionManager::GetInstance();
+    std::string full_table_name = database_schema_.name_ + "." + table_schema.name_;
+    compaction_mgr.RegisterTable(full_table_name, table);
+    logger_.Debug("Registered table " + full_table_name + " with CompactionManager");
+  }
+
   return Status::OK();
 }
 
@@ -79,6 +99,14 @@ Status Database::DeleteTable(const std::string& table_name) {
   
   // Remove from name map after releasing the lock
   table_name_to_id_map_.erase(table_name);
+
+  // Unregister from CompactionManager
+  if (vectordb::globalConfig.AutoCompaction.load()) {
+    auto& compaction_mgr = CompactionManager::GetInstance();
+    std::string full_table_name = database_schema_.name_ + "." + table_name;
+    compaction_mgr.UnregisterTable(full_table_name);
+    logger_.Debug("Unregistered table " + full_table_name + " from CompactionManager");
+  }
 
   if (is_leader_) {
     // Delete table from disk.
