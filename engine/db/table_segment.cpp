@@ -97,14 +97,18 @@ Status TableSegment::Init(meta::TableSchema& table_schema, int64_t size_limit) {
     }
   }
 
-  // Check for integer overflow and allocate attribute table
+  // Use dynamic memory blocks with initial capacity
+  capacity_ = size_limit;  // Start with initial capacity equal to size limit
+
+  // Allocate dynamic attribute table
   if (primitive_offset_ > 0) {
     size_t total_size = 0;
-    if (__builtin_mul_overflow(size_limit, primitive_offset_, &total_size)) {
+    if (__builtin_mul_overflow(capacity_, primitive_offset_, &total_size)) {
       return Status(DB_UNEXPECTED_ERROR, "Integer overflow in attribute table size calculation");
     }
-    attribute_table_ = std::make_unique<char[]>(total_size);
-    std::memset(attribute_table_.get(), 0, total_size);
+    attribute_table_ = std::make_unique<DynamicMemoryBlock<char>>(total_size, GrowthStrategy::ADAPTIVE);
+    // Initialize to zero
+    std::memset(attribute_table_->GetData(), 0, total_size);
   }
   
   var_len_attr_table_.resize(var_len_attr_num_);
@@ -112,15 +116,16 @@ Status TableSegment::Init(meta::TableSchema& table_schema, int64_t size_limit) {
     elem.resize(size_limit_);
   }
 
-  // Allocate vector tables with overflow checking
+  // Allocate dynamic vector tables
   if (dense_vector_num_ > 0) {
     vector_tables_.resize(dense_vector_num_);
     for (auto i = 0; i < dense_vector_num_; ++i) {
-      size_t total_size = 0;
-      if (__builtin_mul_overflow(size_limit, vector_dims_[i], &total_size)) {
-        return Status(DB_UNEXPECTED_ERROR, "Integer overflow in vector table size calculation");
-      }
-      vector_tables_[i] = std::make_unique<float[]>(total_size);
+      // Create dynamic vector block with initial capacity
+      vector_tables_[i] = std::make_unique<DynamicVectorBlock>(
+          capacity_,  // initial number of vectors
+          vector_dims_[i],  // dimension per vector
+          GrowthStrategy::ADAPTIVE
+      );
     }
   }
   
@@ -129,9 +134,147 @@ Status TableSegment::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   return Status::OK();
 }
 
+Status TableSegment::Resize(size_t new_capacity) {
+  // Check if critical operations are in progress
+  if (index_rebuild_in_progress_.load() || compaction_in_progress_.load()) {
+    logger_.Debug("[TableSegment] Resize deferred - critical operation in progress");
+    return Status::OK();  // Defer resize, will be retried on next insert
+  }
+
+  std::unique_lock lock(data_rw_mutex_);
+
+  if (new_capacity <= capacity_) {
+    // No need to resize if new capacity is smaller or equal
+    return Status::OK();
+  }
+
+  logger_.Info("Resizing TableSegment from capacity " + std::to_string(capacity_) +
+              " to " + std::to_string(new_capacity));
+
+  // Track resize progress for rollback
+  size_t resize_step = 0;
+  size_t old_capacity = capacity_;
+  size_t old_size_limit = size_limit_;
+  std::vector<size_t> resized_vector_tables;
+
+  // Resize attribute table
+  if (primitive_offset_ > 0 && attribute_table_) {
+    size_t new_size = new_capacity * primitive_offset_;
+    auto status = attribute_table_->Resize(new_size);
+    if (!status.ok()) {
+      logger_.Error("Failed to resize attribute table: " + status.message());
+      return status;
+    }
+    resize_step = 1;
+  }
+
+  // Resize vector tables (with rollback capability)
+  for (size_t i = 0; i < vector_tables_.size(); ++i) {
+    if (vector_tables_[i]) {
+      auto status = vector_tables_[i]->ResizeVectors(new_capacity);
+      if (!status.ok()) {
+        logger_.Error("Failed to resize vector table " + std::to_string(i) + ": " + status.message());
+
+        // Rollback: Resize back the vector tables that were already resized
+        for (size_t j : resized_vector_tables) {
+          vector_tables_[j]->ResizeVectors(old_capacity);
+        }
+
+        // Rollback: Resize back the attribute table if it was resized
+        if (resize_step >= 1 && attribute_table_) {
+          attribute_table_->Resize(old_capacity * primitive_offset_);
+        }
+
+        return status;
+      }
+      resized_vector_tables.push_back(i);
+    }
+  }
+  resize_step = 2;
+
+  // Resize variable length attribute tables
+  try {
+    for (auto& var_table : var_len_attr_table_) {
+      var_table.resize(new_capacity);
+    }
+    resize_step = 3;
+  } catch (const std::exception& e) {
+    logger_.Error("Failed to resize variable length tables: " + std::string(e.what()));
+
+    // Rollback all previous operations
+    // Rollback vector tables
+    for (size_t i = 0; i < vector_tables_.size(); ++i) {
+      if (vector_tables_[i]) {
+        vector_tables_[i]->ResizeVectors(old_capacity);
+      }
+    }
+
+    // Rollback attribute table
+    if (primitive_offset_ > 0 && attribute_table_) {
+      attribute_table_->Resize(old_capacity * primitive_offset_);
+    }
+
+    return Status(DB_UNEXPECTED_ERROR, "Failed to resize variable length tables: " + std::string(e.what()));
+  }
+
+  // Resize deleted bitset
+  try {
+    auto new_deleted = std::make_unique<ConcurrentBitset>(new_capacity);
+    // Copy existing deleted bits
+    for (size_t i = 0; i < record_number_; ++i) {
+      if (deleted_->test(i)) {
+        new_deleted->set(i);
+      }
+    }
+    deleted_ = std::move(new_deleted);
+    resize_step = 4;
+  } catch (const std::exception& e) {
+    logger_.Error("Failed to resize deleted bitset: " + std::string(e.what()));
+
+    // Rollback all previous operations
+    // Rollback variable length tables
+    for (auto& var_table : var_len_attr_table_) {
+      var_table.resize(old_capacity);
+    }
+
+    // Rollback vector tables
+    for (size_t i = 0; i < vector_tables_.size(); ++i) {
+      if (vector_tables_[i]) {
+        vector_tables_[i]->ResizeVectors(old_capacity);
+      }
+    }
+
+    // Rollback attribute table
+    if (primitive_offset_ > 0 && attribute_table_) {
+      attribute_table_->Resize(old_capacity * primitive_offset_);
+    }
+
+    return Status(DB_UNEXPECTED_ERROR, "Failed to resize deleted bitset: " + std::string(e.what()));
+  }
+
+  // Update capacity and size limit (final commit point)
+  capacity_ = new_capacity;
+  size_limit_ = new_capacity;
+
+  logger_.Info("TableSegment resize completed successfully");
+  return Status::OK();
+}
+
+Status TableSegment::DoubleSize() {
+  size_t new_capacity = capacity_ * 2;
+
+  // Check for overflow
+  if (new_capacity < capacity_) {
+    return Status(DB_UNEXPECTED_ERROR, "Capacity overflow when doubling size");
+  }
+
+  return Resize(new_capacity);
+}
+
 TableSegment::TableSegment(meta::TableSchema& table_schema, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service)
     : skip_sync_disk_(false),
       size_limit_(init_table_scale),
+      capacity_(init_table_scale),  // Initialize capacity
       first_record_id_(0),
       record_number_(0),
       field_name_mem_offset_map_(0),
@@ -146,12 +289,17 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, int64_t init_table_s
       sparse_vector_num_(0),
       vector_dims_(0) {
   embedding_service_ = embedding_service;
+
+  // Initialize insertion rate monitor for predictive expansion
+  insertion_monitor_ = std::make_unique<InsertionRateMonitor>(10);
+
   Init(table_schema, init_table_scale);
 }
 
 TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& db_catalog_path, int64_t init_table_scale, std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service)
     : skip_sync_disk_(true),
       size_limit_(init_table_scale),
+      capacity_(init_table_scale),  // Initialize capacity
       first_record_id_(0),
       record_number_(0),
       field_name_mem_offset_map_(0),
@@ -167,6 +315,10 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& d
       vector_dims_(0),
       wal_global_id_(-1) {
   embedding_service_ = embedding_service;
+
+  // Initialize insertion rate monitor for predictive expansion
+  insertion_monitor_ = std::make_unique<InsertionRateMonitor>(10);
+
   // Init the containers.
   Init(table_schema, init_table_scale);
   std::string path = db_catalog_path + "/" + std::to_string(table_schema.id_) + "/data_mvp.bin";
@@ -205,7 +357,7 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& d
     file.read(reinterpret_cast<char*>(deleted_->data()), bitset_size);
 
     // Read the attribute table
-    file.read(attribute_table_.get(), record_number_ * primitive_offset_);
+    file.read(attribute_table_->GetData(), record_number_ * primitive_offset_);
 
     // add int pk into set
     if (isIntPK()) {
@@ -218,28 +370,28 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& d
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = 0;
-            std::memcpy(&value, &(attribute_table_.get()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int8_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int8_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value = 0;
-            std::memcpy(&value, &(attribute_table_.get()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int16_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int16_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value = 0;
-            std::memcpy(&value, &(attribute_table_.get()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int32_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int32_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value = 0;
-            std::memcpy(&value, &(attribute_table_.get()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int64_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int64_t));
             // do not check existance to avoid overhead
             primary_key_.addKeyIfNotExist(value, rIdx);
             break;
@@ -261,9 +413,9 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& d
             continue;
           }
           double lat = 0;
-          std::memcpy(&lat, &(attribute_table_.get()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+          std::memcpy(&lat, &(attribute_table_->GetData()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
           double lon = 0;
-          std::memcpy(&lon, &(attribute_table_.get()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+          std::memcpy(&lon, &(attribute_table_->GetData()[rIdx * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
           index->insertPoint(lat, lon, rIdx);
         }
       }
@@ -305,7 +457,7 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& d
 
     // Read the vector table
     for (auto i = 0; i < dense_vector_num_; ++i) {
-      file.read(reinterpret_cast<char*>(vector_tables_[i].get()), sizeof(float) * record_number_ * vector_dims_[i]);
+      file.read(reinterpret_cast<char*>(vector_tables_[i]->GetData()), sizeof(float) * record_number_ * vector_dims_[i]);
     }
 
     // Last, read the global wal id.
@@ -392,7 +544,7 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
       field_name_mem_offset_map_,
       primitive_offset_,
       var_len_attr_num_,
-      attribute_table_.get(),
+      attribute_table_->GetData(),
       var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
 
@@ -495,25 +647,25 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
         switch (pkType()) {
           case meta::FieldType::INT1: {
             int8_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[offset]), sizeof(int8_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[offset]), sizeof(int8_t));
             item_deleted = DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
           }
           case meta::FieldType::INT2: {
             int16_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[offset]), sizeof(int16_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[offset]), sizeof(int16_t));
             item_deleted = DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
           }
           case meta::FieldType::INT4: {
             int32_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[offset]), sizeof(int32_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[offset]), sizeof(int32_t));
             item_deleted = DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
           }
           case meta::FieldType::INT8: {
             int64_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[offset]), sizeof(int64_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[offset]), sizeof(int64_t));
             item_deleted = DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
           }
@@ -618,7 +770,7 @@ Status TableSegment::HardDelete(Json& records, std::vector<vectordb::query::expr
       field_name_mem_offset_map_,
       primitive_offset_,
       var_len_attr_num_,
-      attribute_table_.get(),
+      attribute_table_->GetData(),
       var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
 
@@ -713,28 +865,28 @@ Status TableSegment::BatchHardDelete(const std::vector<size_t>& sorted_ids) {
       switch (pkType()) {
         case meta::FieldType::INT1: {
           int8_t pk;
-          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int8_t));
+          std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int8_t));
           primary_key_.removeKey(pk);
           logger_.Debug("[TableSegment] Removed INT8 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
           break;
         }
         case meta::FieldType::INT2: {
           int16_t pk;
-          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int16_t));
+          std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int16_t));
           primary_key_.removeKey(pk);
           logger_.Debug("[TableSegment] Removed INT16 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
           break;
         }
         case meta::FieldType::INT4: {
           int32_t pk;
-          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int32_t));
+          std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int32_t));
           primary_key_.removeKey(pk);
           logger_.Debug("[TableSegment] Removed INT32 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
           break;
         }
         case meta::FieldType::INT8: {
           int64_t pk;
-          std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int64_t));
+          std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int64_t));
           primary_key_.removeKey(pk);
           logger_.Debug("[TableSegment] Removed INT64 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
           break;
@@ -791,7 +943,7 @@ Status TableSegment::CompactDataStructures(const std::vector<size_t>& sorted_ids
   
   // Compact attribute data
   size_t record_size = primitive_offset_;
-  char* attr_data = attribute_table_.get();
+  char* attr_data = attribute_table_->GetData();
   size_t write_pos = 0;
   
   for (size_t read_pos = 0; read_pos < total_records; ++read_pos) {
@@ -809,7 +961,7 @@ Status TableSegment::CompactDataStructures(const std::vector<size_t>& sorted_ids
   for (size_t v = 0; v < vector_tables_.size() && v < vector_dims_.size(); ++v) {
     if (vector_tables_[v]) {
       size_t vec_dim = vector_dims_[v];
-      float* vec_data = vector_tables_[v].get();
+      float* vec_data = vector_tables_[v]->GetData();
       size_t write_pos = 0;
       
       for (size_t read_pos = 0; read_pos < total_records; ++read_pos) {
@@ -843,6 +995,9 @@ Status TableSegment::CompactDataStructures(const std::vector<size_t>& sorted_ids
 // Rebuild primary key index after data compaction
 void TableSegment::RebuildPrimaryKeyIndex() {
   logger_.Debug("[TableSegment] Rebuilding primary key index after hard delete");
+
+  // Set flag to prevent resize during index rebuild
+  index_rebuild_in_progress_.store(true);
   
   // Clear existing index
   primary_key_.clear();
@@ -860,25 +1015,25 @@ void TableSegment::RebuildPrimaryKeyIndex() {
         switch (pkType()) {
           case meta::FieldType::INT1: {
             int8_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int8_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int8_t));
             primary_key_.addKeyIfNotExist(pk, id);
             break;
           }
           case meta::FieldType::INT2: {
             int16_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int16_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int16_t));
             primary_key_.addKeyIfNotExist(pk, id);
             break;
           }
           case meta::FieldType::INT4: {
             int32_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int32_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int32_t));
             primary_key_.addKeyIfNotExist(pk, id);
             break;
           }
           case meta::FieldType::INT8: {
             int64_t pk;
-            std::memcpy(&pk, &(attribute_table_.get()[pk_offset + id * primitive_offset_]), sizeof(int64_t));
+            std::memcpy(&pk, &(attribute_table_->GetData()[pk_offset + id * primitive_offset_]), sizeof(int64_t));
             primary_key_.addKeyIfNotExist(pk, id);
             break;
           }
@@ -888,6 +1043,9 @@ void TableSegment::RebuildPrimaryKeyIndex() {
   }
   
   logger_.Debug("[TableSegment] Primary key index rebuilt successfully");
+
+  // Clear index rebuild flag
+  index_rebuild_in_progress_.store(false);
 }
 
 // Legacy method - now redirects to safe batch version
@@ -929,7 +1087,33 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
     logger_.Debug("No records to insert.");
     return Status::OK();
   }
-  
+
+  // Record insertion for rate monitoring
+  if (insertion_monitor_) {
+    insertion_monitor_->RecordInsertion(new_record_size);
+
+    // Check if predictive expansion is recommended
+    if (predictive_expansion_enabled_.load() &&
+        insertion_monitor_->ShouldPreExpand(record_number_.load(), capacity_, 30.0)) {
+
+      // Calculate recommended capacity based on predicted growth
+      size_t recommended_capacity = insertion_monitor_->GetRecommendedCapacity(capacity_);
+
+      logger_.Info("Predictive expansion triggered: expanding from " +
+                  std::to_string(capacity_) + " to " +
+                  std::to_string(recommended_capacity) +
+                  " based on insertion rate of " +
+                  std::to_string(insertion_monitor_->GetCurrentRate()) + " records/sec");
+
+      // Perform pre-emptive resize
+      auto resize_status = Resize(recommended_capacity);
+      if (!resize_status.ok()) {
+        logger_.Warning("Predictive expansion failed: " + resize_status.message());
+        // Continue with normal operation even if predictive expansion fails
+      }
+    }
+  }
+
   // Check if the records are valid.
   for (auto i = 0; i < new_record_size; ++i) {
     auto record = records.GetArrayElement(i);
@@ -941,13 +1125,36 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
     }
   }
 
-  // Atomically reserve capacity
+  // Check if we need to resize
   size_t reserved_position;
   if (!capacity_manager_->TryReserve(new_record_size, reserved_position)) {
-    return Status(
-        DB_UNEXPECTED_ERROR,
-        "Currently, each table in this database can hold up to " + std::to_string(size_limit_) + " records. " +
-            "To insert more records, please unload the database and reload with a larger vectorScale parameter.");
+    // Need to resize - calculate new capacity
+    size_t required_capacity = record_number_ + new_record_size;
+    size_t new_capacity = capacity_;
+
+    // Use adaptive growth strategy
+    while (new_capacity < required_capacity) {
+      if (new_capacity < 10000) {
+        new_capacity *= 2;  // Double for small sizes
+      } else if (new_capacity < 100000) {
+        new_capacity = static_cast<size_t>(new_capacity * 1.5);  // 1.5x for medium
+      } else {
+        new_capacity += 100000;  // Linear for large sizes
+      }
+    }
+
+    // Attempt resize
+    auto resize_status = Resize(new_capacity);
+    if (!resize_status.ok()) {
+      return Status(DB_UNEXPECTED_ERROR,
+                   "Failed to dynamically resize table segment: " + resize_status.message());
+    }
+
+    // Try reserve again after resize
+    if (!capacity_manager_->TryReserve(new_record_size, reserved_position)) {
+      return Status(DB_UNEXPECTED_ERROR,
+                   "Failed to reserve capacity even after resize");
+    }
   }
 
   // Start WAL transaction
@@ -1052,14 +1259,16 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
         for (auto j = 0; j < field.vector_dimension_; ++j) {
           float value = static_cast<float>((float)(vector.GetArrayElement(j).GetDouble()));
           sum += value * value;
-          std::memcpy(&(vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j]), &value, sizeof(float));
+          float* vec_ptr = vector_tables_[field_id_mem_offset_map_[field.id_]]->GetVector(cursor);
+          std::memcpy(&vec_ptr[j], &value, sizeof(float));
         }
         // convert to length
         if (field.metric_type_ == meta::MetricType::COSINE && sum > 1e-10) {
           sum = std::sqrt(sum);
           // normalize value
           for (auto j = 0; j < field.vector_dimension_; ++j) {
-            vector_tables_[field_id_mem_offset_map_[field.id_]][cursor * vector_dims_[field_id_mem_offset_map_[field.id_]] + j] /= sum;
+            float* vec_ptr = vector_tables_[field_id_mem_offset_map_[field.id_]]->GetVector(cursor);
+            vec_ptr[j] /= sum;
           }
         }
       } else {
@@ -1067,37 +1276,37 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value = static_cast<int8_t>((int8_t)(record.GetInt(field.name_)));
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int8_t));
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value = static_cast<int16_t>((int16_t)(record.GetInt(field.name_)));
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int16_t));
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value = static_cast<int32_t>((int32_t)(record.GetInt(field.name_)));
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int32_t));
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value = static_cast<int64_t>((int64_t)(record.GetInt(field.name_)));
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(int64_t));
             break;
           }
           case meta::FieldType::FLOAT: {
             float value = static_cast<float>((float)(record.GetDouble(field.name_)));
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(float));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(float));
             break;
           }
           case meta::FieldType::DOUBLE: {
             double value = record.GetDouble(field.name_);
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(double));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(double));
             break;
           }
           case meta::FieldType::BOOL: {
             bool value = record.GetBool(field.name_);
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(bool));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &value, sizeof(bool));
             break;
           }
           case meta::FieldType::GEO_POINT: {
@@ -1115,8 +1324,8 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
             if (lon > 180) {
               lon = 180;
             }
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &lat, sizeof(double));
-            std::memcpy(&(attribute_table_.get()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), &lon, sizeof(double));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), &lat, sizeof(double));
+            std::memcpy(&(attribute_table_->GetData()[cursor * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), &lon, sizeof(double));
             // Insert into the geospatial index.
             geospatial_indices_[field.name_]->insertPoint(lat, lon, cursor);
             break;
@@ -1225,7 +1434,7 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
     auto status = embedding_service_->denseEmbedDocuments(
       index.embedding_model_name_,
       var_len_attr_table_[field_id_mem_offset_map_[index.src_field_id_]],
-      vector_tables_[field_id_mem_offset_map_[index.tgt_field_id_]].get(),
+      vector_tables_[field_id_mem_offset_map_[index.tgt_field_id_]]->GetData(),
       record_number_,
       cursor,
       table_schema.fields_[index.tgt_field_id_].vector_dimension_,
@@ -1445,7 +1654,7 @@ Status TableSegment::SaveTableSegment(meta::TableSchema& table_schema, const std
   fwrite(bitset_data, bitset_size, 1, file);
 
   // Write the attribute table.
-  fwrite(attribute_table_.get(), current_record_number * primitive_offset_, 1, file);
+  fwrite(attribute_table_->GetData(), current_record_number * primitive_offset_, 1, file);
 
   // Write the variable length table.
   for (auto recordIdx = 0; recordIdx < current_record_number; ++recordIdx) {
@@ -1468,7 +1677,7 @@ Status TableSegment::SaveTableSegment(meta::TableSchema& table_schema, const std
 
   // Write the vector table.
   for (auto i = 0; i < dense_vector_num_; ++i) {
-    fwrite(vector_tables_[i].get(), sizeof(float) * current_record_number * vector_dims_[i], 1, file);
+    fwrite(vector_tables_[i]->GetData(), sizeof(float) * current_record_number * vector_dims_[i], 1, file);
   }
 
   // Last, write the global wal id.
@@ -1506,10 +1715,14 @@ bool TableSegment::NeedsCompaction(double threshold) const {
 }
 
 Status TableSegment::CompactSegment() {
+  // Set compaction flag to prevent resize during compaction
+  compaction_in_progress_.store(true);
+
   std::unique_lock<std::shared_mutex> lock(data_rw_mutex_);
   
   size_t deleted_count = deleted_->count(record_number_);
   if (deleted_count == 0) {
+    compaction_in_progress_.store(false);  // Clear flag before early return
     return Status(DB_SUCCESS, "No deleted records to compact");
   }
   
@@ -1520,29 +1733,28 @@ Status TableSegment::CompactSegment() {
     deleted_ = std::make_unique<ConcurrentBitset>(size_limit_);
     primary_key_.clear();
     skip_sync_disk_.store(false);
+    compaction_in_progress_.store(false);  // Clear flag before return
     return Status(DB_SUCCESS, "All records deleted, segment reset");
   }
   
-  // Create new data structures with overflow checking
-  std::unique_ptr<char[]> new_attribute_table;
+  // Create new dynamic data structures
+  std::unique_ptr<DynamicMemoryBlock<char>> new_attribute_table;
   if (primitive_offset_ > 0) {
     size_t total_size = 0;
     if (__builtin_mul_overflow(new_size, primitive_offset_, &total_size)) {
       return Status(DB_UNEXPECTED_ERROR, "Integer overflow in compaction attribute table size");
     }
-    new_attribute_table = std::make_unique<char[]>(total_size);
-    std::memset(new_attribute_table.get(), 0, total_size);
+    new_attribute_table = std::make_unique<DynamicMemoryBlock<char>>(total_size, GrowthStrategy::ADAPTIVE);
+    std::memset(new_attribute_table->GetData(), 0, total_size);
   }
-  
-  std::vector<std::unique_ptr<float[]>> new_vector_tables;
+
+  std::vector<std::unique_ptr<DynamicVectorBlock>> new_vector_tables;
   if (dense_vector_num_ > 0) {
     new_vector_tables.resize(dense_vector_num_);
     for (int i = 0; i < dense_vector_num_; i++) {
-      size_t total_size = 0;
-      if (__builtin_mul_overflow(new_size, vector_dims_[i], &total_size)) {
-        return Status(DB_UNEXPECTED_ERROR, "Integer overflow in compaction vector table size");
-      }
-      new_vector_tables[i] = std::make_unique<float[]>(total_size);
+      new_vector_tables[i] = std::make_unique<DynamicVectorBlock>(
+          new_size, vector_dims_[i], GrowthStrategy::ADAPTIVE
+      );
     }
   }
   
@@ -1560,15 +1772,15 @@ Status TableSegment::CompactSegment() {
     if (!deleted_->test(old_idx)) {
       // Copy primitive attributes
       if (primitive_offset_ > 0 && attribute_table_) {
-        std::memcpy(new_attribute_table.get() + new_idx * primitive_offset_,
-                    attribute_table_.get() + old_idx * primitive_offset_,
+        std::memcpy(new_attribute_table->GetData() + new_idx * primitive_offset_,
+                    attribute_table_->GetData() + old_idx * primitive_offset_,
                     primitive_offset_);
       }
       
       // Copy vector data
       for (int v = 0; v < dense_vector_num_; v++) {
-        std::memcpy(new_vector_tables[v].get() + new_idx * vector_dims_[v],
-                    vector_tables_[v].get() + old_idx * vector_dims_[v],
+        std::memcpy(new_vector_tables[v]->GetVector(new_idx),
+                    vector_tables_[v]->GetVector(old_idx),
                     vector_dims_[v] * sizeof(float));
       }
       
@@ -1584,25 +1796,25 @@ Status TableSegment::CompactSegment() {
           switch (pkType()) {
             case meta::FieldType::INT1: {
               int8_t pk;
-              std::memcpy(&pk, &attribute_table_.get()[offset], sizeof(int8_t));
+              std::memcpy(&pk, &attribute_table_->GetData()[offset], sizeof(int8_t));
               new_primary_key.putKey(pk, new_idx);
               break;
             }
             case meta::FieldType::INT2: {
               int16_t pk;
-              std::memcpy(&pk, &attribute_table_.get()[offset], sizeof(int16_t));
+              std::memcpy(&pk, &attribute_table_->GetData()[offset], sizeof(int16_t));
               new_primary_key.putKey(pk, new_idx);
               break;
             }
             case meta::FieldType::INT4: {
               int32_t pk;
-              std::memcpy(&pk, &attribute_table_.get()[offset], sizeof(int32_t));
+              std::memcpy(&pk, &attribute_table_->GetData()[offset], sizeof(int32_t));
               new_primary_key.putKey(pk, new_idx);
               break;
             }
             case meta::FieldType::INT8: {
               int64_t pk;
-              std::memcpy(&pk, &attribute_table_.get()[offset], sizeof(int64_t));
+              std::memcpy(&pk, &attribute_table_->GetData()[offset], sizeof(int64_t));
               new_primary_key.putKey(pk, new_idx);
               break;
             }
@@ -1643,10 +1855,13 @@ Status TableSegment::CompactSegment() {
   // Mark for sync to disk
   skip_sync_disk_.store(false);
   
-  logger_.Info("Compaction completed: " + std::to_string(old_count) + " -> " + 
-               std::to_string(new_size) + " records (removed " + 
+  logger_.Info("Compaction completed: " + std::to_string(old_count) + " -> " +
+               std::to_string(new_size) + " records (removed " +
                std::to_string(deleted_count) + " deleted records)");
-  
+
+  // Clear compaction flag
+  compaction_in_progress_.store(false);
+
   return Status(DB_SUCCESS, "Compacted " + std::to_string(deleted_count) + " deleted records");
 }
 
@@ -1670,7 +1885,7 @@ void TableSegment::Debug(meta::TableSchema& table_schema) {
   std::cout << "attribute_table_: \n";
   for (size_t i = 0; i < record_number_ * primitive_offset_; ++i) {
     for (int j = 7; j >= 0; --j) {
-      std::cout << ((attribute_table_[i] >> j) & 1);
+      std::cout << ((attribute_table_->GetData()[i] >> j) & 1);
     }
     std::cout << ' ';
   }
@@ -1687,51 +1902,51 @@ void TableSegment::Debug(meta::TableSchema& table_schema) {
         switch (field.field_type_) {
           case meta::FieldType::INT1: {
             int8_t value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int8_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int8_t));
             std::cout << value << " ";
             break;
           }
           case meta::FieldType::INT2: {
             int16_t value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int16_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int16_t));
             std::cout << value << " ";
             break;
           }
           case meta::FieldType::INT4: {
             int32_t value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int32_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int32_t));
             std::cout << value << " ";
             break;
           }
           case meta::FieldType::INT8: {
             int64_t value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int64_t));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(int64_t));
             std::cout << value << " ";
             break;
           }
           case meta::FieldType::FLOAT: {
             float value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(float));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(float));
             std::cout << value << " ";
             break;
           }
           case meta::FieldType::DOUBLE: {
             double value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
             std::cout << value << " ";
             break;
           }
           case meta::FieldType::BOOL: {
             bool value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(bool));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(bool));
             std::cout << (value ? "true" : "false") << " ";
             break;
           }
           case meta::FieldType::GEO_POINT: {
             double value;
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_]]), sizeof(double));
             std::cout << "Latitude: " << value << " ";
-            std::memcpy(&value, &(attribute_table_.get()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
+            std::memcpy(&value, &(attribute_table_->GetData()[i * primitive_offset_ + field_id_mem_offset_map_[field.id_] + sizeof(double)]), sizeof(double));
             std::cout << "Longitude: " << value << " ";
             break;
           }
@@ -1787,7 +2002,7 @@ void TableSegment::Debug(meta::TableSchema& table_schema) {
     for (size_t j = 0; j < record_number_; ++j) {
       for (size_t k = 0; k < vector_dims_[i]; ++k) {
         size_t offset = j * vector_dims_[i] + k;
-        std::cout << vector_tables_[i][offset] << " ";
+        std::cout << vector_tables_[i]->GetData()[offset] << " ";
       }
       std::cout << "\n";
     }

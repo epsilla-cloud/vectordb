@@ -29,6 +29,8 @@
 #include "utils/constants.hpp"
 #include "config/config.hpp"
 #include "db/compaction_manager.hpp"
+#include "db/memory_pool_manager.hpp"
+#include "db/batch_insertion_optimizer.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -39,7 +41,10 @@ extern Config globalConfig;
 namespace server {
 namespace web {
 
-constexpr const int64_t InitTableScale = 150000;
+// Use configurable value instead of hardcoded 150000
+inline int64_t GetInitTableScale() {
+  return globalConfig.InitialTableCapacity.load(std::memory_order_acquire);
+}
 
 class WebController : public oatpp::web::server::api::ApiController {
  public:
@@ -55,6 +60,19 @@ class WebController : public oatpp::web::server::api::ApiController {
   }
 
   std::shared_ptr<vectordb::engine::DBServer> db_server;
+  std::shared_ptr<vectordb::engine::db::BatchInsertionOptimizer> batch_optimizer;
+
+  // Initialize batch optimizer
+  void InitBatchOptimizer() {
+    if (!batch_optimizer) {
+      vectordb::engine::db::BatchInsertionConfig config;
+      config.max_batch_size = 1000;
+      config.worker_threads = 4;
+      config.enable_async_wal = true;
+      config.enable_simd = true;
+      batch_optimizer = std::make_shared<vectordb::engine::db::BatchInsertionOptimizer>(config);
+    }
+  }
 
 /**
  *  Begin ENDPOINTs generation ('ApiController' codegen)
@@ -140,7 +158,7 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_400, dto);
     }
     
-    int64_t init_table_scale = InitTableScale;
+    int64_t init_table_scale = GetInitTableScale();
     if (parsedBody.HasMember("vectorScale")) {
       init_table_scale = parsedBody.GetInt("vectorScale");
       // Validate vector scale range
@@ -579,6 +597,114 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.LoadFromString("{\"result\": " + insert_status.message() + "}");
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Insert data to " + table_name + " successfully.");
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(InsertRecordsOptimized)
+
+  ENDPOINT("POST", "/api/{db_name}/data/insert_optimized", InsertRecordsOptimized,
+           PATH(String, db_name, "db_name"),
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    auto status_dto = StatusDto::createShared();
+
+    // Initialize batch optimizer if needed
+    InitBatchOptimizer();
+
+    vectordb::Json parsedBody;
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    if (!parsedBody.HasMember("table")) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "table is missing in your payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    if (!parsedBody.HasMember("records")) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "records is missing in your payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    std::string table_name = parsedBody.GetString("table");
+
+    // Get table dimension (assuming we can get it from db_server)
+    // For now, we'll extract it from the first record
+    auto records = parsedBody.GetArray("records");
+    if (records.GetSize() == 0) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "No records to insert.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    auto first_record = records.GetArrayElement(0);
+    auto vec_array = first_record.GetArray("vec");
+    size_t dimension = vec_array.GetSize();
+
+    // Process with batch optimizer
+    auto start_time = std::chrono::high_resolution_clock::now();
+    auto optimized_batches = batch_optimizer->ProcessInsertionRequest(parsedBody, dimension);
+
+    // Insert optimized batches
+    size_t total_inserted = 0;
+    for (const auto& batch : optimized_batches) {
+      // Convert batch to JSON format expected by db_server
+      vectordb::Json batch_data;
+      batch_data.LoadFromString("[]");
+
+      for (size_t i = 0; i < batch.count; ++i) {
+        vectordb::Json record;
+        record.SetInt("id", batch.ids[i]);
+
+        std::vector<vectordb::Json> vec_array;
+        vec_array.reserve(batch.dimension);
+        for (size_t j = 0; j < batch.dimension; ++j) {
+          vectordb::Json val;
+          val.LoadFromString(std::to_string(batch.vectors[i * batch.dimension + j]));
+          vec_array.push_back(val);
+        }
+        record.SetArray("vec", vec_array);
+
+        batch_data.AddObjectToArray(record);
+      }
+
+      // Collect headers
+      std::unordered_map<std::string, std::string> headers;
+
+      // Insert batch
+      bool upsert = parsedBody.HasMember("upsert") ? parsedBody.GetBool("upsert") : false;
+      vectordb::Status insert_status = db_server->Insert(db_name, table_name, batch_data, headers, upsert);
+
+      if (!insert_status.ok()) {
+        status_dto->statusCode = Status::CODE_500.code;
+        status_dto->message = insert_status.message();
+        return createDtoResponse(Status::CODE_500, status_dto);
+      }
+
+      total_inserted += batch.count;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        end_time - start_time).count();
+
+    // Get metrics
+    auto metrics = batch_optimizer->GetMetrics();
+
+    vectordb::Json response;
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Optimized insert completed successfully");
+    response.SetInt("inserted", total_inserted);
+    response.SetInt("duration_ms", duration_ms);
+    response.SetDouble("vectors_per_second", metrics.avg_vectors_per_second);
+
     auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
     httpResponse->putHeader("Content-Type", "application/json");
     return httpResponse;
@@ -1293,6 +1419,23 @@ class WebController : public oatpp::web::server::api::ApiController {
     unsigned int hw_threads = std::thread::hardware_concurrency();
     hardwareInfo.SetInt("hardwareThreads", hw_threads ? hw_threads : 4);
     response.SetObject("hardware", hardwareInfo);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(GetMemoryStats)
+
+  ENDPOINT_INFO(GetMemoryStats) {
+    info->summary = "Get Memory Statistics";
+    info->description = "Returns current memory usage statistics and allocation strategy";
+  }
+
+  ENDPOINT("GET", "api/memory/stats", GetMemoryStats) {
+    // Get memory statistics from the pool manager
+    auto& memoryManager = vectordb::engine::MemoryPoolManager::GetInstance();
+    vectordb::Json response = memoryManager.GetStatsAsJson();
 
     auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
     httpResponse->putHeader("Content-Type", "application/json");

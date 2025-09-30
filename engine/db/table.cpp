@@ -64,7 +64,7 @@ Table::Table(meta::TableSchema &table_schema,
       if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
         columnData = table_segment_
                          ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                              [table_schema_.fields_[i].name_]].get();
+                                              [table_schema_.fields_[i].name_]]->GetData();
       } else {
         // sparse vector
         columnData = &table_segment_
@@ -141,7 +141,7 @@ Status Table::Rebuild(const std::string &db_catalog_path) {
       if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
         columnData = table_segment_
                          ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                              [table_schema_.fields_[i].name_]].get();
+                                              [table_schema_.fields_[i].name_]]->GetData();
       } else {
         // sparse vector
         columnData = &table_segment_
@@ -231,7 +231,7 @@ Status Table::SwapExecutors() {
       if (fType == meta::FieldType::VECTOR_FLOAT || fType == meta::FieldType::VECTOR_DOUBLE) {
         columnData = table_segment_
                          ->vector_tables_[table_segment_->field_name_mem_offset_map_
-                                              [table_schema_.fields_[i].name_]].get();
+                                              [table_schema_.fields_[i].name_]]->GetData();
       } else {
         // sparse vector
         columnData = &table_segment_
@@ -602,7 +602,7 @@ Status Table::Project(
         int64_t dim = table_segment_->vector_dims_[offset];
         for (int k = 0; k < dim; ++k) {
           vector.AddDoubleToArray(
-              table_segment_->vector_tables_[offset][id * dim + k]);
+              table_segment_->vector_tables_[offset]->GetData()[id * dim + k]);
         }
         record.SetObject(field, vector);
       } else if (field_name_field_type_map_[field] == meta::FieldType::SPARSE_VECTOR_FLOAT ||
@@ -620,43 +620,43 @@ Status Table::Project(
         switch (field_name_field_type_map_[field]) {
           case meta::FieldType::INT1: {
             int8_t *ptr = reinterpret_cast<int8_t *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetInt(field, (int64_t)(*ptr));
             break;
           }
           case meta::FieldType::INT2: {
             int16_t *ptr = reinterpret_cast<int16_t *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetInt(field, (int64_t)(*ptr));
             break;
           }
           case meta::FieldType::INT4: {
             int32_t *ptr = reinterpret_cast<int32_t *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetInt(field, (int64_t)(*ptr));
             break;
           }
           case meta::FieldType::INT8: {
             int64_t *ptr = reinterpret_cast<int64_t *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetInt(field, (int64_t)(*ptr));
             break;
           }
           case meta::FieldType::FLOAT: {
             float *ptr = reinterpret_cast<float *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetDouble(field, (double)(*ptr));
             break;
           }
           case meta::FieldType::DOUBLE: {
             double *ptr = reinterpret_cast<double *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetDouble(field, *ptr);
             break;
           }
           case meta::FieldType::BOOL: {
             bool *ptr = reinterpret_cast<bool *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             record.SetBool(field, *ptr);
             break;
           }
@@ -674,9 +674,9 @@ Status Table::Project(
           case meta::FieldType::GEO_POINT: {
             vectordb::Json geoPoint;
             double *lat = reinterpret_cast<double *>(
-                &table_segment_->attribute_table_[offset]);
+                &table_segment_->attribute_table_->GetData()[offset]);
             double *lon = reinterpret_cast<double *>(
-                &table_segment_->attribute_table_[offset + sizeof(double)]);
+                &table_segment_->attribute_table_->GetData()[offset + sizeof(double)]);
             geoPoint.LoadFromString("{\"latitude\": " + std::to_string(*lat) + ", \"longitude\": " + std::to_string(*lon) + "}");
             record.SetObject(field, geoPoint);
             break;

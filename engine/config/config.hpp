@@ -29,7 +29,7 @@ struct Config {
   std::atomic<bool> SoftDelete{true};
   
   // WAL auto-flush configuration
-  std::atomic<int> WALFlushInterval{30};  // Default: flush every 30 seconds
+  std::atomic<int> WALFlushInterval{15};  // Default: flush every 15 seconds (was 30)
   std::atomic<bool> WALAutoFlush{true};   // Enable/disable auto flush
 
   // Compaction configuration (inspired by Qdrant and Milvus best practices)
@@ -38,6 +38,9 @@ struct Config {
   std::atomic<int> CompactionInterval{3600};     // Check interval in seconds (default: 1 hour)
   std::atomic<int> MinVectorsForCompaction{1000}; // Minimum vectors to trigger compaction (default: 1000)
   std::atomic<int> CompactionMaxDuration{1800};   // Maximum compaction duration in seconds (default: 30 min)
+
+  // Memory management configuration
+  std::atomic<int> InitialTableCapacity{1000};   // Initial table capacity (default: 1000, was 150000)
   
   // Constructor to initialize thread counts based on hardware
   Config() {
@@ -123,49 +126,29 @@ struct Config {
         printf("[Config] Using COMPACTION_INTERVAL=%d seconds from environment\n", interval);
       }
     }
-    
-    // Log the configuration - print all important settings
-    printf("\n");
-    printf("================================================================================\n");
-    printf("                        VectorDB Configuration Summary                         \n");
-    printf("================================================================================\n");
-    printf(" Thread Configuration:\n");
-    printf("   - Hardware Threads Detected : %u\n", hw_threads);
-    printf("   - Intra-Query Threads       : %d\n", IntraQueryThreads.load());
-    printf("   - Rebuild Threads           : %d\n", RebuildThreads.load());
-    printf("   - Executors Per Field       : %d\n", NumExecutorPerField.load());
-    printf("\n");
-    printf(" Queue Configuration:\n");
-    printf("   - Master Queue Size         : %d\n", MasterQueueSize.load());
-    printf("   - Local Queue Size          : %d\n", LocalQueueSize.load());
-    printf("\n");
-    printf(" Deletion Configuration:\n");
-    printf("   - Soft Delete Mode          : %s %s\n",
-           SoftDelete.load() ? "ENABLED" : "DISABLED",
-           SoftDelete.load() ? "(⚠️ Monitor memory in K8s)" : "(✓ Safe for K8s)");
-    printf("\n");
-    printf(" WAL Configuration:\n");
-    printf("   - WAL Flush Interval        : %d seconds\n", WALFlushInterval.load());
-    printf("   - WAL Auto Flush            : %s\n", WALAutoFlush.load() ? "ENABLED" : "DISABLED");
-    printf("\n");
-    printf(" Compaction Configuration:\n");
-    printf("   - Auto Compaction           : %s\n", AutoCompaction.load() ? "ENABLED" : "DISABLED");
-    printf("   - Compaction Threshold      : %.1f%% deleted\n", CompactionThreshold.load() * 100);
-    printf("   - Compaction Interval       : %d seconds\n", CompactionInterval.load());
-    printf("   - Min Vectors               : %d\n", MinVectorsForCompaction.load());
-    printf("\n");
-    printf(" Other Settings:\n");
-    printf("   - Pre-Filter                : %s\n", PreFilter.load() ? "ENABLED" : "DISABLED");
-    printf("   - Global Sync Interval      : %d\n", GlobalSyncInterval.load());
-    printf("   - Minimal Graph Size        : %d\n", MinimalGraphSize.load());
-    printf("\n");
-    printf(" Environment Variables:\n");
-    printf("   - SOFT_DELETE               : %s\n", env_soft_delete ? env_soft_delete : "(not set, using default)");
-    printf("   - WAL_FLUSH_INTERVAL        : %s\n", env_wal_interval ? env_wal_interval : "(not set, using default)");
-    printf("   - WAL_AUTO_FLUSH            : %s\n", env_wal_auto ? env_wal_auto : "(not set, using default)");
-    printf("   - EPSILLA_INTRA_QUERY_THREADS: %s\n", env_threads ? env_threads : "(not set, using default)");
-    printf("================================================================================\n");
-    printf("\n");
+
+    // Check environment variable for initial table capacity
+    const char* env_initial_capacity = std::getenv("INITIAL_TABLE_CAPACITY");
+    if (env_initial_capacity != nullptr) {
+      int capacity = std::atoi(env_initial_capacity);
+      if (capacity >= 10 && capacity <= 10000000) {  // Between 10 and 10M (lowered for testing)
+        InitialTableCapacity.store(capacity, std::memory_order_release);
+        printf("[Config] Using INITIAL_TABLE_CAPACITY=%d from environment\n", capacity);
+      } else {
+        printf("[Config] Invalid INITIAL_TABLE_CAPACITY=%s, using default %d\n",
+               env_initial_capacity, InitialTableCapacity.load());
+      }
+    }
+
+    // Check environment variable for VECTORDB_DISABLE_WAL_SYNC
+    const char* env_disable_wal_sync = std::getenv("VECTORDB_DISABLE_WAL_SYNC");
+    if (env_disable_wal_sync != nullptr) {
+      // Note: This is just for reading the env var, actual WAL sync logic is elsewhere
+      printf("[Config] VECTORDB_DISABLE_WAL_SYNC=%s from environment\n", env_disable_wal_sync);
+    }
+
+    // Configuration printing moved to ConfigManager::PrintConfiguration()
+    // to avoid duplicate output
   }
 
   // Setter method for IntraQueryThreads
@@ -229,6 +212,12 @@ struct Config {
     if (json.HasMember("SoftDelete")) {
       setSoftDelete(json.GetBool("SoftDelete"));
     }
+    if (json.HasMember("InitialTableCapacity")) {
+      int capacity = json.GetInt("InitialTableCapacity");
+      if (capacity >= 100 && capacity <= 10000000) {
+        InitialTableCapacity.store(capacity, std::memory_order_release);
+      }
+    }
   }
   
   // Setter method for SoftDelete mode
@@ -255,6 +244,7 @@ struct Config {
     config.SetInt("CompactionInterval", CompactionInterval.load(std::memory_order_acquire));
     config.SetInt("MinVectorsForCompaction", MinVectorsForCompaction.load(std::memory_order_acquire));
     config.SetInt("CompactionMaxDuration", CompactionMaxDuration.load(std::memory_order_acquire));
+    config.SetInt("InitialTableCapacity", InitialTableCapacity.load(std::memory_order_acquire));
     return config;
   }
 };

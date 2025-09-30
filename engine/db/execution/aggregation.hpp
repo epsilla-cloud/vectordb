@@ -247,7 +247,7 @@ public:
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
       table_segment->var_len_attr_num_,
-      table_segment->attribute_table_.get(),
+      table_segment->attribute_table_->GetData(),
       table_segment->var_len_attr_table_);
     int group_by_root_index = group_by_evals[0].size() - 1;
     std::vector<vectordb::query::expr::ExprEvaluator> aggregation_evaluators;
@@ -257,7 +257,7 @@ public:
         table_segment->field_name_mem_offset_map_,
         table_segment->primitive_offset_,
         table_segment->var_len_attr_num_,
-        table_segment->attribute_table_.get(),
+        table_segment->attribute_table_->GetData(),
         table_segment->var_len_attr_table_);
     }
     // Loop through the ids, conduct evaluation, and aggregate
