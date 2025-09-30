@@ -12,6 +12,8 @@
 #include "db/index/spatial/geoindex.hpp"
 #include "db/vector.hpp"
 #include "db/concurrent_operations.hpp"
+#include "db/dynamic_memory_block.hpp"
+#include "db/insertion_rate_monitor.hpp"
 #include "query/expr/expr_evaluator.hpp"
 #include "query/expr/expr_types.hpp"
 #include "utils/concurrent_bitset.hpp"
@@ -92,6 +94,7 @@ class TableSegment {
 
   Status Init(meta::TableSchema& table_schema, int64_t size_limit);
   Status DoubleSize();
+  Status Resize(size_t new_capacity);  // Dynamic resize support
 
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers, bool upsert = false);
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
@@ -135,6 +138,7 @@ class TableSegment {
   // All the public member variables from TableSegmentMVP
   std::atomic<bool> skip_sync_disk_;                                              // For default DB, skip sync to disk.
   size_t size_limit_;                                                             // The maximum size of the segment. Default 2^20.
+  size_t capacity_;                                                                // The actual allocated capacity (for dynamic growth).
   size_t first_record_id_;                                                        // The internal record id of the first record in the segment.
   std::atomic<size_t> record_number_;                                             // Currently how many records in the segment.
   std::unordered_map<std::string, size_t> field_name_mem_offset_map_;             // The offset of each attribute in attribute table.
@@ -148,10 +152,10 @@ class TableSegment {
   std::vector<meta::FieldType> var_len_attr_field_type_;
   int64_t sparse_vector_num_;
   int64_t dense_vector_num_;
-  std::unique_ptr<char[]> attribute_table_;                         // The attribute table in memory (exclude vector attributes and string attributes).
+  std::unique_ptr<DynamicMemoryBlock<char>> attribute_table_;       // Dynamic attribute table (exclude vector attributes and string attributes).
   std::vector<VariableLenAttrColumnContainer> var_len_attr_table_;  // The variable length attribute table in memory.
   std::vector<int64_t> vector_dims_;
-  std::vector<std::unique_ptr<float[]>> vector_tables_;  // The vector attribute tables. Each vector attribute has its own vector table.
+  std::vector<std::unique_ptr<DynamicVectorBlock>> vector_tables_;  // Dynamic vector attribute tables. Each vector attribute has its own vector table.
   std::unique_ptr<ConcurrentBitset> deleted_;            // The deleted bitset. If the i-th bit is 1, then the i-th record is deleted.
 
   bool isIntPK() const;
@@ -174,6 +178,14 @@ class TableSegment {
   std::unique_ptr<SnapshotManager> snapshot_manager_;  // Snapshot isolation for queries
   std::unique_ptr<AtomicUpsertManager> upsert_manager_;  // Atomic upsert operations
   std::unique_ptr<WALTransactionManager> wal_manager_;  // WAL transaction support
+
+  // Flags to prevent resize during critical operations
+  std::atomic<bool> index_rebuild_in_progress_{false};  // Prevent resize during index rebuild
+  std::atomic<bool> compaction_in_progress_{false};     // Prevent resize during compaction
+
+  // Predictive expansion
+  std::unique_ptr<InsertionRateMonitor> insertion_monitor_;
+  std::atomic<bool> predictive_expansion_enabled_{true};
 
   // used to store primary key set for duplication check
   UniqueKey primary_key_;

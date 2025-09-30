@@ -218,8 +218,8 @@ private:
             // Move primitive attributes
             if (segment->primitive_offset_ > 0 && segment->attribute_table_) {
                 std::memcpy(
-                    segment->attribute_table_.get() + dst * segment->primitive_offset_,
-                    segment->attribute_table_.get() + src * segment->primitive_offset_,
+                    segment->attribute_table_->GetData() + dst * segment->primitive_offset_,
+                    segment->attribute_table_->GetData() + src * segment->primitive_offset_,
                     segment->primitive_offset_
                 );
             }
@@ -228,8 +228,8 @@ private:
             for (int v = 0; v < segment->dense_vector_num_; ++v) {
                 if (segment->vector_tables_[v]) {
                     std::memcpy(
-                        segment->vector_tables_[v].get() + dst * segment->vector_dims_[v],
-                        segment->vector_tables_[v].get() + src * segment->vector_dims_[v],
+                        segment->vector_tables_[v]->GetData() + dst * segment->vector_dims_[v],
+                        segment->vector_tables_[v]->GetData() + src * segment->vector_dims_[v],
                         segment->vector_dims_[v] * sizeof(float)
                     );
                 }
@@ -295,25 +295,25 @@ private:
             switch (segment->pkType()) {
                 case meta::FieldType::INT1: {
                     int8_t pk;
-                    std::memcpy(&pk, &segment->attribute_table_.get()[offset], sizeof(int8_t));
+                    std::memcpy(&pk, &segment->attribute_table_->GetData()[offset], sizeof(int8_t));
                     segment->primary_key_.updateKey(pk, new_idx);
                     break;
                 }
                 case meta::FieldType::INT2: {
                     int16_t pk;
-                    std::memcpy(&pk, &segment->attribute_table_.get()[offset], sizeof(int16_t));
+                    std::memcpy(&pk, &segment->attribute_table_->GetData()[offset], sizeof(int16_t));
                     segment->primary_key_.updateKey(pk, new_idx);
                     break;
                 }
                 case meta::FieldType::INT4: {
                     int32_t pk;
-                    std::memcpy(&pk, &segment->attribute_table_.get()[offset], sizeof(int32_t));
+                    std::memcpy(&pk, &segment->attribute_table_->GetData()[offset], sizeof(int32_t));
                     segment->primary_key_.updateKey(pk, new_idx);
                     break;
                 }
                 case meta::FieldType::INT8: {
                     int64_t pk;
-                    std::memcpy(&pk, &segment->attribute_table_.get()[offset], sizeof(int64_t));
+                    std::memcpy(&pk, &segment->attribute_table_->GetData()[offset], sizeof(int64_t));
                     segment->primary_key_.updateKey(pk, new_idx);
                     break;
                 }

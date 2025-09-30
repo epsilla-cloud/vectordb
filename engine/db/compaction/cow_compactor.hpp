@@ -97,7 +97,7 @@ public:
             if (primitive_offset_ > 0 && source->attribute_table_) {
                 std::memcpy(
                     attribute_table_.get() + dst_idx * primitive_offset_,
-                    source->attribute_table_.get() + src_idx * source->primitive_offset_,
+                    source->attribute_table_->GetData() + src_idx * source->primitive_offset_,
                     primitive_offset_
                 );
             }
@@ -107,7 +107,7 @@ public:
                 if (v < source->vector_tables_.size() && source->vector_tables_[v]) {
                     std::memcpy(
                         vector_tables_[v].get() + dst_idx * vector_dims_[v],
-                        source->vector_tables_[v].get() + src_idx * source->vector_dims_[v],
+                        source->vector_tables_[v]->GetData() + src_idx * source->vector_dims_[v],
                         vector_dims_[v] * sizeof(float)
                     );
                 }
@@ -436,7 +436,7 @@ private:
             if (original->primitive_offset_ > 0 && original->attribute_table_) {
                 if (std::memcmp(
                     shadow->attribute_table_.get() + sample_idx * original->primitive_offset_,
-                    original->attribute_table_.get() + orig_idx * original->primitive_offset_,
+                    original->attribute_table_->GetData() + orig_idx * original->primitive_offset_,
                     original->primitive_offset_) != 0) {
                     return Status(DB_UNEXPECTED_ERROR, 
                                  "Attribute mismatch at index " + 
@@ -457,9 +457,25 @@ private:
         std::unique_lock<std::mutex> lock(segment->data_update_mutex_);
         
         try {
-            // Swap storage
-            segment->attribute_table_.swap(shadow->attribute_table_);
-            segment->vector_tables_.swap(shadow->vector_tables_);
+            // Swap storage - need to handle DynamicMemoryBlock properly
+            // For now, we'll need to copy the data since DynamicMemoryBlock doesn't support swap
+            if (shadow->attribute_table_ && segment->attribute_table_) {
+                size_t size = shadow->GetRecordCount() * segment->primitive_offset_;
+                std::memcpy(segment->attribute_table_->GetData(),
+                           shadow->attribute_table_.get(), size);
+                segment->attribute_table_->Resize(shadow->GetRecordCount());
+            }
+
+            // Swap vector tables - need to copy data for DynamicVectorBlock
+            for (size_t v = 0; v < segment->vector_tables_.size(); ++v) {
+                if (v < shadow->vector_tables_.size() && shadow->vector_tables_[v]) {
+                    size_t vec_size = shadow->GetRecordCount() * segment->vector_dims_[v];
+                    std::memcpy(segment->vector_tables_[v]->GetData(),
+                               shadow->vector_tables_[v].get(),
+                               vec_size * sizeof(float));
+                    segment->vector_tables_[v]->ResizeVectors(shadow->GetRecordCount());
+                }
+            }
             segment->var_len_attr_table_.swap(shadow->var_len_attrs_);
             
             // Update metadata
@@ -519,8 +535,8 @@ private:
         if (segment->primitive_offset_ > 0 && segment->attribute_table_) {
             size_t size = total_records * segment->primitive_offset_;
             snapshot->attribute_table = std::make_unique<char[]>(size);
-            std::memcpy(snapshot->attribute_table.get(), 
-                       segment->attribute_table_.get(), size);
+            std::memcpy(snapshot->attribute_table.get(),
+                       segment->attribute_table_->GetData(), size);
         }
         
         // Copy vector tables
@@ -529,7 +545,7 @@ private:
                 size_t size = total_records * segment->vector_dims_[v];
                 auto table = std::make_unique<float[]>(size);
                 std::memcpy(table.get(), 
-                           segment->vector_tables_[v].get(), 
+                           segment->vector_tables_[v]->GetData(), 
                            size * sizeof(float));
                 snapshot->vector_tables.push_back(std::move(table));
             }
@@ -555,11 +571,24 @@ private:
     void RestoreSnapshot(TableSegmentMVP* segment, const SegmentSnapshot* snapshot) {
         std::unique_lock<std::mutex> lock(segment->data_update_mutex_);
         
-        // Restore all data
-        segment->attribute_table_ = std::move(
-            const_cast<SegmentSnapshot*>(snapshot)->attribute_table);
-        segment->vector_tables_ = std::move(
-            const_cast<SegmentSnapshot*>(snapshot)->vector_tables);
+        // Restore all data - copy into DynamicMemoryBlock
+        if (snapshot->attribute_table && segment->attribute_table_) {
+            size_t size = snapshot->record_count * segment->primitive_offset_;
+            std::memcpy(segment->attribute_table_->GetData(),
+                       snapshot->attribute_table.get(), size);
+            segment->attribute_table_->Resize(snapshot->record_count);
+        }
+
+        // Restore vector tables
+        for (size_t v = 0; v < snapshot->vector_tables.size(); ++v) {
+            if (v < segment->vector_tables_.size() && snapshot->vector_tables[v]) {
+                size_t vec_size = snapshot->record_count * segment->vector_dims_[v];
+                std::memcpy(segment->vector_tables_[v]->GetData(),
+                           snapshot->vector_tables[v].get(),
+                           vec_size * sizeof(float));
+                segment->vector_tables_[v]->ResizeVectors(snapshot->record_count);
+            }
+        }
         segment->var_len_attr_table_ = snapshot->var_len_attrs;
         
         if (snapshot->deleted_bitmap) {
