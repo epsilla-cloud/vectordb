@@ -1,4 +1,4 @@
-FROM epsilla/base as builder
+FROM epsilla/base AS builder
 ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
