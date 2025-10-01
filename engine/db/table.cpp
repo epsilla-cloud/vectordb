@@ -374,18 +374,35 @@ Status Table::Delete(
                  ", deletion_ratio=" + std::to_string(post_deletion_ratio));
     logger_.Debug("[Table] TableSegment deletion completed successfully: " + status.message());
     
-    // Trigger incremental compaction if enabled
-    if (compactor_) {
-      if (post_deletion_ratio > 0.2) {  // 20% threshold for incremental compaction
-        logger_.Debug("[Table] Deletion ratio " + std::to_string(post_deletion_ratio) + 
-                     " exceeds 20% threshold, triggering incremental compaction");
-        compactor_->TriggerCompaction();
-      } else {
-        logger_.Debug("[Table] Deletion ratio " + std::to_string(post_deletion_ratio) + 
-                     " below 20% threshold, no compaction needed");
+    // Eager compaction: immediately compact if enabled and threshold exceeded
+    bool eager = vectordb::globalConfig.EagerCompactionOnDelete.load();
+    double threshold = vectordb::globalConfig.CompactionThreshold.load();
+    if (eager && post_deletion_ratio >= threshold) {
+      logger_.Info("[Table] Eager compaction enabled and deletion ratio " + std::to_string(post_deletion_ratio) +
+                   " >= threshold " + std::to_string(threshold) + ", flushing WAL and compacting now...");
+      // Ensure WAL is flushed so compaction is crash-safe
+      auto wal_status = FlushWAL();
+      if (!wal_status.ok()) {
+        logger_.Warning("[Table] WAL flush failed before eager compaction: " + wal_status.message());
+      }
+      auto compact_status = Compact(threshold);
+      if (!compact_status.ok()) {
+        logger_.Warning("[Table] Eager compaction failed: " + compact_status.message());
       }
     } else {
-      logger_.Debug("[Table] No compactor available, skipping compaction check");
+      // Trigger incremental compaction if available (background), using a fixed 20% hint as before
+      if (compactor_) {
+        if (post_deletion_ratio > 0.2) {
+          logger_.Debug("[Table] Deletion ratio " + std::to_string(post_deletion_ratio) +
+                       " exceeds 20% threshold, triggering incremental compaction");
+          compactor_->TriggerCompaction();
+        } else {
+          logger_.Debug("[Table] Deletion ratio " + std::to_string(post_deletion_ratio) +
+                       " below 20% threshold, no compaction needed");
+        }
+      } else {
+        logger_.Debug("[Table] No compactor available, skipping compaction check");
+      }
     }
   } else {
     logger_.Error("[Table] TableSegment deletion failed: " + status.message());
