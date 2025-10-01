@@ -34,13 +34,17 @@ struct Config {
 
   // Compaction configuration (inspired by Qdrant and Milvus best practices)
   std::atomic<bool> AutoCompaction{true};        // Enable automatic compaction (default: true)
-  std::atomic<double> CompactionThreshold{0.2};  // Trigger compaction when 20% deleted (default: 0.2)
+  std::atomic<double> CompactionThreshold{0.3};  // Trigger compaction when 30% deleted (default: 0.3)
   std::atomic<int> CompactionInterval{3600};     // Check interval in seconds (default: 1 hour)
   std::atomic<int> MinVectorsForCompaction{1000}; // Minimum vectors to trigger compaction (default: 1000)
   std::atomic<int> CompactionMaxDuration{1800};   // Maximum compaction duration in seconds (default: 30 min)
 
   // Memory management configuration
   std::atomic<int> InitialTableCapacity{1000};   // Initial table capacity (default: 1000, was 150000)
+
+  // Eager compaction configuration: run Table::Compact() immediately after large soft-deletes
+  std::atomic<bool> EagerCompactionOnDelete{true}; // Default: true
+  // std::atomic<bool> EagerCompactionOnDelete{false}; --- IGNORE
   
   // Constructor to initialize thread counts based on hardware
   Config() {
@@ -125,6 +129,16 @@ struct Config {
         CompactionInterval.store(interval, std::memory_order_release);
         printf("[Config] Using COMPACTION_INTERVAL=%d seconds from environment\n", interval);
       }
+    }
+
+    // Eager compaction toggle after delete (optional)
+    const char* env_eager_delete_compact = std::getenv("EAGER_DELETE_COMPACT");
+    if (env_eager_delete_compact != nullptr) {
+      std::string env_value(env_eager_delete_compact);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool eager = (env_value == "true" || env_value == "1" || env_value == "yes");
+      EagerCompactionOnDelete.store(eager, std::memory_order_release);
+      printf("[Config] Using EAGER_DELETE_COMPACT=%s from environment\n", eager ? "true" : "false");
     }
 
     // Check environment variable for initial table capacity
@@ -218,6 +232,9 @@ struct Config {
         InitialTableCapacity.store(capacity, std::memory_order_release);
       }
     }
+    if (json.HasMember("EagerCompactionOnDelete")) {
+      EagerCompactionOnDelete.store(json.GetBool("EagerCompactionOnDelete"), std::memory_order_release);
+    }
   }
   
   // Setter method for SoftDelete mode
@@ -245,6 +262,7 @@ struct Config {
     config.SetInt("MinVectorsForCompaction", MinVectorsForCompaction.load(std::memory_order_acquire));
     config.SetInt("CompactionMaxDuration", CompactionMaxDuration.load(std::memory_order_acquire));
     config.SetInt("InitialTableCapacity", InitialTableCapacity.load(std::memory_order_acquire));
+    config.SetBool("EagerCompactionOnDelete", EagerCompactionOnDelete.load(std::memory_order_acquire));
     return config;
   }
 };
