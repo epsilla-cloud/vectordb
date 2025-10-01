@@ -68,6 +68,8 @@ list(APPEND LIB_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/execution/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/index/*.cpp")
+# 排除有问题的 distances.cpp，使用 distance_simd.cpp
+list(REMOVE_ITEM UTILS_FILES "${CMAKE_CURRENT_SOURCE_DIR}/db/index/distances.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
 file(GLOB UTILS_FILES "db/index/nsg/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
@@ -311,3 +313,27 @@ if(CLANG_TIDY_PATH)
     DEPENDS vector_db_test
   )
 endif()
+
+# ============================================================
+# Phase 1 优化: SIMD 距离计算
+# ============================================================
+include(CheckCXXCompilerFlag)
+
+# 检测 AVX2 支持
+check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+if(COMPILER_SUPPORTS_AVX2)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2 -mfma")
+    add_definitions(-DUSE_AVX2)
+    message(STATUS "✓ AVX2 SIMD support enabled")
+endif()
+
+# 检测 ARM NEON 支持
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    add_definitions(-DUSE_NEON)
+    message(STATUS "✓ ARM NEON SIMD support enabled")
+endif()
+
+# 使用 SIMD 优化的距离计算
+add_definitions(-DUSE_SIMD_OPTIMIZED)
+message(STATUS "✓ SIMD optimized distance calculation enabled")
+
