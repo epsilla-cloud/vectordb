@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <thread>
 #include "logger/logger.hpp"
+#include "config/config.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -108,6 +109,7 @@ public:
         const char* env_auto_compact = std::getenv("AUTO_COMPACTION");
         const char* env_compact_thresh = std::getenv("COMPACTION_THRESHOLD");
         const char* env_compact_interval = std::getenv("COMPACTION_INTERVAL");
+        const char* env_eager_delete_compact = std::getenv("EAGER_DELETE_COMPACT");
         const char* env_batch_opt = std::getenv("VECTORDB_BATCH_OPTIMIZATION");
         const char* env_log_exec = std::getenv("VECTORDB_LOG_EXECUTOR");
 
@@ -156,6 +158,8 @@ public:
         std::cout << "   - Compaction Interval       : 3600 seconds"
                   << (env_compact_interval ? " (from env)" : " (default)") << "\n";
         std::cout << "   - Min Vectors               : 1000 (default)\n";
+        std::cout << "   - Eager Compaction On Delete: " << (vectordb::globalConfig.EagerCompactionOnDelete.load() ? "ENABLED" : "DISABLED")
+                  << (env_eager_delete_compact ? " (from env)" : " (default)") << "\n";
         std::cout << "\n";
 
         std::cout << " Memory Management:\n";
@@ -186,6 +190,7 @@ public:
         if (env_auto_compact) { std::cout << "   - AUTO_COMPACTION=" << env_auto_compact << "\n"; env_count++; }
         if (env_compact_thresh) { std::cout << "   - COMPACTION_THRESHOLD=" << env_compact_thresh << "\n"; env_count++; }
         if (env_compact_interval) { std::cout << "   - COMPACTION_INTERVAL=" << env_compact_interval << "\n"; env_count++; }
+        if (env_eager_delete_compact) { std::cout << "   - EAGER_DELETE_COMPACT=" << env_eager_delete_compact << "\n"; env_count++; }
         if (env_count == 0) {
             std::cout << "   (none - using all defaults)\n";
         }
