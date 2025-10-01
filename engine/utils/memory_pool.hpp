@@ -69,6 +69,11 @@ struct MemoryPoolStats {
     std::atomic<size_t> cache_hits{0};
     std::atomic<size_t> cache_misses{0};
     
+    // Delete copy constructor and assignment operator
+    MemoryPoolStats() = default;
+    MemoryPoolStats(const MemoryPoolStats&) = delete;
+    MemoryPoolStats& operator=(const MemoryPoolStats&) = delete;
+    
     double GetCacheHitRate() const {
         size_t total = cache_hits + cache_misses;
         return total > 0 ? static_cast<double>(cache_hits) / total : 0.0;
@@ -416,10 +421,17 @@ public:
     }
     
     /**
-     * @brief Get pool statistics
+     * @brief Get pool statistics (returns a snapshot copy)
      */
-    MemoryPoolStats GetStats() const {
-        return stats_;
+    void GetStats(MemoryPoolStats& out_stats) const {
+        out_stats.total_allocated.store(stats_.total_allocated.load());
+        out_stats.total_freed.store(stats_.total_freed.load());
+        out_stats.current_usage.store(stats_.current_usage.load());
+        out_stats.peak_usage.store(stats_.peak_usage.load());
+        out_stats.allocation_count.store(stats_.allocation_count.load());
+        out_stats.free_count.store(stats_.free_count.load());
+        out_stats.cache_hits.store(stats_.cache_hits.load());
+        out_stats.cache_misses.store(stats_.cache_misses.load());
     }
     
     /**
@@ -437,8 +449,15 @@ public:
         // Clear large allocations
         large_allocations_.clear();
         
-        // Reset stats
-        stats_ = MemoryPoolStats();
+        // Reset stats (manually reset each atomic)
+        stats_.total_allocated.store(0);
+        stats_.total_freed.store(0);
+        stats_.current_usage.store(0);
+        stats_.peak_usage.store(0);
+        stats_.allocation_count.store(0);
+        stats_.free_count.store(0);
+        stats_.cache_hits.store(0);
+        stats_.cache_misses.store(0);
         
         // Reinitialize if needed
         if (initialized_) {
@@ -601,7 +620,7 @@ private:
     std::unordered_map<std::thread::id, std::unique_ptr<ThreadCache>> thread_caches_;
     
     MemoryPoolStats stats_;
-    Logger logger_;
+    engine::Logger logger_;
 };
 
 /**

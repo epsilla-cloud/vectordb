@@ -1,5 +1,6 @@
 #include "db/execution/vec_search_executor.hpp"
 #include "utils/safe_memory_ops.hpp"
+#include "utils/memory_pool.hpp"
 
 #include <omp.h>
 
@@ -67,6 +68,31 @@ VecSearchExecutor::VecSearchExecutor(
       brute_force_queue_(BruteforceThreshold),
       prefilter_enabled_(prefilter_enabled) {
   ann_index_ = ann_index;
+  
+  // Initialize memory pool (singleton, only initialized once)
+  static bool memory_pool_initialized = false;
+  if (!memory_pool_initialized) {
+    utils::MemoryPoolConfig config;
+    config.initial_size = 128 * 1024 * 1024;  // 128MB
+    config.max_size = 1024 * 1024 * 1024;     // 1GB
+    config.enable_thread_cache = true;
+    config.enable_stats = true;
+    utils::MemoryPool::GetInstance().Initialize(config);
+    memory_pool_initialized = true;
+  }
+  
+  // Pre-allocate vectors to reduce runtime allocations
+  // These are already sized in the initializer list, but ensure capacity
+  search_result_.reserve(L_master_);
+  distance_.reserve(L_master_);
+  init_ids_.reserve(L_master_);
+  is_visited_.reserve(ann_index->record_number_);
+  set_L_.reserve((num_threads - 1) * L_local + L_master);
+  local_queues_sizes_.reserve(num_threads);
+  local_queues_starts_.reserve(num_threads);
+  if (brute_force_search_) {
+    brute_force_queue_.reserve(ann_index->record_number_);
+  }
   
   // Log thread configuration for debugging - only in debug builds or when explicitly enabled
 #ifdef VECTORDB_DEBUG_BUILD
