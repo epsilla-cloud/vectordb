@@ -41,9 +41,32 @@ public:
           linear_increment_(100000) {
 
         if (capacity_ > 0) {
-            data_ = std::make_unique<T[]>(capacity_);
-            logger_.Debug("DynamicMemoryBlock initialized with capacity: " +
-                         std::to_string(capacity_));
+            // Check for potential overflow in memory allocation
+            const size_t max_capacity = 100000000;  // 100M elements
+            if (capacity_ > max_capacity) {
+                throw std::overflow_error("Initial capacity exceeds maximum limit: " +
+                                         std::to_string(capacity_));
+            }
+
+            // Check if total memory size would overflow
+            size_t total_bytes;
+            size_t capacity_val = capacity_;  // Read atomic value once
+            if (__builtin_mul_overflow(capacity_val, sizeof(T), &total_bytes)) {
+                throw std::overflow_error("Memory allocation size overflow: capacity=" +
+                                         std::to_string(capacity_val) + ", sizeof(T)=" +
+                                         std::to_string(sizeof(T)));
+            }
+
+            // Safe memory allocation with exception handling
+            try {
+                data_ = std::make_unique<T[]>(capacity_);
+                logger_.Debug("DynamicMemoryBlock initialized with capacity: " +
+                             std::to_string(capacity_));
+            } catch (const std::bad_alloc& e) {
+                logger_.Error("Failed to allocate memory for capacity " +
+                             std::to_string(capacity_) + ": " + e.what());
+                throw std::runtime_error("Memory allocation failed: " + std::string(e.what()));
+            }
         }
     }
 
@@ -72,9 +95,26 @@ public:
                          std::to_string(new_capacity));
         }
 
-        // Allocate new buffer
+        // Check for overflow in new capacity allocation
+        size_t total_bytes;
+        if (__builtin_mul_overflow(new_capacity, sizeof(T), &total_bytes)) {
+            return Status(DB_UNEXPECTED_ERROR,
+                         "Memory allocation size overflow: capacity=" +
+                         std::to_string(new_capacity) + ", sizeof(T)=" +
+                         std::to_string(sizeof(T)));
+        }
+
+        // Allocate new buffer with exception handling
         auto start_time = std::chrono::high_resolution_clock::now();
-        auto new_data = std::make_unique<T[]>(new_capacity);
+        std::unique_ptr<T[]> new_data;
+        try {
+            new_data = std::make_unique<T[]>(new_capacity);
+        } catch (const std::bad_alloc& e) {
+            logger_.Error("Failed to allocate memory for new capacity " +
+                         std::to_string(new_capacity) + ": " + e.what());
+            return Status(DB_UNEXPECTED_ERROR,
+                         "Memory allocation failed: " + std::string(e.what()));
+        }
 
         // Copy existing data
         if (data_ && size_ > 0) {
@@ -262,12 +302,55 @@ class DynamicVectorBlock : public DynamicMemoryBlock<float> {
 public:
     DynamicVectorBlock(size_t initial_vectors, size_t dimension,
                       GrowthStrategy strategy = GrowthStrategy::ADAPTIVE)
-        : DynamicMemoryBlock<float>(initial_vectors * dimension, strategy),
+        : DynamicMemoryBlock<float>(0, strategy),  // Initialize with 0 first
           dimension_(dimension),
-          num_vectors_(0) {}
+          num_vectors_(0) {
+
+        // Validate input parameters
+        if (dimension == 0) {
+            throw std::invalid_argument("Vector dimension cannot be zero");
+        }
+
+        if (initial_vectors == 0) {
+            // Allow zero initialization for empty vector blocks
+            return;
+        }
+
+        // Check for overflow in total capacity calculation
+        size_t total_capacity;
+        if (__builtin_mul_overflow(initial_vectors, dimension, &total_capacity)) {
+            throw std::overflow_error("Vector capacity overflow: vectors=" +
+                                     std::to_string(initial_vectors) + ", dimension=" +
+                                     std::to_string(dimension));
+        }
+
+        // Check maximum reasonable vector count (prevent excessive memory usage)
+        const size_t max_vectors = 10000000;  // 10M vectors
+        if (initial_vectors > max_vectors) {
+            throw std::overflow_error("Initial vector count exceeds maximum limit: " +
+                                     std::to_string(initial_vectors));
+        }
+
+        // Safe initialization using EnsureCapacity
+        auto status = this->EnsureCapacity(total_capacity);
+        if (!status.ok()) {
+            throw std::runtime_error("Failed to initialize vector block: " + status.message());
+        }
+
+        num_vectors_ = initial_vectors;
+    }
 
     Status ResizeVectors(size_t new_num_vectors) {
-        auto status = Resize(new_num_vectors * dimension_);
+        // Check for overflow in new capacity calculation
+        size_t new_total_capacity;
+        if (__builtin_mul_overflow(new_num_vectors, dimension_, &new_total_capacity)) {
+            return Status(DB_UNEXPECTED_ERROR,
+                         "Vector resize overflow: vectors=" +
+                         std::to_string(new_num_vectors) + ", dimension=" +
+                         std::to_string(dimension_));
+        }
+
+        auto status = Resize(new_total_capacity);
         if (status.ok()) {
             num_vectors_ = new_num_vectors;
         }

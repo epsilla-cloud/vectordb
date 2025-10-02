@@ -49,34 +49,38 @@ file(GLOB UTILS_FILES "utils/*.cpp")
 list(APPEND LIB_FILES ${UTILS_FILES})
 
 # Add source files in the server directory
-file(GLOB UTILS_FILES "server/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
+file(GLOB SERVER_FILES "server/*.cpp")
+list(APPEND LIB_FILES ${SERVER_FILES})
 
 # Add source files in the services directory
-file(GLOB UTILS_FILES "services/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
+file(GLOB SERVICES_FILES "services/*.cpp")
+list(APPEND LIB_FILES ${SERVICES_FILES})
 
 # Add source files in the config directory
-file(GLOB UTILS_FILES "config/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
+file(GLOB CONFIG_FILES "config/*.cpp")
+list(APPEND LIB_FILES ${CONFIG_FILES})
 
 # Add source files in the db directory
-file(GLOB UTILS_FILES "db/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
-file(GLOB UTILS_FILES "db/catalog/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
-file(GLOB UTILS_FILES "db/execution/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
-file(GLOB UTILS_FILES "db/index/*.cpp")
-# 排除有问题的 distances.cpp，使用 distance_simd.cpp
-list(REMOVE_ITEM UTILS_FILES "${CMAKE_CURRENT_SOURCE_DIR}/db/index/distances.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
-file(GLOB UTILS_FILES "db/index/nsg/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
-file(GLOB UTILS_FILES "db/index/spatial/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
-file(GLOB UTILS_FILES "db/wal/*.cpp")
-list(APPEND LIB_FILES ${UTILS_FILES})
+file(GLOB DB_FILES "db/*.cpp")
+list(APPEND LIB_FILES ${DB_FILES})
+file(GLOB DB_CATALOG_FILES "db/catalog/*.cpp")
+list(APPEND LIB_FILES ${DB_CATALOG_FILES})
+file(GLOB DB_EXECUTION_FILES "db/execution/*.cpp")
+list(APPEND LIB_FILES ${DB_EXECUTION_FILES})
+file(GLOB DB_INDEX_FILES "db/index/*.cpp")
+# Exclude distances.cpp (legacy BLAS-dependent implementation)
+# Use distance_simd.cpp instead which provides:
+#   - Self-contained SIMD optimizations (AVX2, NEON)
+#   - Pure C++ fallback for platforms without SIMD
+#   - No external BLAS dependency
+list(REMOVE_ITEM DB_INDEX_FILES "${CMAKE_CURRENT_SOURCE_DIR}/db/index/distances.cpp")
+list(APPEND LIB_FILES ${DB_INDEX_FILES})
+file(GLOB DB_INDEX_NSG_FILES "db/index/nsg/*.cpp")
+list(APPEND LIB_FILES ${DB_INDEX_NSG_FILES})
+file(GLOB DB_INDEX_SPATIAL_FILES "db/index/spatial/*.cpp")
+list(APPEND LIB_FILES ${DB_INDEX_SPATIAL_FILES})
+file(GLOB DB_WAL_FILES "db/wal/*.cpp")
+list(APPEND LIB_FILES ${DB_WAL_FILES})
 
 # Add source files in sub dir db_server
 file(GLOB_RECURSE DB_SERVER_FILES "server/db_server/*")

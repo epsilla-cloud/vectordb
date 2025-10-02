@@ -16,11 +16,10 @@
 #include "utils/concurrent_map.hpp"
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
+#include "config/config.hpp"
 
 namespace vectordb {
 namespace engine {
-
-constexpr const long RebuildInterval = 60000;  // TODO:: to be config.
 
 class DBServer {
  public:
@@ -192,11 +191,13 @@ class DBServer {
 
   // periodically in a separate thread
   void RebuildPeriodically() {
-    const std::chrono::milliseconds rebuild_interval(RebuildInterval);
-
     while (!stop_rebuild_thread_) {
       Rebuild();  // Call the Rebuild function
 
+      // Get rebuild interval from global config (allows runtime configuration)
+      int interval_ms = vectordb::globalConfig.RebuildInterval.load(std::memory_order_acquire);
+      const std::chrono::milliseconds rebuild_interval(interval_ms);
+      
       // Introduce the time delay before the next Rebuild
       std::this_thread::sleep_for(rebuild_interval);
     }

@@ -56,12 +56,39 @@ class Table {
 
   // Rebuild the table and ann graph, and save to disk.
   Status Rebuild(const std::string &db_catalog_path);
+  
+  // Smart rebuild: intelligently choose between incremental and full rebuild
+  // This is the main entry point for rebuild operations
+  Status SmartRebuild(const std::string &db_catalog_path);
 
   // Compact the table by removing deleted records
   Status Compact(double threshold = 0.3);
 
   // Check if any segment needs compaction
   bool NeedsCompaction(double threshold = 0.3) const;
+
+ private:
+  // === Rebuild strategy methods ===
+  
+  // Check if rebuild should be skipped
+  bool ShouldSkipRebuild(int64_t old_count, int64_t new_count, double deleted_ratio);
+  
+  // Perform incremental rebuild (only process new nodes)
+  Status IncrementalRebuild(const std::string &db_catalog_path);
+  
+  // Perform full rebuild (rebuild entire graph)
+  Status FullRebuild(const std::string &db_catalog_path);
+  
+  // Check if disk save is needed
+  bool ShouldSaveToDisk();
+  
+  // === Rebuild state tracking ===
+  std::atomic<int> incremental_rebuild_count_{0};  // Consecutive incremental rebuilds
+  std::atomic<int> total_rebuild_count_{0};        // Total rebuilds since start
+  std::chrono::steady_clock::time_point last_save_time_{std::chrono::steady_clock::now()};
+  std::mutex rebuild_compact_mutex_;               // Protect rebuild and compact operations
+  
+ public:
 
   // Swap executors during config change.
   Status SwapExecutors();

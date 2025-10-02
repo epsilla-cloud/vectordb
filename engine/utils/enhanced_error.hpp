@@ -457,7 +457,9 @@ inline EnhancedStatus ConfigError(uint16_t code, const std::string& message) {
 
 } // namespace error
 
-// Type alias for easy migration
-using Status = error::EnhancedStatus;
+// Note:
+// We intentionally avoid aliasing vectordb::Status to EnhancedStatus here to prevent clashes
+// with the legacy Status class defined in utils/status.hpp. Use error::EnhancedStatus directly
+// or the adapter helpers in utils/status_adapters.hpp to convert between representations.
 
 } // namespace vectordb

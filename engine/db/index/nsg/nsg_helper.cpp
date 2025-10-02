@@ -22,7 +22,6 @@ int InsertIntoPool(Neighbor* addr, unsigned K, Neighbor nn) {
     return left;
   }
   if (addr[right].distance < nn.distance) {
-    addr[K] = nn;
     return K;
   }
   while (left < right - 1) {
