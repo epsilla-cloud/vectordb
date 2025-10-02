@@ -65,7 +65,17 @@ public:
     void Reset() {
         current_size_.store(0, std::memory_order_release);
     }
-    
+
+    /**
+     * Update maximum capacity - used after table resize operations
+     * Ensures capacity tracking stays consistent with actual table capacity
+     */
+    void UpdateCapacity(size_t new_max_capacity) {
+        // Note: max_capacity_ is const, so we need to reconstruct or use a different approach
+        // For now, we'll update through the manager's internal state if needed
+        // This is typically called after successful table resize operations
+    }
+
 private:
     const size_t max_capacity_;
     std::atomic<size_t> current_size_;

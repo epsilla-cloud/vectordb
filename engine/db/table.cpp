@@ -50,8 +50,17 @@ Table::Table(meta::TableSchema &table_schema,
       table_schema, db_catalog_path, actual_capacity, embedding_service_);
 
   // Replay operations in write ahead log.
+  // Disable predictive expansion during WAL recovery to prevent deadlocks
+  bool original_predictive_setting = table_segment_->IsPredictiveExpansionEnabled();
+  table_segment_->EnablePredictiveExpansion(false);
+
   wal_ = std::make_shared<WriteAheadLog>(db_catalog_path_, table_schema.id_, is_leader_);
   wal_->Replay(table_schema, field_name_field_type_map_, table_segment_, headers);
+
+  // Re-enable predictive expansion after WAL recovery is complete
+  // Add a cooldown period to prevent immediate expansion after restart
+  table_segment_->EnablePredictiveExpansion(original_predictive_setting);
+  table_segment_->SetPredictiveExpansionCooldown(10.0); // 10 second cooldown after restart
 
   for (int i = 0; i < table_schema_.fields_.size(); ++i) {
     auto fType = table_schema_.fields_[i].field_type_;
@@ -129,8 +138,10 @@ Status Table::Rebuild(const std::string &db_catalog_path) {
         fType == meta::FieldType::VECTOR_DOUBLE ||
         fType == meta::FieldType::SPARSE_VECTOR_FLOAT ||
         fType == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
-      if (ann_graph_segment_[index]->record_number_ == record_number ||
-          record_number < globalConfig.MinimalGraphSize) {
+      // Check if ann_graph_segment_[index] is valid before accessing
+      if (ann_graph_segment_[index] && 
+          (ann_graph_segment_[index]->record_number_ == record_number ||
+           record_number < globalConfig.MinimalGraphSize)) {
         // No need to rebuild the ann graph.
         logger_.Debug("Skip rebuild ANN graph for attribute: " + table_schema_.fields_[i].name_);
         ++index;
@@ -213,6 +224,199 @@ Status Table::Rebuild(const std::string &db_catalog_path) {
   return Status::OK();
 }
 
+// ============================================================================
+// Smart Rebuild Implementation
+// ============================================================================
+
+Status Table::SmartRebuild(const std::string &db_catalog_path) {
+  // Mutex protection: prevent concurrent rebuild and compaction
+  std::lock_guard<std::mutex> lock(rebuild_compact_mutex_);
+  
+  auto start_time = std::chrono::high_resolution_clock::now();
+  
+  // Get current state
+  int64_t record_number = table_segment_->record_number_;
+  double deleted_ratio = table_segment_->GetDeletedRatio();
+  
+  // Get old record count from first ANN graph segment
+  int64_t old_record_number = 0;
+  if (!ann_graph_segment_.empty() && ann_graph_segment_[0]) {
+    old_record_number = ann_graph_segment_[0]->record_number_;
+  }
+  
+  int64_t delta = record_number - old_record_number;
+  
+  logger_.Info("[SmartRebuild] Table: " + table_schema_.name_ + 
+               ", Records: " + std::to_string(record_number) + 
+               ", Delta: " + std::to_string(delta) + 
+               ", Deletion ratio: " + std::to_string(deleted_ratio * 100) + "%");
+  
+  // === Decision Tree: Handle different scenarios ===
+  
+  // Scenario 1: No changes, skip rebuild
+  if (ShouldSkipRebuild(old_record_number, record_number, deleted_ratio)) {
+    logger_.Info("[SmartRebuild] Skipping rebuild - no significant changes");
+    return Status::OK();
+  }
+  
+  // Scenario 2: HIGH DELETION RATIO (> threshold) - MUST compact first
+  // This is critical for maintaining search quality
+  if (deleted_ratio > globalConfig.CompactionBeforeRebuildThreshold) {
+    logger_.Warning("[SmartRebuild] High deletion ratio (" + 
+                    std::to_string(deleted_ratio * 100) + "%) detected!");
+    logger_.Info("[SmartRebuild] STEP 1: Compacting to remove deleted nodes...");
+    
+    // Step 1: Compact to physically remove deleted nodes
+    auto compact_status = table_segment_->CompactSegment();
+    if (!compact_status.ok()) {
+      logger_.Error("[SmartRebuild] Compaction failed: " + compact_status.message());
+      return compact_status;
+    }
+    
+    // Step 2: Save compacted data
+    if (is_leader_) {
+      table_segment_->SaveTableSegment(table_schema_, db_catalog_path, true);
+    }
+    
+    logger_.Info("[SmartRebuild] STEP 2: Compaction completed, now performing FULL rebuild...");
+    logger_.Info("[SmartRebuild] Reason: Node IDs changed after compaction, must rebuild entire graph");
+    
+    // Step 3: MUST do full rebuild (node IDs changed)
+    auto rebuild_status = FullRebuild(db_catalog_path);
+    
+    // Reset incremental counter after compaction
+    incremental_rebuild_count_.store(0);
+    
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    logger_.Info("[SmartRebuild] Compact + Full rebuild completed in " + 
+                 std::to_string(duration.count()) + "ms");
+    
+    return rebuild_status;
+  }
+  
+  // Scenario 3: Incremental rebuild (if enabled and conditions met)
+  bool use_incremental = 
+    globalConfig.EnableIncrementalRebuild &&
+    delta > 0 &&
+    delta < globalConfig.IncrementalThreshold &&
+    incremental_rebuild_count_.load() < globalConfig.FullRebuildInterval;
+  
+  if (use_incremental) {
+    logger_.Info("[SmartRebuild] Using INCREMENTAL rebuild for " + 
+                 std::to_string(delta) + " new nodes");
+    logger_.Info("[SmartRebuild] Incremental count: " + 
+                 std::to_string(incremental_rebuild_count_.load() + 1) + "/" + 
+                 std::to_string(globalConfig.FullRebuildInterval));
+    
+    auto status = IncrementalRebuild(db_catalog_path);
+    if (status.ok()) {
+      incremental_rebuild_count_.fetch_add(1);
+    }
+    
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    logger_.Info("[SmartRebuild] Incremental rebuild completed in " + 
+                 std::to_string(duration.count()) + "ms");
+    
+    return status;
+  }
+  
+  // Scenario 4: Full rebuild (default fallback)
+  logger_.Info("[SmartRebuild] Using FULL rebuild");
+  if (delta >= globalConfig.IncrementalThreshold) {
+    logger_.Info("[SmartRebuild] Reason: Delta (" + std::to_string(delta) + 
+                 ") >= threshold (" + std::to_string(globalConfig.IncrementalThreshold) + ")");
+  } else if (incremental_rebuild_count_.load() >= globalConfig.FullRebuildInterval) {
+    logger_.Info("[SmartRebuild] Reason: Periodic full rebuild (every " + 
+                 std::to_string(globalConfig.FullRebuildInterval) + " incremental rebuilds)");
+  }
+  
+  auto status = FullRebuild(db_catalog_path);
+  
+  // Reset incremental counter after full rebuild
+  incremental_rebuild_count_.store(0);
+  
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+  logger_.Info("[SmartRebuild] Full rebuild completed in " + 
+               std::to_string(duration.count()) + "ms");
+  
+  return status;
+}
+
+bool Table::ShouldSkipRebuild(int64_t old_count, int64_t new_count, double deleted_ratio) {
+  int64_t delta = new_count - old_count;
+  
+  // No new data
+  if (delta == 0) {
+    return true;
+  }
+  
+  // New data is too small (< 1% of total)
+  if (new_count > 0) {
+    float delta_ratio = static_cast<float>(delta) / static_cast<float>(new_count);
+    if (delta_ratio < 0.01f) {
+      logger_.Debug("[ShouldSkipRebuild] Delta ratio " + std::to_string(delta_ratio) + " < 0.01");
+      return true;
+    }
+  }
+  
+  // High deletion ratio - don't skip (need to compact)
+  if (deleted_ratio > globalConfig.CompactionBeforeRebuildThreshold) {
+    return false;
+  }
+  
+  return false;
+}
+
+Status Table::IncrementalRebuild(const std::string &db_catalog_path) {
+  logger_.Info("[IncrementalRebuild] Starting incremental rebuild...");
+  
+  // Note: Incremental rebuild is a placeholder for now
+  // Full implementation would require:
+  // 1. Insert new nodes into existing graph
+  // 2. Filter deleted nodes when finding neighbors
+  // 3. Add bidirectional links
+  // 4. Update navigation point if needed
+  
+  // For now, fall back to full rebuild
+  logger_.Warning("[IncrementalRebuild] Incremental rebuild not fully implemented yet, using full rebuild");
+  return FullRebuild(db_catalog_path);
+}
+
+Status Table::FullRebuild(const std::string &db_catalog_path) {
+  // This is essentially the same as the original Rebuild() method
+  return Rebuild(db_catalog_path);
+}
+
+bool Table::ShouldSaveToDisk() {
+  total_rebuild_count_.fetch_add(1);
+  int count = total_rebuild_count_.load();
+  
+  // Save every N rebuilds
+  if (count % globalConfig.RebuildSaveInterval == 0) {
+    logger_.Debug("[ShouldSaveToDisk] Saving due to rebuild count: " + std::to_string(count));
+    return true;
+  }
+  
+  // Or save every N seconds
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_save_time_).count();
+  
+  if (elapsed >= globalConfig.RebuildSaveIntervalSeconds) {
+    logger_.Debug("[ShouldSaveToDisk] Saving due to time elapsed: " + std::to_string(elapsed) + "s");
+    last_save_time_ = now;
+    return true;
+  }
+  
+  return false;
+}
+
+// ============================================================================
+// End of Smart Rebuild Implementation
+// ============================================================================
+
 Status Table::SwapExecutors() {
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
@@ -281,6 +485,9 @@ Status Table::Release() {
 }
 
 Status Table::Compact(double threshold) {
+  // Mutex protection: prevent concurrent rebuild and compaction
+  std::lock_guard<std::mutex> lock(rebuild_compact_mutex_);
+  
   if (table_segment_ == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table segment is null");
   }
@@ -290,22 +497,55 @@ Status Table::Compact(double threshold) {
                  std::to_string(threshold) + ")");
   }
   
-  logger_.Info("Starting compaction for table " + table_schema_.name_ + 
-               " (deleted ratio: " + std::to_string(table_segment_->GetDeletedRatio()) + ")");
+  logger_.Info("[Compact] Starting compaction for table " + table_schema_.name_ + 
+               " (deleted ratio: " + std::to_string(table_segment_->GetDeletedRatio() * 100) + "%)");
   
+  auto start_time = std::chrono::high_resolution_clock::now();
+  
+  // Step 1: Compact the segment (physically remove deleted records)
   auto status = table_segment_->CompactSegment();
   if (!status.ok()) {
-    logger_.Error("Compaction failed for table " + table_schema_.name_ + ": " + status.message());
+    logger_.Error("[Compact] Compaction failed for table " + table_schema_.name_ + ": " + status.message());
     return status;
   }
   
-  // Save the compacted segment to disk
-  status = table_segment_->SaveTableSegment(table_schema_, db_catalog_path_, true);
-  if (!status.ok()) {
-    logger_.Error("Failed to save compacted segment for table " + table_schema_.name_);
+  // Step 2: Save the compacted segment to disk
+  if (is_leader_) {
+    status = table_segment_->SaveTableSegment(table_schema_, db_catalog_path_, true);
+    if (!status.ok()) {
+      logger_.Error("[Compact] Failed to save compacted segment for table " + table_schema_.name_);
+      return status;
+    }
   }
   
-  return status;
+  auto compact_time = std::chrono::high_resolution_clock::now();
+  auto compact_duration = std::chrono::duration_cast<std::chrono::milliseconds>(compact_time - start_time);
+  logger_.Info("[Compact] Compaction completed in " + std::to_string(compact_duration.count()) + "ms");
+  
+  // Step 3: CRITICAL - Force full rebuild after compaction
+  // Reason: Compaction changes node IDs, making the ANN graph invalid
+  if (globalConfig.ForceFullRebuildAfterCompaction) {
+    logger_.Warning("[Compact] Node IDs changed after compaction - FORCING FULL REBUILD");
+    logger_.Info("[Compact] This is required to maintain data consistency");
+    
+    auto rebuild_status = FullRebuild(db_catalog_path_);
+    if (!rebuild_status.ok()) {
+      logger_.Error("[Compact] Full rebuild after compaction failed: " + rebuild_status.message());
+      return rebuild_status;
+    }
+    
+    // Reset incremental rebuild counter
+    incremental_rebuild_count_.store(0);
+    
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    logger_.Info("[Compact] Compaction + Full rebuild completed in " + 
+                 std::to_string(total_duration.count()) + "ms");
+  } else {
+    logger_.Warning("[Compact] ForceFullRebuildAfterCompaction is disabled - ANN graph may be INVALID!");
+  }
+  
+  return Status::OK();
 }
 
 bool Table::NeedsCompaction(double threshold) const {
@@ -377,9 +617,17 @@ Status Table::Delete(
     // Eager compaction: immediately compact if enabled and threshold exceeded
     bool eager = vectordb::globalConfig.EagerCompactionOnDelete.load();
     double threshold = vectordb::globalConfig.CompactionThreshold.load();
-    if (eager && post_deletion_ratio >= threshold) {
-      logger_.Info("[Table] Eager compaction enabled and deletion ratio " + std::to_string(post_deletion_ratio) +
-                   " >= threshold " + std::to_string(threshold) + ", flushing WAL and compacting now...");
+    int min_deleted_vectors = vectordb::globalConfig.MinDeletedVectorsForEagerCompaction.load();
+    size_t deleted_count = table_segment_->GetDeletedRatio() * table_segment_->GetRecordCount();
+
+    // Check both percentage threshold and minimum deleted vector count
+    bool should_compact = eager && post_deletion_ratio >= threshold && deleted_count >= min_deleted_vectors;
+
+    if (should_compact) {
+      logger_.Info("[Table] Eager compaction enabled: deletion ratio " + std::to_string(post_deletion_ratio) +
+                   " >= threshold " + std::to_string(threshold) + " and deleted vectors " +
+                   std::to_string(deleted_count) + " >= minimum " + std::to_string(min_deleted_vectors) +
+                   ", flushing WAL and compacting now...");
       // Ensure WAL is flushed so compaction is crash-safe
       auto wal_status = FlushWAL();
       if (!wal_status.ok()) {
@@ -389,6 +637,10 @@ Status Table::Delete(
       if (!compact_status.ok()) {
         logger_.Warning("[Table] Eager compaction failed: " + compact_status.message());
       }
+    } else if (eager) {
+      logger_.Debug("[Table] Eager compaction skipped: deletion ratio " + std::to_string(post_deletion_ratio) +
+                   " >= threshold " + std::to_string(threshold) + " but deleted vectors " +
+                   std::to_string(deleted_count) + " < minimum " + std::to_string(min_deleted_vectors));
     } else {
       // Trigger incremental compaction if available (background), using a fixed 20% hint as before
       if (compactor_) {

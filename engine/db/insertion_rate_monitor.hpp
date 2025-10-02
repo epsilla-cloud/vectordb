@@ -125,17 +125,41 @@ public:
                                   double prediction_window_seconds = 60.0) const {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        // Use peak rate for conservative estimation
-        double rate_to_use = std::max(current_rate_, peak_rate_ * 0.8);
+        // Clamp prediction window to reasonable range (5-30 seconds)
+        prediction_window_seconds = std::max(5.0, std::min(prediction_window_seconds, 30.0));
+
+        // Use current rate, but cap it at reasonable maximum (1000 records/sec for safety)
+        double rate_to_use = std::min(current_rate_, 1000.0);
+
+        // For very high rates, be more conservative
+        if (rate_to_use > 500.0) {
+            rate_to_use = rate_to_use * 0.5;  // Reduce by 50% for high rates
+        }
 
         // Predict how many records we'll need in the prediction window
         size_t predicted_insertions = static_cast<size_t>(rate_to_use * prediction_window_seconds);
 
-        // Add 20% buffer
-        size_t recommended = current_capacity + static_cast<size_t>(predicted_insertions * 1.2);
+        // Add modest buffer (50% instead of 20% for small capacities, 20% for larger)
+        double buffer_factor = current_capacity < 10000 ? 1.5 : 1.2;
+        size_t recommended = current_capacity + static_cast<size_t>(predicted_insertions * buffer_factor);
 
-        // Ensure at least 2x growth for efficiency
-        return std::max(recommended, current_capacity * 2);
+        // Progressive growth strategy instead of fixed 2x
+        size_t min_growth;
+        if (current_capacity < 1000) {
+            min_growth = current_capacity * 3;      // 3x for very small tables
+        } else if (current_capacity < 10000) {
+            min_growth = current_capacity * 2;      // 2x for small tables
+        } else if (current_capacity < 100000) {
+            min_growth = current_capacity + 50000;  // Linear growth for medium tables
+        } else {
+            min_growth = current_capacity + 100000; // Conservative growth for large tables
+        }
+
+        // Take the smaller of predicted vs progressive growth to avoid over-allocation
+        size_t final_capacity = std::min(recommended, min_growth);
+
+        // But ensure we still have meaningful growth
+        return std::max(final_capacity, current_capacity + std::max(predicted_insertions / 4, current_capacity / 4));
     }
 
     /**
@@ -191,12 +215,26 @@ private:
             }
 
             // Convert to records per second
-            current_rate_ = (total_in_window * 1000.0) / time_diff;
+            double raw_rate = (total_in_window * 1000.0) / time_diff;
 
-            // Update peak rate
+            // Apply smoothing and bounds checking
+            // Limit maximum rate to 5000 records/sec for safety
+            raw_rate = std::min(raw_rate, 5000.0);
+
+            // Apply exponential smoothing to reduce rate spikes
+            if (current_rate_ > 0) {
+                current_rate_ = 0.7 * current_rate_ + 0.3 * raw_rate;
+            } else {
+                current_rate_ = raw_rate;
+            }
+
+            // Update peak rate with smoothed value
             if (current_rate_ > peak_rate_) {
                 peak_rate_ = current_rate_;
             }
+
+            // Cap peak rate as well
+            peak_rate_ = std::min(peak_rate_, 5000.0);
         }
     }
 

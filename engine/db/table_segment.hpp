@@ -168,6 +168,21 @@ class TableSegment {
   // Geospatial indices
   std::unordered_map<std::string, std::shared_ptr<vectordb::engine::index::GeospatialIndex>> geospatial_indices_;
 
+  // Predictive expansion control methods
+  void EnablePredictiveExpansion(bool enabled) {
+    predictive_expansion_enabled_.store(enabled, std::memory_order_release);
+  }
+
+  bool IsPredictiveExpansionEnabled() const {
+    return predictive_expansion_enabled_.load(std::memory_order_acquire);
+  }
+
+  void SetPredictiveExpansionCooldown(double seconds) {
+    expansion_cooldown_until_ = std::chrono::steady_clock::now() +
+                                std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                    std::chrono::duration<double>(seconds));
+  }
+
  private:
   friend class IncrementalCompactor;  // Allow IncrementalCompactor access for compaction
   vectordb::engine::Logger logger_;
@@ -186,6 +201,7 @@ class TableSegment {
   // Predictive expansion
   std::unique_ptr<InsertionRateMonitor> insertion_monitor_;
   std::atomic<bool> predictive_expansion_enabled_{true};
+  std::chrono::steady_clock::time_point expansion_cooldown_until_;
 
   // used to store primary key set for duplication check
   UniqueKey primary_key_;

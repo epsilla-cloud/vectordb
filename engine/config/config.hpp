@@ -39,11 +39,30 @@ struct Config {
   std::atomic<int> MinVectorsForCompaction{1000}; // Minimum vectors to trigger compaction (default: 1000)
   std::atomic<int> CompactionMaxDuration{1800};   // Maximum compaction duration in seconds (default: 30 min)
 
+  // Index rebuild configuration
+  std::atomic<int> RebuildInterval{60000};       // Index rebuild interval in milliseconds (default: 60 seconds)
+  
+  // === Incremental rebuild configuration ===
+  std::atomic<bool> EnableIncrementalRebuild{false};        // Enable incremental rebuild (default: false, enable gradually)
+  std::atomic<int> IncrementalThreshold{1000};              // New records < threshold use incremental (default: 1000)
+  std::atomic<int> FullRebuildInterval{10};                 // Full rebuild every N incremental rebuilds (default: 10)
+  std::atomic<bool> FilterDeletedInIncremental{true};       // Filter deleted nodes during incremental rebuild (default: true)
+  std::atomic<bool> EnableBidirectionalLinks{true};         // Enable bidirectional links in incremental rebuild (default: true)
+  
+  // === Deletion and compaction strategy ===
+  std::atomic<double> CompactionBeforeRebuildThreshold{0.1}; // Consider compaction if deletion ratio > threshold (default: 0.1 = 10%)
+  std::atomic<bool> ForceFullRebuildAfterCompaction{true};   // Force full rebuild after compaction (default: true, required)
+  
+  // === I/O optimization ===
+  std::atomic<int> RebuildSaveInterval{5};                  // Save to disk every N rebuilds (default: 5)
+  std::atomic<int> RebuildSaveIntervalSeconds{300};         // Or save every N seconds (default: 300 = 5 minutes)
+
   // Memory management configuration
   std::atomic<int> InitialTableCapacity{1000};   // Initial table capacity (default: 1000, was 150000)
 
   // Eager compaction configuration: run Table::Compact() immediately after large soft-deletes
   std::atomic<bool> EagerCompactionOnDelete{true}; // Default: true
+  std::atomic<int> MinDeletedVectorsForEagerCompaction{10}; // Minimum deleted vectors to trigger eager compaction (default: 10)
   // std::atomic<bool> EagerCompactionOnDelete{false}; --- IGNORE
   
   // Constructor to initialize thread counts based on hardware
@@ -141,6 +160,16 @@ struct Config {
       printf("[Config] Using EAGER_DELETE_COMPACT=%s from environment\n", eager ? "true" : "false");
     }
 
+    // Check environment variable for minimum deleted vectors for eager compaction
+    const char* env_min_deleted_vectors = std::getenv("MIN_DELETED_VECTORS_FOR_EAGER_COMPACTION");
+    if (env_min_deleted_vectors != nullptr) {
+      int min_deleted = std::atoi(env_min_deleted_vectors);
+      if (min_deleted >= 1 && min_deleted <= 10000) {  // Reasonable range: 1 to 10,000
+        MinDeletedVectorsForEagerCompaction.store(min_deleted, std::memory_order_release);
+        printf("[Config] Using MIN_DELETED_VECTORS_FOR_EAGER_COMPACTION=%d from environment\n", min_deleted);
+      }
+    }
+
     // Check environment variable for initial table capacity
     const char* env_initial_capacity = std::getenv("INITIAL_TABLE_CAPACITY");
     if (env_initial_capacity != nullptr) {
@@ -151,6 +180,103 @@ struct Config {
       } else {
         printf("[Config] Invalid INITIAL_TABLE_CAPACITY=%s, using default %d\n",
                env_initial_capacity, InitialTableCapacity.load());
+      }
+    }
+
+    // Check environment variable for rebuild interval
+    const char* env_rebuild_interval = std::getenv("REBUILD_INTERVAL");
+    if (env_rebuild_interval != nullptr) {
+      int interval = std::atoi(env_rebuild_interval);
+      if (interval >= 5000 && interval <= 3600000) {  // Between 5 seconds and 1 hour (in milliseconds)
+        RebuildInterval.store(interval, std::memory_order_release);
+        printf("[Config] Using REBUILD_INTERVAL=%d milliseconds from environment\n", interval);
+      } else {
+        printf("[Config] Invalid REBUILD_INTERVAL=%s, using default %d ms\n",
+               env_rebuild_interval, RebuildInterval.load());
+      }
+    }
+    
+    // === Incremental rebuild configuration ===
+    const char* env_enable_incremental = std::getenv("ENABLE_INCREMENTAL_REBUILD");
+    if (env_enable_incremental != nullptr) {
+      std::string env_value(env_enable_incremental);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool enable = (env_value == "true" || env_value == "1" || env_value == "yes");
+      EnableIncrementalRebuild.store(enable, std::memory_order_release);
+      printf("[Config] Using ENABLE_INCREMENTAL_REBUILD=%s from environment\n", enable ? "true" : "false");
+    }
+    
+    const char* env_incremental_threshold = std::getenv("INCREMENTAL_THRESHOLD");
+    if (env_incremental_threshold != nullptr) {
+      int threshold = std::atoi(env_incremental_threshold);
+      if (threshold >= 10 && threshold <= 100000) {
+        IncrementalThreshold.store(threshold, std::memory_order_release);
+        printf("[Config] Using INCREMENTAL_THRESHOLD=%d from environment\n", threshold);
+      }
+    }
+    
+    const char* env_full_rebuild_interval = std::getenv("FULL_REBUILD_INTERVAL");
+    if (env_full_rebuild_interval != nullptr) {
+      int interval = std::atoi(env_full_rebuild_interval);
+      if (interval >= 1 && interval <= 100) {
+        FullRebuildInterval.store(interval, std::memory_order_release);
+        printf("[Config] Using FULL_REBUILD_INTERVAL=%d from environment\n", interval);
+      }
+    }
+    
+    const char* env_filter_deleted = std::getenv("FILTER_DELETED_IN_INCREMENTAL");
+    if (env_filter_deleted != nullptr) {
+      std::string env_value(env_filter_deleted);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool filter = (env_value == "true" || env_value == "1" || env_value == "yes");
+      FilterDeletedInIncremental.store(filter, std::memory_order_release);
+      printf("[Config] Using FILTER_DELETED_IN_INCREMENTAL=%s from environment\n", filter ? "true" : "false");
+    }
+    
+    const char* env_bidirectional = std::getenv("ENABLE_BIDIRECTIONAL_LINKS");
+    if (env_bidirectional != nullptr) {
+      std::string env_value(env_bidirectional);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool enable = (env_value == "true" || env_value == "1" || env_value == "yes");
+      EnableBidirectionalLinks.store(enable, std::memory_order_release);
+      printf("[Config] Using ENABLE_BIDIRECTIONAL_LINKS=%s from environment\n", enable ? "true" : "false");
+    }
+    
+    // === Deletion and compaction strategy ===
+    const char* env_compact_before_rebuild = std::getenv("COMPACTION_BEFORE_REBUILD_THRESHOLD");
+    if (env_compact_before_rebuild != nullptr) {
+      double threshold = std::atof(env_compact_before_rebuild);
+      if (threshold >= 0.05 && threshold <= 0.5) {
+        CompactionBeforeRebuildThreshold.store(threshold, std::memory_order_release);
+        printf("[Config] Using COMPACTION_BEFORE_REBUILD_THRESHOLD=%.2f from environment\n", threshold);
+      }
+    }
+    
+    const char* env_force_full_after_compact = std::getenv("FORCE_FULL_REBUILD_AFTER_COMPACTION");
+    if (env_force_full_after_compact != nullptr) {
+      std::string env_value(env_force_full_after_compact);
+      std::transform(env_value.begin(), env_value.end(), env_value.begin(), ::tolower);
+      bool force = (env_value == "true" || env_value == "1" || env_value == "yes");
+      ForceFullRebuildAfterCompaction.store(force, std::memory_order_release);
+      printf("[Config] Using FORCE_FULL_REBUILD_AFTER_COMPACTION=%s from environment\n", force ? "true" : "false");
+    }
+    
+    // === I/O optimization ===
+    const char* env_rebuild_save_interval = std::getenv("REBUILD_SAVE_INTERVAL");
+    if (env_rebuild_save_interval != nullptr) {
+      int interval = std::atoi(env_rebuild_save_interval);
+      if (interval >= 1 && interval <= 100) {
+        RebuildSaveInterval.store(interval, std::memory_order_release);
+        printf("[Config] Using REBUILD_SAVE_INTERVAL=%d from environment\n", interval);
+      }
+    }
+    
+    const char* env_rebuild_save_seconds = std::getenv("REBUILD_SAVE_INTERVAL_SECONDS");
+    if (env_rebuild_save_seconds != nullptr) {
+      int seconds = std::atoi(env_rebuild_save_seconds);
+      if (seconds >= 60 && seconds <= 3600) {
+        RebuildSaveIntervalSeconds.store(seconds, std::memory_order_release);
+        printf("[Config] Using REBUILD_SAVE_INTERVAL_SECONDS=%d from environment\n", seconds);
       }
     }
 
@@ -235,6 +361,12 @@ struct Config {
     if (json.HasMember("EagerCompactionOnDelete")) {
       EagerCompactionOnDelete.store(json.GetBool("EagerCompactionOnDelete"), std::memory_order_release);
     }
+    if (json.HasMember("RebuildInterval")) {
+      int interval = json.GetInt("RebuildInterval");
+      if (interval >= 5000 && interval <= 3600000) {  // Between 5 seconds and 1 hour (in milliseconds)
+        RebuildInterval.store(interval, std::memory_order_release);
+      }
+    }
   }
   
   // Setter method for SoftDelete mode
@@ -263,6 +395,7 @@ struct Config {
     config.SetInt("CompactionMaxDuration", CompactionMaxDuration.load(std::memory_order_acquire));
     config.SetInt("InitialTableCapacity", InitialTableCapacity.load(std::memory_order_acquire));
     config.SetBool("EagerCompactionOnDelete", EagerCompactionOnDelete.load(std::memory_order_acquire));
+    config.SetInt("RebuildInterval", RebuildInterval.load(std::memory_order_acquire));
     return config;
   }
 };
