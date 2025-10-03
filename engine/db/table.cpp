@@ -116,6 +116,10 @@ Status Table::Rebuild(const std::string &db_catalog_path) {
   omp_set_num_threads(globalConfig.RebuildThreads);
   logger_.Debug("Rebuild table segment with threads: " + std::to_string(globalConfig.RebuildThreads));
 
+  // CRITICAL: Set flag to prevent resize during ANN graph rebuild
+  // This prevents Insert from resizing vector_tables_ while we're reading them
+  table_segment_->SetIndexRebuildInProgress(true);
+
   // Get the current record number.
   int64_t record_number = table_segment_->record_number_;
 
@@ -219,6 +223,9 @@ Status Table::Rebuild(const std::string &db_catalog_path) {
       ++index;
     }
   }
+
+  // CRITICAL: Clear flag to allow resize operations again
+  table_segment_->SetIndexRebuildInProgress(false);
 
   logger_.Debug("Rebuild done.");
   return Status::OK();
@@ -673,6 +680,12 @@ Status Table::Search(const std::string &field_name,
                         bool with_distance,
                         std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
                         vectordb::Json &facets) {
+  // Check if rebuild is in progress - prevent concurrent access to data structures
+  if (table_segment_->IsIndexRebuildInProgress()) {
+    return Status(DB_UNEXPECTED_ERROR,
+                 "Index rebuild is in progress. Please retry the query after rebuild completes.");
+  }
+
   // Check if field_name exists.
   if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
@@ -781,6 +794,12 @@ Status Table::SearchByAttribute(
     vectordb::Json &projects,
     std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
     vectordb::Json &facets) {
+  // Check if rebuild is in progress - prevent concurrent access to data structures
+  if (table_segment_->IsIndexRebuildInProgress()) {
+    return Status(DB_UNEXPECTED_ERROR,
+                 "Index rebuild is in progress. Please retry the query after rebuild completes.");
+  }
+
   // TODO: create a separate pool for search by attribute.
   int64_t field_offset = 0;
   // [Note] the following invocation is wrong
@@ -859,6 +878,12 @@ Status Table::Project(
 
   for (auto i = 0; i < idlist_size; ++i) {
     int64_t id = from_id_list ? ids[i] : i;
+
+    // Skip deleted records when projecting all records
+    if (!from_id_list && table_segment_->deleted_->test(id)) {
+      continue;
+    }
+
     vectordb::Json record;
     record.LoadFromString("{}");
     for (auto field : query_fields) {

@@ -42,10 +42,16 @@ public:
 
         if (capacity_ > 0) {
             // Check for potential overflow in memory allocation
-            const size_t max_capacity = 100000000;  // 100M elements
+            // Can be overridden by EPSILLA_DYNAMIC_BLOCK_MAX_CAPACITY environment variable
+            static const size_t default_max = 1000000000;  // 1B elements
+            static const size_t max_capacity = []() {
+                const char* env_max = std::getenv("EPSILLA_DYNAMIC_BLOCK_MAX_CAPACITY");
+                return env_max ? std::stoul(env_max) : default_max;
+            }();
+
             if (capacity_ > max_capacity) {
                 throw std::overflow_error("Initial capacity exceeds maximum limit: " +
-                                         std::to_string(capacity_));
+                                         std::to_string(capacity_) + " (max: " + std::to_string(max_capacity) + ")");
             }
 
             // Check if total memory size would overflow
@@ -88,11 +94,17 @@ public:
         size_t new_capacity = CalculateNewCapacity(new_size);
 
         // Check for maximum capacity limit
-        const size_t max_capacity = 100000000;  // 100M records
+        // Can be overridden by EPSILLA_DYNAMIC_BLOCK_MAX_CAPACITY environment variable
+        static const size_t default_max = 1000000000;  // 1B elements (default ~4GB for floats)
+        static const size_t max_capacity = []() {
+            const char* env_max = std::getenv("EPSILLA_DYNAMIC_BLOCK_MAX_CAPACITY");
+            return env_max ? std::stoul(env_max) : default_max;
+        }();
+
         if (new_capacity > max_capacity) {
             return Status(DB_UNEXPECTED_ERROR,
                          "Requested capacity exceeds maximum limit: " +
-                         std::to_string(new_capacity));
+                         std::to_string(new_capacity) + " (max: " + std::to_string(max_capacity) + ")");
         }
 
         // Check for overflow in new capacity allocation

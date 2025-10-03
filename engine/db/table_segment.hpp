@@ -94,7 +94,8 @@ class TableSegment {
 
   Status Init(meta::TableSchema& table_schema, int64_t size_limit);
   Status DoubleSize();
-  Status Resize(size_t new_capacity);  // Dynamic resize support
+  Status Resize(size_t new_capacity);  // Dynamic resize support (public interface with locking)
+  Status ResizeInternal(size_t new_capacity);  // Internal resize without locking (caller must hold lock)
 
   Status Insert(meta::TableSchema& table_schema, Json& records, int64_t wal_id, std::unordered_map<std::string, std::string> &headers, bool upsert = false);
   Status InsertPrepare(meta::TableSchema& table_schema, Json& pks, Json& result);
@@ -112,7 +113,11 @@ class TableSegment {
   // Helper methods for concurrent hard delete
   Status CompactDataStructures(const std::vector<size_t>& sorted_ids);
   void RebuildPrimaryKeyIndex();
-  
+
+  // Control flags for critical operations (used by Table class during rebuild)
+  void SetIndexRebuildInProgress(bool value) { index_rebuild_in_progress_.store(value); }
+  bool IsIndexRebuildInProgress() const { return index_rebuild_in_progress_.load(); }
+
   // HardDeleteByIntPK is implemented inline below
 
   // Convert a primary key to an internal id

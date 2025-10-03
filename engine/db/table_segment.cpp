@@ -102,6 +102,10 @@ Status TableSegment::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   // rather than pre-allocating based on vector_scale which is intended for vectors
   capacity_ = std::min(size_limit, static_cast<int64_t>(1000));  // Cap initial capacity at 1000 records
 
+  // CRITICAL FIX: Reset capacity_manager_ to match the adjusted capacity_
+  // Constructor initialized it to init_table_scale, but we capped capacity_ to 1000
+  capacity_manager_ = std::make_unique<AtomicCapacityManager>(capacity_);
+
   // Allocate dynamic attribute table
   if (primitive_offset_ > 0) {
     size_t total_size = 0;
@@ -115,7 +119,10 @@ Status TableSegment::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   
   var_len_attr_table_.resize(var_len_attr_num_);
   for (auto& elem : var_len_attr_table_) {
-    elem.resize(size_limit_);
+    // IMPORTANT: Resize to capacity_, not size_limit_
+    // This matches vector_tables_ and attribute_table_ initialization
+    // Will grow dynamically via Resize() when needed
+    elem.resize(capacity_);
   }
 
   // Allocate dynamic vector tables
@@ -136,14 +143,17 @@ Status TableSegment::Init(meta::TableSchema& table_schema, int64_t size_limit) {
   return Status::OK();
 }
 
-Status TableSegment::Resize(size_t new_capacity) {
-  // Check if critical operations are in progress
+Status TableSegment::ResizeInternal(size_t new_capacity) {
+  // IMPORTANT: Caller must hold data_rw_mutex_ lock
+  // This is the internal implementation without locking
+
+  // Check if critical operations are in progress (even when called internally)
   if (index_rebuild_in_progress_.load() || compaction_in_progress_.load()) {
     logger_.Debug("[TableSegment] Resize deferred - critical operation in progress");
-    return Status::OK();  // Defer resize, will be retried on next insert
+    // Don't resize during rebuild/compaction, but don't fail either
+    // The insert will be rejected if capacity is truly insufficient
+    return Status::OK();
   }
-
-  std::unique_lock lock(data_rw_mutex_);
 
   if (new_capacity <= capacity_) {
     // No need to resize if new capacity is smaller or equal
@@ -161,18 +171,22 @@ Status TableSegment::Resize(size_t new_capacity) {
 
   // Resize attribute table
   if (primitive_offset_ > 0 && attribute_table_) {
+    logger_.Info("Resizing attribute table to " + std::to_string(new_capacity));
     size_t new_size = new_capacity * primitive_offset_;
     auto status = attribute_table_->Resize(new_size);
     if (!status.ok()) {
       logger_.Error("Failed to resize attribute table: " + status.message());
       return status;
     }
+    logger_.Info("Attribute table resized successfully");
     resize_step = 1;
   }
 
   // Resize vector tables (with rollback capability)
+  logger_.Info("Resizing " + std::to_string(vector_tables_.size()) + " vector tables");
   for (size_t i = 0; i < vector_tables_.size(); ++i) {
     if (vector_tables_[i]) {
+      logger_.Info("Resizing vector table " + std::to_string(i) + " to " + std::to_string(new_capacity));
       auto status = vector_tables_[i]->ResizeVectors(new_capacity);
       if (!status.ok()) {
         logger_.Error("Failed to resize vector table " + std::to_string(i) + ": " + status.message());
@@ -190,15 +204,29 @@ Status TableSegment::Resize(size_t new_capacity) {
         return status;
       }
       resized_vector_tables.push_back(i);
+      logger_.Info("Vector table " + std::to_string(i) + " resized successfully");
     }
   }
+  logger_.Info("All vector tables resized successfully");
   resize_step = 2;
 
   // Resize variable length attribute tables
+  logger_.Info("Resizing " + std::to_string(var_len_attr_table_.size()) + " var-length attribute tables");
   try {
-    for (auto& var_table : var_len_attr_table_) {
-      var_table.resize(new_capacity);
+    for (size_t i = 0; i < var_len_attr_table_.size(); ++i) {
+      auto& var_table = var_len_attr_table_[i];
+      logger_.Info("Var-length table " + std::to_string(i) + " current size: " + std::to_string(var_table.size()) + ", new capacity: " + std::to_string(new_capacity));
+      // Only resize if new capacity is larger than current size
+      // var_len_attr_table may have been initialized to size_limit_ which could be >> new_capacity
+      if (new_capacity > var_table.size()) {
+        logger_.Info("Resizing var-length table " + std::to_string(i) + " from " + std::to_string(var_table.size()) + " to " + std::to_string(new_capacity));
+        var_table.resize(new_capacity);
+        logger_.Info("Var-length table " + std::to_string(i) + " resized successfully");
+      } else {
+        logger_.Info("Skipping resize of var-length table " + std::to_string(i) + " (already large enough)");
+      }
     }
+    logger_.Info("All var-length tables resized successfully");
     resize_step = 3;
   } catch (const std::exception& e) {
     logger_.Error("Failed to resize variable length tables: " + std::string(e.what()));
@@ -271,6 +299,13 @@ Status TableSegment::Resize(size_t new_capacity) {
   logger_.Info("TableSegment resize completed: capacity=" + std::to_string(new_capacity) +
                ", current_records=" + std::to_string(current_records));
   return Status::OK();
+}
+
+// Public Resize interface with locking
+Status TableSegment::Resize(size_t new_capacity) {
+  std::unique_lock lock(data_rw_mutex_);
+  // ResizeInternal will check for critical operations
+  return ResizeInternal(new_capacity);
 }
 
 Status TableSegment::DoubleSize() {
@@ -1151,8 +1186,8 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
                   " based on insertion rate of " +
                   std::to_string(insertion_monitor_->GetCurrentRate()) + " records/sec");
 
-      // Perform pre-emptive resize
-      auto resize_status = Resize(recommended_capacity);
+      // Perform pre-emptive resize (use ResizeInternal since we already hold the lock)
+      auto resize_status = ResizeInternal(recommended_capacity);
       if (!resize_status.ok()) {
         logger_.Warning("Predictive expansion failed: " + resize_status.message());
         // Continue with normal operation even if predictive expansion fails
@@ -1201,8 +1236,8 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
                  ", old_capacity=" + std::to_string(capacity_) +
                  ", new_capacity=" + std::to_string(new_capacity));
 
-    // Attempt resize
-    auto resize_status = Resize(new_capacity);
+    // Attempt resize (use ResizeInternal since we already hold the lock)
+    auto resize_status = ResizeInternal(new_capacity);
     if (!resize_status.ok()) {
       logger_.Error("INSERT_RESIZE_FAILED: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
                     ", error=" + resize_status.message());
@@ -1211,115 +1246,30 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
     }
 
     logger_.Info("INSERT_RESIZE_SUCCESS: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                 ", new_capacity=" + std::to_string(new_capacity));
+                 ", new_capacity=" + std::to_string(capacity_));  // Use actual capacity, not requested
 
     // Try reserve again after resize
+    // Note: If resize was deferred, capacity_ won't have changed, so this may still fail
+    // In that case, return a retriable error
     if (!capacity_manager_->TryReserve(new_record_size, reserved_position)) {
-      logger_.Error("INSERT_RESERVE_FAILED_AFTER_RESIZE: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)));
-      return Status(DB_UNEXPECTED_ERROR,
-                   "Failed to reserve capacity even after resize");
+      // Check if resize was actually deferred (capacity didn't increase)
+      if (capacity_ < new_capacity) {
+        logger_.Warning("INSERT_DEFERRED: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
+                       ", resize was deferred due to ongoing critical operation, insert will be retried");
+        return Status(DB_UNEXPECTED_ERROR,
+                     "Table resize deferred due to ongoing rebuild/compaction. Please retry the insert operation.");
+      } else {
+        logger_.Error("INSERT_RESERVE_FAILED_AFTER_RESIZE: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
+                     ", capacity=" + std::to_string(capacity_) + ", requested=" + std::to_string(new_capacity));
+        return Status(DB_UNEXPECTED_ERROR,
+                     "Failed to reserve capacity even after resize");
+      }
     }
   }
 
   logger_.Info("INSERT_CAPACITY_RESERVED: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
                ", reserved_position=" + std::to_string(reserved_position) +
                ", reserved_count=" + std::to_string(new_record_size));
-
-  // CONSERVATIVE FIX: Only resize vector tables when it's safe to do so
-  // This fixes the race condition while respecting compaction operations
-  if (!compaction_in_progress_.load()) {
-    size_t required_vectors = reserved_position + new_record_size;
-
-    logger_.Info("INSERT_VECTOR_TABLE_CHECK: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                 ", required_vectors=" + std::to_string(required_vectors) +
-                 ", reserved_position=" + std::to_string(reserved_position) +
-                 ", new_record_size=" + std::to_string(new_record_size));
-
-    // CRITICAL: Check for capacity tracking inconsistency
-    // Only cap when required_vectors is unreasonably large compared to current records
-    // This prevents issues after compaction while allowing legitimate expansion
-    size_t current_records = record_number_.load();
-    if (required_vectors > capacity_ && required_vectors > current_records * 10) {
-      logger_.Error("INSERT_VECTOR_TABLE_INCONSISTENCY: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                   ", required_vectors=" + std::to_string(required_vectors) +
-                   ", capacity=" + std::to_string(capacity_) +
-                   ", current_records=" + std::to_string(current_records) +
-                   " - This indicates a capacity tracking inconsistency.");
-      required_vectors = std::max(capacity_, current_records + new_record_size);  // Use reasonable size
-      logger_.Info("INSERT_VECTOR_TABLE_CORRECTED: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                   ", corrected_required_vectors=" + std::to_string(required_vectors));
-    }
-
-    for (size_t i = 0; i < vector_tables_.size(); ++i) {
-      if (!vector_tables_[i]) {
-        logger_.Error("INSERT_VECTOR_TABLE_NULL: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) + " - Vector table is null!");
-        continue;
-      }
-
-      // CRITICAL FIX: Use GetCapacity() to get physical capacity, not GetNumVectors()
-      // After compaction, num_vectors_ may be set to actual data count (e.g., 24)
-      // while physical capacity is much larger (e.g., 500) for growth headroom
-      // GetNumVectors() returns num_vectors_ (logical count), not physical capacity
-      size_t physical_capacity_floats = 0;
-      size_t dimension = 0;
-
-      logger_.Info("INSERT_ACCESSING_VECTOR_TABLE: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                   ", table_index=" + std::to_string(i) + ", about to call GetCapacity()...");
-
-      try {
-        physical_capacity_floats = vector_tables_[i]->GetCapacity();
-        logger_.Info("INSERT_GOT_CAPACITY: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) + ", capacity=" + std::to_string(physical_capacity_floats) +
-                     ", about to call GetDimension()...");
-
-        dimension = vector_tables_[i]->GetDimension();
-        logger_.Info("INSERT_GOT_DIMENSION: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) + ", dimension=" + std::to_string(dimension));
-      } catch (const std::exception& e) {
-        logger_.Error("INSERT_VECTOR_TABLE_ACCESS_ERROR: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) + ", error=" + std::string(e.what()));
-        return Status(DB_UNEXPECTED_ERROR, "Failed to access vector table: " + std::string(e.what()));
-      }
-
-      if (dimension == 0) {
-        logger_.Error("INSERT_VECTOR_TABLE_ZERO_DIM: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) + " - Dimension is zero!");
-        return Status(DB_UNEXPECTED_ERROR, "Vector table has zero dimension");
-      }
-
-      size_t current_vector_capacity = physical_capacity_floats / dimension;
-
-      if (current_vector_capacity < required_vectors) {
-        logger_.Info("INSERT_VECTOR_TABLE_RESIZE_ATTEMPT: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) +
-                     ", current_capacity=" + std::to_string(current_vector_capacity) +
-                     ", required=" + std::to_string(required_vectors));
-
-        auto resize_start = std::chrono::steady_clock::now();
-        auto resize_status = vector_tables_[i]->ResizeVectors(required_vectors);
-        auto resize_end = std::chrono::steady_clock::now();
-        auto resize_ms = std::chrono::duration_cast<std::chrono::milliseconds>(resize_end - resize_start).count();
-
-        if (!resize_status.ok()) {
-          logger_.Error("INSERT_VECTOR_TABLE_RESIZE_FAILED: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                       ", table_index=" + std::to_string(i) +
-                       ", error=" + resize_status.message() +
-                       ", resize_duration_ms=" + std::to_string(resize_ms));
-          return Status(DB_UNEXPECTED_ERROR,
-                       "Vector table resize failed: " + resize_status.message());
-        }
-
-        logger_.Info("INSERT_VECTOR_TABLE_RESIZE_SUCCESS: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                     ", table_index=" + std::to_string(i) +
-                     ", new_capacity=" + std::to_string(required_vectors) +
-                     ", resize_duration_ms=" + std::to_string(resize_ms));
-      }
-    }
-  } else {
-    logger_.Info("INSERT_VECTOR_TABLE_SKIPPED: thread_id=" + std::to_string(std::hash<std::thread::id>{}(thread_id)) +
-                 " - Skipping vector table resize during compaction");
-  }
 
   // Start WAL transaction
   auto wal_txn = wal_manager_->BeginTransaction(wal_id);
