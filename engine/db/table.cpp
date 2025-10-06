@@ -104,7 +104,8 @@ Table::Table(meta::TableSchema &table_schema,
             globalConfig.MasterQueueSize,
             globalConfig.LocalQueueSize,
             globalConfig.GlobalSyncInterval,
-            globalConfig.PreFilter));
+            globalConfig.PreFilter,
+            table_schema_.fields_[i].name_));
       }
       executor_pool_.push_back(pool);
     }
@@ -214,7 +215,8 @@ Status Table::Rebuild(const std::string &db_catalog_path) {
             globalConfig.MasterQueueSize,
             globalConfig.LocalQueueSize,
             globalConfig.GlobalSyncInterval,
-            globalConfig.PreFilter));
+            globalConfig.PreFilter,
+            table_schema_.fields_[i].name_));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);
@@ -472,7 +474,8 @@ Status Table::SwapExecutors() {
             globalConfig.MasterQueueSize,
             globalConfig.LocalQueueSize,
             globalConfig.GlobalSyncInterval,
-            globalConfig.PreFilter));
+            globalConfig.PreFilter,
+            table_schema_.fields_[i].name_));
       }
       std::unique_lock<std::mutex> lock(executor_pool_mutex_);
       executor_pool_.set(index, pool);

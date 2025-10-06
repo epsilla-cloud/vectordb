@@ -44,13 +44,15 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations,
-    bool prefilter_enabled)
+    bool prefilter_enabled,
+    const std::string& vector_field_name)
     : total_indexed_vector_(ann_index->record_number_),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
       neighbor_list_(neighbor_list),
       vector_column_(vector_column),
+      vector_field_name_(vector_field_name),
       fstdistfunc_(fstdistfunc),
       dist_func_param_(dist_func_param),
       num_threads_(num_threads),
@@ -467,8 +469,21 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 
   int64_t nk = local_queue_capacity;
 
+  // Boundary check: ensure cand_id is valid and offset_table_[cand_id + 1] exists
+  if (cand_id < 0 || cand_id >= total_indexed_vector_) {
+    // Invalid candidate ID, cannot expand
+    local_count_computation += tmp_count_computation;
+    return nk;
+  }
+
   for (int64_t e_i = offset_table_[cand_id]; e_i < offset_table_[cand_id + 1]; ++e_i) {
     int64_t nb_id = neighbor_list_[e_i];
+
+    // Boundary check: ensure neighbor ID is valid
+    if (nb_id < 0 || nb_id >= total_indexed_vector_) {
+      continue;
+    }
+
     {  // Sequential edition
       if (is_visited[nb_id]) {
         continue;
@@ -557,18 +572,34 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
+  // Boundary check: ensure we have valid data and navigation point
+  if (total_indexed_vector_ == 0) {
+    // No vectors indexed, cannot prepare init IDs
+    return;
+  }
+
   std::vector<bool> is_selected(total_indexed_vector_);
   int64_t init_ids_end = 0;
-  for (
-      int64_t e_i = offset_table_[start_search_point_];
-      e_i < offset_table_[start_search_point_ + 1] && init_ids_end < L;
-      ++e_i) {
-    int64_t v_id = neighbor_list_[e_i];
-    if (is_selected[v_id]) {
-      continue;
+
+  // Boundary check: ensure offset_table_[start_search_point_ + 1] exists
+  // offset_table_ size is record_number_ + 1, so we need start_search_point_ + 1 < record_number_ + 1
+  // which means start_search_point_ < record_number_ (i.e., < total_indexed_vector_)
+  if (start_search_point_ < total_indexed_vector_) {
+    for (
+        int64_t e_i = offset_table_[start_search_point_];
+        e_i < offset_table_[start_search_point_ + 1] && init_ids_end < L;
+        ++e_i) {
+      int64_t v_id = neighbor_list_[e_i];
+      // Additional safety check for valid neighbor ID
+      if (v_id < 0 || v_id >= total_indexed_vector_) {
+        continue;
+      }
+      if (is_selected[v_id]) {
+        continue;
+      }
+      is_selected[v_id] = true;
+      init_ids[init_ids_end++] = v_id;
     }
-    is_selected[v_id] = true;
-    init_ids[init_ids_end++] = v_id;
   }
 
   int64_t tmp_id = start_search_point_ + 1;
@@ -795,22 +826,63 @@ bool VecSearchExecutor::BruteForceSearch(
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
-  
+
+  // Determine whether to use indexed data or table segment data
+  // When total_indexed_vector_ == 0, the index hasn't been built yet,
+  // so we need to use table_segment's vector data instead of vector_column_
+  bool use_table_segment_data = (total_indexed_vector_ == 0 && !vector_field_name_.empty());
+
   // Use thread-local computation to avoid race conditions
   if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
+    DenseVectorPtr data_ptr;
+
+    if (use_table_segment_data) {
+      // Use TableSegment's vector data when index not built
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;  // Field not found
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->vector_tables_.size()) {
+        return false;  // Invalid field offset
+      }
+      data_ptr = table_segment->vector_tables_[field_offset]->GetData();
+    } else {
+      // Use ANNGraphSegment's vector data (indexed data)
+      data_ptr = std::get<DenseVectorPtr>(vector_column_);
+    }
+
     #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-          std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+          data_ptr + dimension_ * v_id,
           std::get<DenseVectorPtr>(query_data),
           dist_func_param_);
       // Direct array write is safe with static scheduling
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   } else {
+    VariableLenAttrColumnContainer* data_container;
+
+    if (use_table_segment_data) {
+      // Use TableSegment's sparse vector data when index not built
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;  // Field not found
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->var_len_attr_table_.size()) {
+        return false;  // Invalid field offset
+      }
+      data_container = &table_segment->var_len_attr_table_[field_offset];
+    } else {
+      // Use ANNGraphSegment's sparse vector data (indexed data)
+      data_container = std::get<VariableLenAttrColumnContainer *>(vector_column_);
+    }
+
     #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
-      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+      auto &vecData = data_container->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
           *std::get<SparseVectorPtr>(vecData),
           *std::get<SparseVectorPtr>(query_data));
@@ -851,15 +923,34 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
-  
+
+  // Determine whether to use indexed data or table segment data
+  bool use_table_segment_data = (total_indexed_vector_ == 0 && !vector_field_name_.empty());
+
   // Use thread-local computation with static scheduling to avoid race conditions
   if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
+    DenseVectorPtr data_ptr;
+
+    if (use_table_segment_data) {
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->vector_tables_.size()) {
+        return false;
+      }
+      data_ptr = table_segment->vector_tables_[field_offset]->GetData();
+    } else {
+      data_ptr = std::get<DenseVectorPtr>(vector_column_);
+    }
+
     #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
         float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-            std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+            data_ptr + dimension_ * v_id,
             std::get<DenseVectorPtr>(query_data),
             dist_func_param_);
         // Direct array write is safe with static scheduling
@@ -869,11 +960,27 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
       }
     }
   } else {
+    VariableLenAttrColumnContainer* data_container;
+
+    if (use_table_segment_data) {
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->var_len_attr_table_.size()) {
+        return false;
+      }
+      data_container = &table_segment->var_len_attr_table_[field_offset];
+    } else {
+      data_container = std::get<VariableLenAttrColumnContainer *>(vector_column_);
+    }
+
     #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
-        auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+        auto &vecData = data_container->at(v_id);
         float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
             *std::get<SparseVectorPtr>(vecData),
             *std::get<SparseVectorPtr>(query_data));
@@ -928,15 +1035,41 @@ Status VecSearchExecutor::Search(
   //           << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
   //           << total_vector << std::endl;
 
+  // CRITICAL FIX: If total_vector > total_indexed_vector_, the index is out of date
+  // This happens when data is inserted but rebuild hasn't completed yet
+  bool use_brute_force = brute_force_search_ && (total_vector <= total_indexed_vector_);
+
+  // Special case: if no vectors are indexed yet, use brute force search
+  // This provides results even when the index hasn't been built yet
+  if (total_indexed_vector_ == 0 && total_vector > 0 && !vector_field_name_.empty()) {
+    fprintf(stderr, "[VecSearchExecutor] Using brute force fallback: total_indexed=%ld, total_vector=%ld, field=%s\n",
+            total_indexed_vector_, total_vector, vector_field_name_.c_str());
+    BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+    result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
+    fprintf(stderr, "[VecSearchExecutor] Brute force returned %ld results\n", result_size);
+    for (int64_t k_i = 0; k_i < result_size; ++k_i) {
+      search_result_[k_i] = brute_force_queue_[k_i].id_;
+      distance_[k_i] = brute_force_queue_[k_i].distance_;
+    }
+    return Status::OK();
+  }
+
+  // If total_indexed_vector_ == 0 but vector_field_name_ is empty, we can't do brute force
+  // This shouldn't happen in normal operation, but handle it gracefully
+  if (total_indexed_vector_ == 0) {
+    result_size = 0;
+    return Status::OK();
+  }
+
   if (prefilter_enabled_) {
-    PreFilterBruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+    PreFilterBruteForceSearch(query_data, 0, std::min(total_vector, total_indexed_vector_), deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       distance_[k_i] = brute_force_queue_[k_i].distance_;
     }
-  } else if (brute_force_search_) {
-    BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+  } else if (use_brute_force) {
+    BruteForceSearch(query_data, 0, total_indexed_vector_, deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
@@ -946,6 +1079,8 @@ Status VecSearchExecutor::Search(
     // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
     // create circular dependency)
     auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
+    fprintf(stderr, "[VecSearchExecutor] Using NSG search: total_indexed=%ld, total_vector=%ld, searchLimit=%zu, L_master=%ld, L_local=%ld\n",
+            total_indexed_vector_, total_vector, searchLimit, L_master_, L_local_);
     SearchImpl(
         query_data,
         searchLimit,
@@ -959,6 +1094,8 @@ Status VecSearchExecutor::Search(
         is_visited_,
         subsearch_iterations_);
     if (total_vector > total_indexed_vector_) {
+      fprintf(stderr, "[VecSearchExecutor] Index out of date: adding brute force for vectors [%ld, %ld)\n",
+              total_indexed_vector_, total_vector);
       // Need to brute force search the newly added but haven't been indexed vectors.
       BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
       // Merge the brute force results into the search result.

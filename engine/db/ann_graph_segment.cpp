@@ -8,6 +8,7 @@
 #include "db/index/knn/knn.hpp"
 #include "db/index/nsg/nsg.hpp"
 #include "utils/common_util.hpp"
+#include "config/config.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -25,7 +26,7 @@ struct NSGConfig {
         knng(knng_) {}
 };
 
-// Recommended default: 45, 50, 300, 100
+// Fallback default (not used when globalConfig is available)
 const NSGConfig Default_NSG_Config(45, 50, 300, 100);
 
 ANNGraphSegment::ANNGraphSegment(bool skip_sync_disk)
@@ -201,16 +202,26 @@ void ANNGraphSegment::BuildFromVectorTable(VectorColumnData vector_column, int64
   record_number_ = n;
 
   // Build a KNN graph using NN descent.
-  const int64_t k = Default_NSG_Config.knng;
+  const int64_t k = vectordb::globalConfig.NSGKnng.load(std::memory_order_acquire);
   logger_.Debug("KNN graph building start");
   vectordb::engine::index::Graph knng(n);
   vectordb::engine::index::KNNGraph graph(n, dim, k, vector_column, knng, metricType);
   logger_.Debug("KNN graph building finish");
 
+  // Use adaptive search_length based on dataset size
+  const int adaptive_search_length = vectordb::globalConfig.getAdaptiveSearchLength(n);
+  const int out_degree = vectordb::globalConfig.NSGOutDegree.load(std::memory_order_acquire);
+  const int candidate_pool_size = vectordb::globalConfig.NSGCandidatePoolSize.load(std::memory_order_acquire);
+
+  logger_.Info("NSG Build Config: dataset_size=" + std::to_string(n) +
+               ", search_length=" + std::to_string(adaptive_search_length) +
+               " (adaptive), out_degree=" + std::to_string(out_degree) +
+               ", candidate_pool_size=" + std::to_string(candidate_pool_size));
+
   vectordb::engine::index::BuildParams b_params;
-  b_params.candidate_pool_size = Default_NSG_Config.candidate_pool_size;
-  b_params.out_degree = Default_NSG_Config.out_degree;
-  b_params.search_length = Default_NSG_Config.search_length;
+  b_params.candidate_pool_size = candidate_pool_size;
+  b_params.out_degree = out_degree;
+  b_params.search_length = adaptive_search_length;
 
   vectordb::engine::index::NsgIndex::Metric_Type metric = vectordb::engine::index::NsgIndex::Metric_Type::Metric_Type_L2;
 

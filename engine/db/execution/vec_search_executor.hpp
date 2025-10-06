@@ -37,6 +37,7 @@ class VecSearchExecutor {
   int64_t* offset_table_;           // The offset table for neighbor list for each node.
   int64_t* neighbor_list_;          // The neighbor list for each node consecutively stored.
   VectorColumnData vector_column_;  // The vector column for each node consecutively stored.
+  std::string vector_field_name_;   // The name of the vector field this executor is querying.
 
   // Distance calculation function
   DistFunc fstdistfunc_;
@@ -71,7 +72,8 @@ class VecSearchExecutor {
       int64_t L_master,
       int64_t L_local,
       int64_t subsearch_iterations,
-      bool prefilter_enabled);
+      bool prefilter_enabled,
+      const std::string& vector_field_name = "");
 
   static int64_t AddIntoQueue(
       std::vector<Candidate>& queue,
