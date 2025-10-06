@@ -683,11 +683,9 @@ Status Table::Search(const std::string &field_name,
                         bool with_distance,
                         std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
                         vectordb::Json &facets) {
-  // Check if rebuild is in progress - prevent concurrent access to data structures
-  if (table_segment_->IsIndexRebuildInProgress()) {
-    return Status(DB_UNEXPECTED_ERROR,
-                 "Index rebuild is in progress. Please retry the query after rebuild completes.");
-  }
+  // Note: Queries are now allowed during index rebuild.
+  // The VecSearchExecutor will automatically use brute force fallback
+  // when the index is not yet built or still rebuilding.
 
   // Check if field_name exists.
   if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
@@ -797,11 +795,8 @@ Status Table::SearchByAttribute(
     vectordb::Json &projects,
     std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
     vectordb::Json &facets) {
-  // Check if rebuild is in progress - prevent concurrent access to data structures
-  if (table_segment_->IsIndexRebuildInProgress()) {
-    return Status(DB_UNEXPECTED_ERROR,
-                 "Index rebuild is in progress. Please retry the query after rebuild completes.");
-  }
+  // Note: Queries are now allowed during index rebuild.
+  // SearchByAttribute accesses TableSegment data which is stable during rebuild.
 
   // TODO: create a separate pool for search by attribute.
   int64_t field_offset = 0;
