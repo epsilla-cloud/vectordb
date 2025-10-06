@@ -566,9 +566,16 @@ bool Table::NeedsCompaction(double threshold) const {
 }
 
 Status Table::Insert(vectordb::Json &record, std::unordered_map<std::string, std::string> &headers, bool upsert) {
+  logger_.Info("[CRUD-INSERT] Processing " + std::string(upsert ? "UPSERT" : "INSERT") +
+               " request for table=" + table_schema_.name_);
   int64_t wal_id =
       wal_->WriteEntry(upsert ? LogEntryType::UPSERT : LogEntryType::INSERT, record.DumpToString());
-  return table_segment_->Insert(table_schema_, record, wal_id, headers, upsert);
+  auto status = table_segment_->Insert(table_schema_, record, wal_id, headers, upsert);
+  if (status.ok()) {
+    logger_.Info("[CRUD-INSERT] " + std::string(upsert ? "UPSERT" : "INSERT") +
+                 " completed successfully, total_records=" + std::to_string(table_segment_->record_number_.load()));
+  }
+  return status;
 }
 
 Status Table::InsertPrepare(vectordb::Json &pks, vectordb::Json &result) {
@@ -582,14 +589,14 @@ Status Table::Delete(
   
   // Log deletion request at table level
   size_t pk_count = records.GetSize();
-  std::string log_msg = "[Table] Processing deletion request for table=" + table_schema_.name_;
+  std::string log_msg = "[CRUD-DELETE] Processing deletion request for table=" + table_schema_.name_;
   if (pk_count > 0) {
     log_msg += ", primaryKeys=" + std::to_string(pk_count) + " items";
   }
   if (!filter.empty()) {
     log_msg += ", filter=[" + filter + "]";
   }
-  logger_.Debug(log_msg);
+  logger_.Info(log_msg);
   
   // Get deletion statistics before operation
   double pre_deletion_ratio = table_segment_->GetDeletedRatio();
@@ -733,6 +740,10 @@ Status Table::Search(const std::string &field_name,
     }
   }
 
+  // Log search query start
+  logger_.Info("[CRUD-QUERY] Starting vector search on table=" + table_schema_.name_ +
+               ", field=" + field_name + ", limit=" + std::to_string(limit));
+
   // Get the field offset in the vector table.
   int64_t field_offset = table_segment_->vec_field_name_executor_pool_idx_map_[field_name];
 
@@ -783,6 +794,8 @@ Status Table::Search(const std::string &field_name,
       facets.AddObjectToArray(std::move(facet));
     }
   }
+
+  logger_.Info("[CRUD-QUERY] Vector search completed, returned " + std::to_string(result_num) + " results");
   return Status::OK();
 }
 
@@ -797,6 +810,9 @@ Status Table::SearchByAttribute(
     vectordb::Json &facets) {
   // Note: Queries are now allowed during index rebuild.
   // SearchByAttribute accesses TableSegment data which is stable during rebuild.
+
+  logger_.Info("[CRUD-QUERY] Starting attribute search on table=" + table_schema_.name_ +
+               ", skip=" + std::to_string(skip) + ", limit=" + std::to_string(limit));
 
   // TODO: create a separate pool for search by attribute.
   int64_t field_offset = 0;
@@ -844,6 +860,8 @@ Status Table::SearchByAttribute(
       facets.AddObjectToArray(std::move(facet));
     }
   }
+
+  logger_.Info("[CRUD-QUERY] Attribute search completed, returned " + std::to_string(result_num) + " results");
   return Status::OK();
 }
 
