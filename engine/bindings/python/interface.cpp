@@ -10,6 +10,7 @@
 
 #include "db/db_server.hpp"
 #include "server/web_server/web_controller.hpp"
+#include "config/config.hpp"
 
 PyMODINIT_FUNC
 PyInit_epsilla(void) {
@@ -27,6 +28,9 @@ PyInit_epsilla(void) {
     Py_XDECREF(m);
     return NULL;
   }
+
+  // Load NSG configuration from environment variables
+  vectordb::globalConfig.loadNSGConfigFromEnv();
 
   db = new vectordb::engine::DBServer();
 

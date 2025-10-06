@@ -64,6 +64,12 @@ struct Config {
   std::atomic<bool> EagerCompactionOnDelete{true}; // Default: true
   std::atomic<int> MinDeletedVectorsForEagerCompaction{10}; // Minimum deleted vectors to trigger eager compaction (default: 10)
   // std::atomic<bool> EagerCompactionOnDelete{false}; --- IGNORE
+
+  // NSG Index parameters
+  std::atomic<int> NSGSearchLength{0};        // 0 = auto-adaptive based on data size
+  std::atomic<int> NSGOutDegree{50};
+  std::atomic<int> NSGCandidatePoolSize{300};
+  std::atomic<int> NSGKnng{100};
   
   // Constructor to initialize thread counts based on hardware
   Config() {
@@ -325,6 +331,99 @@ struct Config {
       RebuildThreads.store(value, std::memory_order_release);
     } else {
       throw std::invalid_argument("Invalid value for RebuildThreads, valid range: [1, 128]");
+    }
+  }
+
+  // Setter method for NSGSearchLength
+  void setNSGSearchLength(int value) {
+    if (value >= 0 && value <= 10000) {
+      NSGSearchLength.store(value, std::memory_order_release);
+    } else {
+      throw std::invalid_argument("Invalid value for NSGSearchLength, valid range: [0, 10000], 0 = auto");
+    }
+  }
+
+  // Setter method for NSGOutDegree
+  void setNSGOutDegree(int value) {
+    if (value >= 10 && value <= 200) {
+      NSGOutDegree.store(value, std::memory_order_release);
+    } else {
+      throw std::invalid_argument("Invalid value for NSGOutDegree, valid range: [10, 200]");
+    }
+  }
+
+  // Setter method for NSGCandidatePoolSize
+  void setNSGCandidatePoolSize(int value) {
+    if (value >= 50 && value <= 1000) {
+      NSGCandidatePoolSize.store(value, std::memory_order_release);
+    } else {
+      throw std::invalid_argument("Invalid value for NSGCandidatePoolSize, valid range: [50, 1000]");
+    }
+  }
+
+  // Calculate adaptive search_length based on dataset size
+  int getAdaptiveSearchLength(size_t dataset_size) const {
+    int configured = NSGSearchLength.load(std::memory_order_acquire);
+
+    // If manually configured (non-zero), use configured value
+    if (configured > 0) {
+      return configured;
+    }
+
+    // Auto-adaptive algorithm based on dataset size
+    if (dataset_size < 10000) {
+      return 40;
+    } else if (dataset_size < 50000) {
+      return 60;
+    } else if (dataset_size < 100000) {
+      return 100;
+    } else if (dataset_size < 500000) {
+      return 150;
+    } else if (dataset_size < 1000000) {
+      return 200;
+    } else {
+      return 250;
+    }
+  }
+
+  // Load NSG config from environment variables (called at startup)
+  void loadNSGConfigFromEnv() {
+    const char* search_len_env = std::getenv("EPSILLA_NSG_SEARCH_LENGTH");
+    if (search_len_env != nullptr) {
+      try {
+        int val = std::stoi(search_len_env);
+        setNSGSearchLength(val);
+        // Also update query queue sizes for better recall
+        if (val > 0) {
+          MasterQueueSize.store(std::max(val, 500), std::memory_order_release);
+          LocalQueueSize.store(std::max(val, 500), std::memory_order_release);
+          printf("[Config] NSG search_length set to %d from environment (queue sizes updated)\n", val);
+        }
+      } catch (...) {
+        // Ignore invalid env var
+      }
+    }
+
+    const char* out_degree_env = std::getenv("EPSILLA_NSG_OUT_DEGREE");
+    if (out_degree_env != nullptr) {
+      try {
+        int val = std::stoi(out_degree_env);
+        setNSGOutDegree(val);
+        printf("[Config] NSG out_degree set to %d from environment\n", val);
+      } catch (...) {
+        // Ignore invalid env var
+      }
+    }
+
+    const char* candidate_pool_env = std::getenv("EPSILLA_NSG_CANDIDATE_POOL_SIZE");
+    if (candidate_pool_env != nullptr) {
+      try {
+        int val = std::stoi(candidate_pool_env);
+        setNSGCandidatePoolSize(val);
+        printf("[Config] NSG candidate_pool_size set to %d from environment\n", val);
+      } catch (...) {
+        // Ignore invalid env var
+      }
     }
   }
 

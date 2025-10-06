@@ -437,7 +437,8 @@ private:
                 globalConfig.MasterQueueSize,
                 globalConfig.LocalQueueSize,
                 globalConfig.GlobalSyncInterval,
-                globalConfig.PreFilter
+                globalConfig.PreFilter,
+                field.name_
             ));
         }
         

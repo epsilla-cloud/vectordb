@@ -89,6 +89,9 @@ public:
         config_.batch_optimization = GetEnvBool("VECTORDB_BATCH_OPTIMIZATION", false);
         config_.wal_auto_flush = GetEnvBool("WAL_AUTO_FLUSH", true);
 
+        // Load NSG configuration from environment variables
+        vectordb::globalConfig.loadNSGConfigFromEnv();
+
         initialized_ = true;
 
         PrintConfiguration();
