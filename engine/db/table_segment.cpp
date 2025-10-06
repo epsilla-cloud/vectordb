@@ -1056,7 +1056,7 @@ Status TableSegment::CompactDataStructures(const std::vector<size_t>& sorted_ids
 
 // Rebuild primary key index after data compaction
 void TableSegment::RebuildPrimaryKeyIndex() {
-  logger_.Debug("[TableSegment] Rebuilding primary key index after hard delete");
+  logger_.Info("[REBUILD] Starting primary key index rebuild after hard delete");
 
   // Set flag to prevent resize during index rebuild
   index_rebuild_in_progress_.store(true);
@@ -1104,7 +1104,7 @@ void TableSegment::RebuildPrimaryKeyIndex() {
     }
   }
   
-  logger_.Debug("[TableSegment] Primary key index rebuilt successfully");
+  logger_.Info("[REBUILD] Primary key index rebuilt successfully (" + std::to_string(current_records) + " records processed)");
 
   // Clear index rebuild flag
   index_rebuild_in_progress_.store(false);
