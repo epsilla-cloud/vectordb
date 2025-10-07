@@ -165,7 +165,7 @@ class DBServer {
   std::shared_ptr<meta::Meta> meta_;  // The db meta.
   // Thread-safe map for db name to index mapping
   utils::ConcurrentUnorderedMap<std::string, size_t> db_name_to_id_map_;  // The db name to db index map.
-  
+
   // Protect dbs_ vector with shared_mutex
   mutable std::shared_mutex dbs_mutex_;
   std::vector<std::shared_ptr<Database>> dbs_;                    // The dbs.
@@ -173,19 +173,23 @@ class DBServer {
   bool stop_rebuild_thread_ = false;
   bool rebuild_started_ = false;
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
-  
+
   // WAL flush thread management
   std::thread wal_flush_thread_;
   std::atomic<bool> stop_wal_flush_thread_{false};
   std::atomic<bool> wal_flush_thread_started_{false};
-  
+
   // WAL flush statistics (using atomic for thread safety)
   std::atomic<uint64_t> wal_flush_stats_total_flushes_{0};
   std::atomic<uint64_t> wal_flush_stats_successful_flushes_{0};
   std::atomic<uint64_t> wal_flush_stats_failed_flushes_{0};
   std::atomic<uint64_t> wal_flush_stats_last_flush_time_{0};
   std::atomic<uint64_t> wal_flush_stats_total_duration_ms_{0};
-  
+
+  // Worker pool initialization
+  void InitializeWorkerPools();
+  void ShutdownWorkerPools();
+
   // Private WAL flush worker
   void WALFlushWorker();
 

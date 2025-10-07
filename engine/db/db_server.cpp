@@ -6,6 +6,7 @@
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/execution/aggregation.hpp"
+#include "db/execution/worker_pool.hpp"
 #include "config/config.hpp"
 #include "db/compaction_manager.hpp"
 
@@ -13,9 +14,12 @@ namespace vectordb {
 namespace engine {
 
 DBServer::DBServer() {
+  // Initialize worker pool manager first
+  InitializeWorkerPools();
+
   // Initialize the meta database
   meta_ = std::make_shared<meta::BasicMetaImpl>();
-  
+
   // Start WAL flush thread if auto-flush is enabled
   if (vectordb::globalConfig.WALAutoFlush.load()) {
     StartWALFlushThread();
@@ -37,13 +41,16 @@ DBServer::~DBServer() {
   if (rebuild_thread_.joinable()) {
     rebuild_thread_.join();
   }
-  
+
   // Stop WAL flush thread
   StopWALFlushThread();
 
   // Stop compaction manager
   auto& compactionMgr = CompactionManager::GetInstance();
   compactionMgr.Stop();
+
+  // Shutdown worker pools last
+  ShutdownWorkerPools();
 }
 
 Status DBServer::LoadDB(const std::string& db_name,
@@ -989,6 +996,82 @@ void DBServer::WALFlushWorker() {
   FlushAllWAL();
   
   logger_.Info("WAL flush worker thread exited");
+}
+
+void DBServer::InitializeWorkerPools() {
+  logger_.Info("Initializing worker pools for CPU/IO task separation");
+
+  // Priority: Environment variables > Config file > Auto-detection
+  execution::WorkerPoolConfig config;
+
+  // Read configuration from global config first
+  int configured_cpu_workers = globalConfig.CpuWorkerThreads.load();
+  int configured_io_workers = globalConfig.IoWorkerThreads.load();
+
+  if (configured_cpu_workers > 0 && configured_io_workers > 0) {
+    // Use explicitly configured values from config file
+    config.cpu_workers = configured_cpu_workers;
+    config.io_workers = configured_io_workers;
+    config.max_queue_size = globalConfig.WorkerPoolMaxQueueSize.load();
+    config.enable_cpu_affinity = globalConfig.EnableCpuAffinity.load();
+    config.enable_stats = true;
+    logger_.Info("Using configured worker counts from config file");
+  } else if (std::getenv("VECTORDB_CPU_WORKERS") || std::getenv("VECTORDB_IO_WORKERS")) {
+    // Use environment variables (K8S deployment scenario)
+    config = execution::WorkerPoolConfig::FromEnvironment();
+    logger_.Info("Using worker pool configuration from environment variables");
+  } else {
+    // Auto-detect (K8S cgroup aware, supports cpu.cfs_quota_us)
+    config = execution::WorkerPoolConfig::AutoDetect();
+    logger_.Info("Auto-detected worker pool configuration (K8S cgroup aware)");
+  }
+
+  try {
+    // Initialize the worker pool manager singleton
+    auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+    pool_manager.Initialize(config);
+
+    logger_.Info("Worker pools initialized successfully - CPU workers: " +
+                std::to_string(config.cpu_workers) +
+                ", IO workers: " + std::to_string(config.io_workers) +
+                ", max queue: " + std::to_string(config.max_queue_size) +
+                ", CPU affinity: " + (config.enable_cpu_affinity ? "enabled" : "disabled"));
+
+  } catch (const std::exception& e) {
+    logger_.Error("Failed to initialize worker pools: " + std::string(e.what()));
+    throw;
+  }
+}
+
+void DBServer::ShutdownWorkerPools() {
+  logger_.Info("Shutting down worker pools");
+
+  try {
+    auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+
+    if (pool_manager.IsInitialized()) {
+      // Log final statistics before shutdown
+      auto cpu_stats = pool_manager.GetCpuStats();
+      auto io_stats = pool_manager.GetIoStats();
+
+      logger_.Info("CPU Pool Statistics:");
+      logger_.Info("  Total tasks: " + std::to_string(cpu_stats.tasks_completed));
+      logger_.Info("  Failed tasks: " + std::to_string(cpu_stats.tasks_failed));
+      logger_.Info("  Avg wait time: " + std::to_string(cpu_stats.GetAverageWaitTime()) + " us");
+      logger_.Info("  Avg exec time: " + std::to_string(cpu_stats.GetAverageExecTime()) + " us");
+
+      logger_.Info("IO Pool Statistics:");
+      logger_.Info("  Total tasks: " + std::to_string(io_stats.tasks_completed));
+      logger_.Info("  Failed tasks: " + std::to_string(io_stats.tasks_failed));
+      logger_.Info("  Avg wait time: " + std::to_string(io_stats.GetAverageWaitTime()) + " us");
+      logger_.Info("  Avg exec time: " + std::to_string(io_stats.GetAverageExecTime()) + " us");
+
+      pool_manager.Shutdown();
+      logger_.Info("Worker pools shut down successfully");
+    }
+  } catch (const std::exception& e) {
+    logger_.Error("Error during worker pool shutdown: " + std::string(e.what()));
+  }
 }
 
 }  // namespace engine

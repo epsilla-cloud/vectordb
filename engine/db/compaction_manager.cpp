@@ -2,6 +2,7 @@
 #include "db/table.hpp"
 #include "db/table_segment.hpp"
 #include "db/wal_compaction_coordinator.hpp"
+#include "db/execution/worker_pool.hpp"
 #include "config/config.hpp"
 #include "utils/common_util.hpp"
 #include <chrono>
@@ -191,11 +192,30 @@ Status CompactionManager::DoCompaction(const std::string& table_name) {
   auto& wal_coordinator = WALCompactionCoordinator::GetInstance();
   ScopedWALCompactionGuard wal_guard(table_name);
 
-  // Perform actual compaction using Table's built-in Compact method
-  auto compaction_status = table->Compact(compaction_threshold_.load());
-  if (!compaction_status.ok()) {
-    logger_.Error("Table compaction failed for " + table_name + ": " + compaction_status.message());
-    return compaction_status;
+  // Perform actual compaction using hybrid CPU/IO worker pools
+  // CPU pool: For data processing and compression
+  // IO pool: For disk I/O operations
+  auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+
+  try {
+    // Submit compaction task to IO pool with NORMAL priority (lower than WAL)
+    auto future = pool_manager.SubmitIoTaskWithPriority(
+      execution::TaskPriority::NORMAL,
+      [table, this]() -> Status {
+        return table->Compact(this->compaction_threshold_.load());
+      }
+    );
+
+    // Wait for compaction to complete
+    auto compaction_status = future.get();
+
+    if (!compaction_status.ok()) {
+      logger_.Error("Table compaction failed for " + table_name + ": " + compaction_status.message());
+      return compaction_status;
+    }
+  } catch (const std::exception& e) {
+    logger_.Error("Compaction task submission failed for " + table_name + ": " + e.what());
+    return Status(DB_UNEXPECTED_ERROR, "Compaction task failed: " + std::string(e.what()));
   }
 
   // Mark WAL coordination as successful

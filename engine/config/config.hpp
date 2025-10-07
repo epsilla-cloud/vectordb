@@ -70,6 +70,12 @@ struct Config {
   std::atomic<int> NSGOutDegree{50};
   std::atomic<int> NSGCandidatePoolSize{300};
   std::atomic<int> NSGKnng{100};
+
+  // Worker pool configuration for CPU/IO task separation
+  std::atomic<int> CpuWorkerThreads{0};        // 0 = auto-detect (75% of hardware threads)
+  std::atomic<int> IoWorkerThreads{0};         // 0 = auto-detect (25% of hardware threads)
+  std::atomic<int> WorkerPoolMaxQueueSize{10000};
+  std::atomic<bool> EnableCpuAffinity{false};  // Bind CPU workers to specific cores
   
   // Constructor to initialize thread counts based on hardware
   Config() {
