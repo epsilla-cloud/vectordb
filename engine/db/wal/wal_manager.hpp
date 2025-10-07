@@ -13,6 +13,7 @@
 #include "db/wal/write_ahead_log.hpp"
 #include "utils/status.hpp"
 #include "logger/logger.hpp"
+#include "db/execution/worker_pool.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -211,11 +212,10 @@ public:
         if (running_.exchange(false)) {
             // Flush pending writes
             Flush();
-            
-            // Stop async writer thread
-            if (async_writer_thread_.joinable()) {
-                cv_.notify_all();
-                async_writer_thread_.join();
+
+            // Stop fsync thread
+            if (fsync_thread_.joinable()) {
+                fsync_thread_.join();
             }
         }
     }
@@ -243,74 +243,57 @@ private:
     }
     
     /**
-     * @brief Start async writer thread
+     * @brief Start async writer thread (now uses IO worker pool)
      */
     void StartAsyncWriter() {
         running_ = true;
-        async_writer_thread_ = std::thread([this]() {
-            AsyncWriterLoop();
+
+        // Start background fsync thread
+        fsync_thread_ = std::thread([this]() {
+            FsyncLoop();
         });
-        logger_.Info("Async WAL writer started");
+
+        logger_.Info("Async WAL writer started (using IO worker pool)");
     }
-    
+
     /**
-     * @brief Async writer main loop
+     * @brief Periodic fsync loop
      */
-    void AsyncWriterLoop() {
+    void FsyncLoop() {
         while (running_) {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-            
-            // Wait for writes or timeout for periodic fsync
-            cv_.wait_for(lock, std::chrono::milliseconds(config_.fsync_interval_ms),
-                        [this] { return !write_queue_.empty() || !running_; });
-            
-            // Process pending writes
-            std::vector<std::shared_ptr<AsyncWriteRequest>> batch;
-            while (!write_queue_.empty() && batch.size() < 100) {
-                batch.push_back(write_queue_.front());
-                write_queue_.pop();
+            std::this_thread::sleep_for(std::chrono::milliseconds(config_.fsync_interval_ms));
+            if (running_) {
+                ForceFsync();
             }
-            lock.unlock();
-            
-            // Process batch
-            for (auto& request : batch) {
-                auto result = WriteEntryWithRetry(request->type, request->entry, 
-                                                  request->retry_count);
-                request->promise.set_value(result);
-            }
-            
-            // Periodic fsync
-            ForceFsync();
         }
     }
     
     /**
-     * @brief Write entry asynchronously
+     * @brief Write entry asynchronously (using IO worker pool)
      */
     WALWriteResult WriteEntryAsync(LogEntryType type, const std::string& entry) {
-        auto request = std::make_shared<AsyncWriteRequest>();
-        request->type = type;
-        request->entry = entry;
-        
-        auto future = request->promise.get_future();
-        
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            if (write_queue_.size() >= config_.async_queue_size) {
+        try {
+            // Submit to IO worker pool with HIGH priority for WAL writes
+            auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+
+            auto future = pool_manager.SubmitIoTaskWithPriority(
+                execution::TaskPriority::HIGH,
+                [this, type, entry]() -> WALWriteResult {
+                    return this->WriteEntryWithRetry(type, entry, 0);
+                }
+            );
+
+            // Wait for result with timeout
+            if (future.wait_for(std::chrono::seconds(10)) == std::future_status::ready) {
+                return future.get();
+            } else {
                 failed_writes_++;
-                return {false, -1, "Async queue full", 0};
+                return {false, -1, "Async write timeout", 0};
             }
-            write_queue_.push(request);
-        }
-        
-        cv_.notify_one();
-        
-        // Wait for result with timeout
-        if (future.wait_for(std::chrono::seconds(10)) == std::future_status::ready) {
-            return future.get();
-        } else {
+
+        } catch (const std::exception& e) {
             failed_writes_++;
-            return {false, -1, "Async write timeout", 0};
+            return {false, -1, "IO pool error: " + std::string(e.what()), 0};
         }
     }
     
@@ -416,21 +399,31 @@ private:
     }
     
     /**
-     * @brief Flush async queue
+     * @brief Flush async queue (now uses IO worker pool stats)
      */
     void FlushAsyncQueue() {
-        std::unique_lock<std::mutex> lock(queue_mutex_);
-        while (!write_queue_.empty()) {
-            cv_.wait_for(lock, std::chrono::milliseconds(100));
+        // Wait for IO pool to complete pending tasks
+        auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+        auto stats = pool_manager.GetIoStats();
+
+        // Simple spin wait for pending tasks to complete
+        while (stats.current_queue_size.load() > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            stats = pool_manager.GetIoStats();
         }
     }
-    
+
     /**
-     * @brief Get queue size
+     * @brief Get queue size (from IO worker pool)
      */
     size_t GetQueueSize() const {
-        std::lock_guard<std::mutex> lock(queue_mutex_);
-        return write_queue_.size();
+        try {
+            auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+            auto stats = pool_manager.GetIoStats();
+            return stats.current_queue_size.load();
+        } catch (...) {
+            return 0;
+        }
     }
     
     /**
@@ -471,12 +464,9 @@ private:
     std::unique_ptr<WriteAheadLog> fallback_wal_;
     std::atomic<bool> using_fallback_{false};
     
-    // Async write support
+    // Async write support (now using IO worker pool)
     std::atomic<bool> running_;
-    std::thread async_writer_thread_;
-    std::queue<std::shared_ptr<AsyncWriteRequest>> write_queue_;
-    mutable std::mutex queue_mutex_;
-    std::condition_variable cv_;
+    std::thread fsync_thread_;  // Only for periodic fsync
     
     // Cache
     std::map<int64_t, std::pair<LogEntryType, std::string>> cache_;
