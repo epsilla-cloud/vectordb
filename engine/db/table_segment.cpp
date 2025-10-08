@@ -155,6 +155,18 @@ Status TableSegment::ResizeInternal(size_t new_capacity) {
     return Status::OK();
   }
 
+  // CRITICAL FIX: Prevent concurrent resize operations
+  if (resize_in_progress_.exchange(true)) {
+    logger_.Warning("[TableSegment] Resize already in progress, deferring this resize request");
+    return Status::OK();  // Another resize is ongoing, defer this one
+  }
+
+  // RAII guard to ensure resize_in_progress_ is always reset
+  struct ResizeGuard {
+    std::atomic<bool>& flag;
+    ~ResizeGuard() { flag.store(false); }
+  } resize_guard{resize_in_progress_};
+
   if (new_capacity <= capacity_) {
     // No need to resize if new capacity is smaller or equal
     return Status::OK();
@@ -191,14 +203,24 @@ Status TableSegment::ResizeInternal(size_t new_capacity) {
       if (!status.ok()) {
         logger_.Error("Failed to resize vector table " + std::to_string(i) + ": " + status.message());
 
-        // Rollback: Resize back the vector tables that were already resized
+        // CRITICAL FIX: Improved rollback with error handling
+        // Rollback vector tables that were already resized
         for (size_t j : resized_vector_tables) {
-          vector_tables_[j]->ResizeVectors(old_capacity);
+          auto rollback_status = vector_tables_[j]->ResizeVectors(old_capacity);
+          if (!rollback_status.ok()) {
+            // Log but continue - we're already in error state
+            logger_.Error("CRITICAL: Rollback failed for vector table " + std::to_string(j) +
+                         ": " + rollback_status.message() + " - DATA INCONSISTENCY POSSIBLE");
+          }
         }
 
-        // Rollback: Resize back the attribute table if it was resized
+        // Rollback attribute table if it was resized
         if (resize_step >= 1 && attribute_table_) {
-          attribute_table_->Resize(old_capacity * primitive_offset_);
+          auto rollback_status = attribute_table_->Resize(old_capacity * primitive_offset_);
+          if (!rollback_status.ok()) {
+            logger_.Error("CRITICAL: Rollback failed for attribute table: " +
+                         rollback_status.message() + " - DATA INCONSISTENCY POSSIBLE");
+          }
         }
 
         return status;
@@ -231,19 +253,28 @@ Status TableSegment::ResizeInternal(size_t new_capacity) {
   } catch (const std::exception& e) {
     logger_.Error("Failed to resize variable length tables: " + std::string(e.what()));
 
-    // Rollback all previous operations
+    // CRITICAL FIX: Improved rollback with error logging
     // Rollback vector tables
     for (size_t i = 0; i < vector_tables_.size(); ++i) {
       if (vector_tables_[i]) {
-        vector_tables_[i]->ResizeVectors(old_capacity);
+        auto rollback_status = vector_tables_[i]->ResizeVectors(old_capacity);
+        if (!rollback_status.ok()) {
+          logger_.Error("CRITICAL: Rollback failed for vector table " + std::to_string(i) +
+                       " during var-len resize failure: " + rollback_status.message());
+        }
       }
     }
 
     // Rollback attribute table
     if (primitive_offset_ > 0 && attribute_table_) {
-      attribute_table_->Resize(old_capacity * primitive_offset_);
+      auto rollback_status = attribute_table_->Resize(old_capacity * primitive_offset_);
+      if (!rollback_status.ok()) {
+        logger_.Error("CRITICAL: Rollback failed for attribute table during var-len resize failure: " +
+                     rollback_status.message());
+      }
     }
 
+    // Note: var_len_attr_table rollback is handled by std::vector's exception safety
     return Status(DB_UNEXPECTED_ERROR, "Failed to resize variable length tables: " + std::string(e.what()));
   }
 

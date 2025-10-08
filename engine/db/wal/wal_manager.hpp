@@ -20,32 +20,41 @@ namespace engine {
 
 /**
  * @brief Configuration for WAL Manager
+ *
+ * CRITICAL FIX: Updated documentation to clarify fsync behavior
+ * - In async mode: WriteEntry calls via WALManager DO NOT immediately fsync,
+ *   but WriteEntry in WriteAheadLog DOES fsync on every write
+ * - WALManager's async mode only affects task queuing, not fsync behavior
+ * - For guaranteed durability, WriteAheadLog::WriteEntry always calls fsync
  */
 struct WALConfig {
     // Number of retry attempts for failed writes
     int max_retry_attempts = 3;
-    
+
     // Delay between retry attempts (milliseconds)
     int retry_delay_ms = 100;
-    
+
     // Whether to use async write for better performance
+    // NOTE: This only affects task queuing, not fsync!
+    // WriteAheadLog::WriteEntry ALWAYS calls fsync for durability
     bool async_write = true;
-    
+
     // Queue size for async writes
     size_t async_queue_size = 10000;
-    
-    // Fsync interval (milliseconds) - batch fsync for performance
+
+    // Fsync interval (milliseconds) - for ADDITIONAL periodic fsync
+    // NOTE: Individual WriteEntry calls ALREADY fsync, this is just extra safety
     int fsync_interval_ms = 1000;
-    
+
     // Emergency fallback directory when primary fails
     std::string fallback_directory = "/tmp/wal_fallback";
-    
+
     // Whether to halt on critical errors
     bool halt_on_critical_error = false;
-    
+
     // Enable write-through cache
     bool enable_cache = true;
-    
+
     // Cache size in entries
     size_t cache_size = 1000;
 };
@@ -273,26 +282,31 @@ private:
      */
     WALWriteResult WriteEntryAsync(LogEntryType type, const std::string& entry) {
         try {
-            // Submit to IO worker pool with HIGH priority for WAL writes
+            // CRITICAL FIX: Submit to IO worker pool with CRITICAL priority for WAL writes
+            // CRITICAL priority ensures the task will wait for queue space instead of being rejected,
+            // preventing data loss due to queue saturation
             auto& pool_manager = execution::WorkerPoolManager::GetInstance();
 
             auto future = pool_manager.SubmitIoTaskWithPriority(
-                execution::TaskPriority::HIGH,
+                execution::TaskPriority::CRITICAL,  // Changed from HIGH to CRITICAL
                 [this, type, entry]() -> WALWriteResult {
                     return this->WriteEntryWithRetry(type, entry, 0);
                 }
             );
 
-            // Wait for result with timeout
-            if (future.wait_for(std::chrono::seconds(10)) == std::future_status::ready) {
+            // CRITICAL FIX: Increased timeout from 10s to 60s for critical WAL operations
+            // WAL writes must succeed, so we give them more time
+            if (future.wait_for(std::chrono::seconds(60)) == std::future_status::ready) {
                 return future.get();
             } else {
                 failed_writes_++;
-                return {false, -1, "Async write timeout", 0};
+                logger_.Error("CRITICAL: WAL async write timeout after 60 seconds");
+                return {false, -1, "Async write timeout after 60s", 0};
             }
 
         } catch (const std::exception& e) {
             failed_writes_++;
+            logger_.Error("CRITICAL: WAL IO pool error: " + std::string(e.what()));
             return {false, -1, "IO pool error: " + std::string(e.what()), 0};
         }
     }
@@ -381,16 +395,15 @@ private:
     
     /**
      * @brief Force fsync on WAL files
+     * CRITICAL FIX: Now actually calls Flush() which performs fsync
      */
     Status ForceFsync() {
         try {
             if (wal_) {
-                // This would need to be added to WriteAheadLog class
-                // For now, we'll assume it exists
-                // wal_->ForceFsync();
+                wal_->Flush();  // FIXED: Actually call Flush which does fsync
             }
             if (fallback_wal_ && using_fallback_) {
-                // fallback_wal_->ForceFsync();
+                fallback_wal_->Flush();  // FIXED: Flush fallback WAL too
             }
             return Status::OK();
         } catch (const std::exception& e) {

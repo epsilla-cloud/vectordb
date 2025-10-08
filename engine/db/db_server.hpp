@@ -31,6 +31,11 @@ class DBServer {
   void StartWALFlushThread();
   void StopWALFlushThread();
   Status FlushAllWAL();
+
+  // Monitoring and statistics
+  void StartMonitoringThread();
+  void StopMonitoringThread();
+  void PrintMonitoringStats();
   
   // WAL flush statistics
   struct WALFlushStats {
@@ -40,14 +45,19 @@ class DBServer {
     uint64_t last_flush_time;
     uint64_t total_flush_duration_ms;
   };
-  
+
+  // CRITICAL FIX: Add mutex to protect consistent snapshot reads
   WALFlushStats GetWALFlushStats() const {
+    // Lock to ensure consistent snapshot across all statistics
+    // Without this lock, we might read inconsistent state during concurrent updates
+    std::lock_guard<std::mutex> lock(wal_stats_mutex_);
+
     WALFlushStats stats;
-    stats.total_flushes = wal_flush_stats_total_flushes_.load();
-    stats.successful_flushes = wal_flush_stats_successful_flushes_.load();
-    stats.failed_flushes = wal_flush_stats_failed_flushes_.load();
-    stats.last_flush_time = wal_flush_stats_last_flush_time_.load();
-    stats.total_flush_duration_ms = wal_flush_stats_total_duration_ms_.load();
+    stats.total_flushes = wal_flush_stats_total_flushes_.load(std::memory_order_relaxed);
+    stats.successful_flushes = wal_flush_stats_successful_flushes_.load(std::memory_order_relaxed);
+    stats.failed_flushes = wal_flush_stats_failed_flushes_.load(std::memory_order_relaxed);
+    stats.last_flush_time = wal_flush_stats_last_flush_time_.load(std::memory_order_relaxed);
+    stats.total_flush_duration_ms = wal_flush_stats_total_duration_ms_.load(std::memory_order_relaxed);
     return stats;
   }
 
@@ -186,12 +196,23 @@ class DBServer {
   std::atomic<uint64_t> wal_flush_stats_last_flush_time_{0};
   std::atomic<uint64_t> wal_flush_stats_total_duration_ms_{0};
 
+  // CRITICAL FIX: Mutex to protect consistent snapshot reads of WAL stats
+  mutable std::mutex wal_stats_mutex_;
+
+  // Monitoring thread management
+  std::thread monitoring_thread_;
+  std::atomic<bool> stop_monitoring_thread_{false};
+  std::atomic<bool> monitoring_thread_started_{false};
+
   // Worker pool initialization
   void InitializeWorkerPools();
   void ShutdownWorkerPools();
 
   // Private WAL flush worker
   void WALFlushWorker();
+
+  // Private monitoring worker
+  void MonitoringWorker();
 
   // periodically in a separate thread
   void RebuildPeriodically() {

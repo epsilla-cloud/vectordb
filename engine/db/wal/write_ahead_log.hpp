@@ -79,20 +79,30 @@ class WriteAheadLog {
     if (now - last_rotation_time_ > ROTATION_INTERVAL) {
       RotateFile();
     }
-    int64_t next = global_counter_.IncrementAndGet();
+
+    // CRITICAL FIX: Increment counter AFTER successful write, not before
+    // This prevents ID holes when fsync fails
+    int64_t next = global_counter_.Get() + 1;
+
 #ifdef __APPLE__
     fprintf(file_, "%lld %d %s\n", next, type, entry.c_str());
 #else
     fprintf(file_, "%ld %d %s\n", next, type, entry.c_str());
 #endif
     fflush(file_);
-    // Ensure data is written to disk for durability
+
+    // CRITICAL FIX: Ensure data is written to disk BEFORE incrementing counter
+    // This guarantees durability and prevents data loss
     if (fsync(fileno(file_)) != 0) {
       std::string error_msg = "Critical: WAL fsync failed: " + std::string(strerror(errno));
       logger_.Error(error_msg);
       // For critical operations, throw exception to prevent data loss
+      // Counter is NOT incremented, so retry will use the same ID
       throw std::runtime_error(error_msg);
     }
+
+    // Only increment counter after successful fsync
+    global_counter_.IncrementAndGet();
     return next;
   }
 

@@ -129,6 +129,12 @@ class TableSegment {
   // Get the ratio of deleted records to total records
   double GetDeletedRatio() const;
 
+  // Get the count of deleted records
+  size_t GetDeletedCount() const {
+    if (record_number_ == 0) return 0;
+    return deleted_->count(record_number_);
+  }
+
   // Check if compaction is needed based on deleted ratio threshold
   bool NeedsCompaction(double threshold = 0.3) const;
 
@@ -202,6 +208,7 @@ class TableSegment {
   // Flags to prevent resize during critical operations
   std::atomic<bool> index_rebuild_in_progress_{false};  // Prevent resize during index rebuild
   std::atomic<bool> compaction_in_progress_{false};     // Prevent resize during compaction
+  std::atomic<bool> resize_in_progress_{false};         // CRITICAL FIX: Prevent concurrent resizes
 
   // Predictive expansion
   std::unique_ptr<InsertionRateMonitor> insertion_monitor_;

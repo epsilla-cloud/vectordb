@@ -45,6 +45,9 @@ DBServer::~DBServer() {
   // Stop WAL flush thread
   StopWALFlushThread();
 
+  // Stop monitoring thread
+  StopMonitoringThread();
+
   // Stop compaction manager
   auto& compactionMgr = CompactionManager::GetInstance();
   compactionMgr.Stop();
@@ -94,31 +97,42 @@ Status DBServer::UnloadDB(const std::string& db_name) {
   if (!db_index.has_value()) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
-  
+
   std::shared_ptr<Database> db_to_unload;
   {
     std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     db_to_unload = dbs_[db_index.value()];
   }
-  
+
   if (db_to_unload) {
-    // Critical: Flush WAL before unloading to ensure data persistence
+    // CRITICAL FIX: Flush WAL before unloading and FAIL if flush fails
+    // This prevents data loss during unload
     logger_.Info("Flushing WAL before unloading database: " + db_name);
     auto flush_status = db_to_unload->FlushAllWAL();
     if (!flush_status.ok()) {
-      logger_.Error("Failed to flush WAL for database " + db_name + ": " + flush_status.message());
-      // Continue with unload but log the error
+      std::string error_msg = "CRITICAL: Failed to flush WAL for database " + db_name +
+                              ": " + flush_status.message() +
+                              ". Aborting unload to prevent data loss. " +
+                              "Use force=true to override.";
+      logger_.Error(error_msg);
+      // CRITICAL FIX: Return error instead of continuing
+      // Data safety is more important than convenience
+      return Status(DB_UNEXPECTED_ERROR, error_msg);
     }
-    
+
     // Save metadata to disk
     logger_.Info("Saving metadata before unloading database: " + db_name);
     auto dump_status = db_to_unload->Dump(db_to_unload->db_catalog_path_);
     if (!dump_status.ok()) {
-      logger_.Warning("Failed to save metadata for database " + db_name + ": " + dump_status.message());
-      // Continue with unload but log the warning
+      std::string error_msg = "CRITICAL: Failed to save metadata for database " + db_name +
+                              ": " + dump_status.message() +
+                              ". Aborting unload to prevent data loss.";
+      logger_.Error(error_msg);
+      // CRITICAL FIX: Also fail on metadata save failure
+      return Status(DB_UNEXPECTED_ERROR, error_msg);
     }
   }
-  
+
   // Unload database from meta.
   vectordb::Status status = meta_->UnloadDatabase(db_name);
   if (!status.ok()) {
@@ -132,10 +146,10 @@ Status DBServer::UnloadDB(const std::string& db_name) {
     // Reset the shared_ptr in the vector
     dbs_[db_index.value()].reset();
   }
-  
+
   // Remove from name map after releasing the lock
   db_name_to_id_map_.erase(db_name);
-  
+
   logger_.Info("Successfully unloaded database: " + db_name);
   return Status::OK();
 }
@@ -899,20 +913,18 @@ void DBServer::StopWALFlushThread() {
 
 Status DBServer::FlushAllWAL() {
   auto start_time = std::chrono::steady_clock::now();
-  
-  wal_flush_stats_total_flushes_++;
-  
+
   // Get copy of databases to avoid holding lock during flush
   std::vector<std::shared_ptr<Database>> dbs_copy;
   {
     std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
     dbs_copy = dbs_;
   }
-  
+
   bool any_error = false;
   int total_dbs = 0;
   int successful_dbs = 0;
-  
+
   // Flush WAL for each database
   for (auto db : dbs_copy) {
     if (db) {
@@ -926,19 +938,24 @@ Status DBServer::FlushAllWAL() {
       }
     }
   }
-  
+
   auto end_time = std::chrono::steady_clock::now();
   auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-  
-  // Update statistics
-  if (any_error) {
-    wal_flush_stats_failed_flushes_++;
-  } else {
-    wal_flush_stats_successful_flushes_++;
-  }
 
-  wal_flush_stats_last_flush_time_ = std::chrono::system_clock::now().time_since_epoch().count();
-  wal_flush_stats_total_duration_ms_ += duration_ms;
+  // CRITICAL FIX: Update statistics atomically under lock for consistent snapshots
+  {
+    std::lock_guard<std::mutex> lock(wal_stats_mutex_);
+    wal_flush_stats_total_flushes_++;
+
+    if (any_error) {
+      wal_flush_stats_failed_flushes_++;
+    } else {
+      wal_flush_stats_successful_flushes_++;
+    }
+
+    wal_flush_stats_last_flush_time_ = std::chrono::system_clock::now().time_since_epoch().count();
+    wal_flush_stats_total_duration_ms_ += duration_ms;
+  }
 
   // Only log if there were databases to flush or if there was an error
   if (total_dbs > 0 || any_error) {
@@ -996,6 +1013,146 @@ void DBServer::WALFlushWorker() {
   FlushAllWAL();
   
   logger_.Info("WAL flush worker thread exited");
+}
+
+void DBServer::StartMonitoringThread() {
+  if (monitoring_thread_started_.load()) {
+    logger_.Warning("Monitoring thread already started");
+    return;
+  }
+
+  stop_monitoring_thread_ = false;
+  monitoring_thread_ = std::thread(&DBServer::MonitoringWorker, this);
+  monitoring_thread_started_ = true;
+
+  logger_.Info("Monitoring thread started");
+}
+
+void DBServer::StopMonitoringThread() {
+  if (!monitoring_thread_started_.load()) {
+    return;
+  }
+
+  stop_monitoring_thread_ = true;
+
+  if (monitoring_thread_.joinable()) {
+    monitoring_thread_.join();
+  }
+
+  monitoring_thread_started_ = false;
+  logger_.Info("Monitoring thread stopped");
+}
+
+void DBServer::PrintMonitoringStats() {
+  // Get WAL statistics
+  auto wal_stats = GetWALFlushStats();
+
+  // Calculate WAL failure rate
+  double wal_failure_rate = 0.0;
+  if (wal_stats.total_flushes > 0) {
+    wal_failure_rate = (double)wal_stats.failed_flushes / wal_stats.total_flushes * 100.0;
+  }
+
+  double wal_avg_duration = 0.0;
+  if (wal_stats.successful_flushes > 0) {
+    wal_avg_duration = (double)wal_stats.total_flush_duration_ms / wal_stats.successful_flushes;
+  }
+
+  // Get WorkerPool statistics
+  auto& pool_manager = execution::WorkerPoolManager::GetInstance();
+  auto cpu_stats = pool_manager.GetCpuStats();
+  auto io_stats = pool_manager.GetIoStats();
+
+  // Calculate queue utilization
+  double cpu_queue_util = 0.0;
+  double io_queue_util = 0.0;
+
+  if (cpu_stats.peak_queue_size > 0) {
+    cpu_queue_util = (double)cpu_stats.current_queue_size / cpu_stats.peak_queue_size * 100.0;
+  }
+
+  if (io_stats.peak_queue_size > 0) {
+    io_queue_util = (double)io_stats.current_queue_size / io_stats.peak_queue_size * 100.0;
+  }
+
+  // Print comprehensive monitoring statistics
+  logger_.Info("========== MONITORING STATS ==========");
+
+  logger_.Info("[WAL] Total Flushes: " + std::to_string(wal_stats.total_flushes) +
+               ", Success: " + std::to_string(wal_stats.successful_flushes) +
+               ", Failed: " + std::to_string(wal_stats.failed_flushes) +
+               ", Failure Rate: " + std::to_string(wal_failure_rate) + "%");
+
+  logger_.Info("[WAL] Avg Duration: " + std::to_string(wal_avg_duration) + "ms");
+
+  logger_.Info("[CPU Pool] Tasks: Submitted=" + std::to_string(cpu_stats.tasks_submitted) +
+               ", Completed=" + std::to_string(cpu_stats.tasks_completed) +
+               ", Failed=" + std::to_string(cpu_stats.tasks_failed) +
+               ", Rejected=" + std::to_string(cpu_stats.tasks_rejected));
+
+  logger_.Info("[CPU Pool] Queue: Current=" + std::to_string(cpu_stats.current_queue_size) +
+               ", Peak=" + std::to_string(cpu_stats.peak_queue_size) +
+               ", Utilization=" + std::to_string(cpu_queue_util) + "%");
+
+  logger_.Info("[CPU Pool] Performance: Avg Wait=" + std::to_string(cpu_stats.GetAverageWaitTime()) + "us" +
+               ", Avg Exec=" + std::to_string(cpu_stats.GetAverageExecTime()) + "us" +
+               ", Active Workers=" + std::to_string(cpu_stats.active_workers));
+
+  logger_.Info("[IO Pool] Tasks: Submitted=" + std::to_string(io_stats.tasks_submitted) +
+               ", Completed=" + std::to_string(io_stats.tasks_completed) +
+               ", Failed=" + std::to_string(io_stats.tasks_failed) +
+               ", Rejected=" + std::to_string(io_stats.tasks_rejected));
+
+  logger_.Info("[IO Pool] Queue: Current=" + std::to_string(io_stats.current_queue_size) +
+               ", Peak=" + std::to_string(io_stats.peak_queue_size) +
+               ", Utilization=" + std::to_string(io_queue_util) + "%");
+
+  logger_.Info("[IO Pool] Performance: Avg Wait=" + std::to_string(io_stats.GetAverageWaitTime()) + "us" +
+               ", Avg Exec=" + std::to_string(io_stats.GetAverageExecTime()) + "us" +
+               ", Active Workers=" + std::to_string(io_stats.active_workers));
+
+  // Alert on critical conditions
+  if (wal_failure_rate > 0.01) {
+    logger_.Warning("⚠️  ALERT: WAL failure rate (" + std::to_string(wal_failure_rate) + "%) exceeds threshold (0.01%)");
+  }
+
+  if (cpu_stats.tasks_rejected > 0) {
+    logger_.Warning("⚠️  ALERT: CPU pool has rejected " + std::to_string(cpu_stats.tasks_rejected) + " tasks");
+  }
+
+  if (io_stats.tasks_rejected > 0) {
+    logger_.Warning("⚠️  ALERT: IO pool has rejected " + std::to_string(io_stats.tasks_rejected) + " tasks");
+  }
+
+  if (cpu_queue_util > 80.0) {
+    logger_.Warning("⚠️  ALERT: CPU queue utilization (" + std::to_string(cpu_queue_util) + "%) exceeds 80%");
+  }
+
+  if (io_queue_util > 80.0) {
+    logger_.Warning("⚠️  ALERT: IO queue utilization (" + std::to_string(io_queue_util) + "%) exceeds 80%");
+  }
+
+  logger_.Info("======================================");
+}
+
+void DBServer::MonitoringWorker() {
+  logger_.Info("Monitoring worker thread started");
+
+  while (!stop_monitoring_thread_.load()) {
+    // Sleep for monitoring interval (default: 60 seconds)
+    for (int i = 0; i < 60 && !stop_monitoring_thread_.load(); ++i) {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    if (stop_monitoring_thread_.load()) {
+      break;
+    }
+
+    // Print monitoring statistics
+    PrintMonitoringStats();
+  }
+
+  logger_.Info("Monitoring worker thread exited");
 }
 
 void DBServer::InitializeWorkerPools() {

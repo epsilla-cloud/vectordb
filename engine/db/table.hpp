@@ -139,6 +139,45 @@ class Table {
   size_t GetRecordCount();
   size_t GetCapacity();
 
+  // Get the number of active (non-deleted) vectors
+  size_t GetActiveVectorCount() {
+    if (!table_segment_) {
+      return 0;
+    }
+    size_t total = table_segment_->GetRecordCount();
+    size_t deleted = table_segment_->GetDeletedCount();
+    return total - deleted;
+  }
+
+  // Get detailed vector statistics
+  struct VectorStats {
+    size_t total_vectors;      // Total vectors (including deleted)
+    size_t active_vectors;     // Active vectors (excluding deleted)
+    size_t deleted_vectors;    // Deleted vectors
+    double deleted_ratio;      // Ratio of deleted vectors
+    size_t capacity;           // Current capacity
+  };
+
+  VectorStats GetVectorStats() {
+    VectorStats stats{};
+    if (!table_segment_) {
+      return stats;
+    }
+
+    stats.total_vectors = table_segment_->GetRecordCount();
+    stats.deleted_vectors = table_segment_->GetDeletedCount();
+    stats.active_vectors = stats.total_vectors - stats.deleted_vectors;
+    stats.capacity = table_segment_->size_limit_;
+
+    if (stats.total_vectors > 0) {
+      stats.deleted_ratio = (double)stats.deleted_vectors / stats.total_vectors;
+    } else {
+      stats.deleted_ratio = 0.0;
+    }
+
+    return stats;
+  }
+
   void SetWALEnabled(bool enabled) {
     wal_->SetEnabled(enabled);
   }
