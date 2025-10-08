@@ -208,9 +208,13 @@ enable_testing()
 
 set(DB_TEST_FILES)
 
-# Add source files in the utils directory
+# Add source files in the db test directory
 file(GLOB ENGINE_DB_TEST_FILES "test/engine/db/*.cpp")
 list(APPEND DB_TEST_FILES ${ENGINE_DB_TEST_FILES})
+
+# Add source files in the utils test directory
+file(GLOB ENGINE_UTILS_TEST_FILES "test/engine/utils/*.cpp")
+list(APPEND DB_TEST_FILES ${ENGINE_UTILS_TEST_FILES})
 
 add_executable(
   vector_db_test
