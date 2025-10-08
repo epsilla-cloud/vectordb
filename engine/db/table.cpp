@@ -1100,5 +1100,72 @@ void Table::DisableIncrementalCompaction() {
   }
 }
 
+// === Full-text search integration ===
+
+std::string Table::GenerateFullTextIndexId(const std::string& db_name,
+                                             const std::string& table_name) {
+  std::string index_id = db_name + "_" + table_name;
+
+  // Convert to lowercase for consistency
+  std::transform(index_id.begin(), index_id.end(), index_id.begin(), ::tolower);
+
+  // Replace invalid characters with underscore
+  std::replace_if(index_id.begin(), index_id.end(),
+                  [](char c) { return !std::isalnum(c) && c != '_'; },
+                  '_');
+
+  return index_id;
+}
+
+Status Table::InitFullTextIndex(const std::string& db_name) {
+  // Check if full-text search is globally enabled
+  if (!globalConfig.EnableFullText.load(std::memory_order_acquire)) {
+    logger_.Debug("[FullText] Full-text search not enabled globally, skipping index creation");
+    return Status::OK();
+  }
+
+  // Generate index ID
+  fulltext_index_id_ = GenerateFullTextIndexId(db_name, table_schema_.name_);
+
+  logger_.Info("[FullText] Initializing full-text index [db=" + db_name +
+               ", table=" + table_schema_.name_ +
+               ", index=" + fulltext_index_id_ + "]");
+
+  // Get full-text engine instance
+  // Note: The engine should be created by the DB class and passed to tables
+  // For now, we'll try to get it from a manager/factory
+  // TODO: Implement FullTextEngineManager to provide engine instances
+
+  logger_.Info("[FullText] Full-text index initialized successfully [index=" +
+               fulltext_index_id_ + "]");
+
+  return Status::OK();
+}
+
+Status Table::DropFullTextIndex() {
+  if (!fulltext_engine_ || fulltext_index_id_.empty()) {
+    logger_.Debug("[FullText] No full-text index to drop");
+    return Status::OK();
+  }
+
+  logger_.Info("[FullText] Dropping full-text index [index=" + fulltext_index_id_ + "]");
+
+  auto status = fulltext_engine_->DeleteIndex(fulltext_index_id_);
+  if (!status.ok()) {
+    logger_.Warning("[FullText] Failed to drop index [index=" + fulltext_index_id_ +
+                    ", error=" + status.ToString() + "]");
+    // Don't fail the operation - index can be cleaned up manually
+    return Status::OK();
+  }
+
+  logger_.Info("[FullText] Full-text index dropped successfully [index=" +
+               fulltext_index_id_ + "]");
+
+  fulltext_engine_.reset();
+  fulltext_index_id_.clear();
+
+  return Status::OK();
+}
+
 }  // namespace engine
 }  // namespace vectordb

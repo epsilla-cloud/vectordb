@@ -31,6 +31,49 @@ DBServer::DBServer() {
     auto& compactionMgr = CompactionManager::GetInstance();
     compactionMgr.Start();
   }
+
+  // Initialize full-text search engine if enabled
+  if (vectordb::globalConfig.EnableFullText.load() ||
+      vectordb::globalConfig.EnableQuickwit.load()) {
+
+    logger_.Info("Initializing full-text search engine");
+
+    // Build engine configuration
+    vectordb::server::fulltext::FullTextEngineConfig ft_config;
+
+    // Parse engine type
+    std::string engine_type = vectordb::globalConfig.FullTextEngine;
+    if (engine_type.empty()) {
+      engine_type = "quickwit";  // Default
+    }
+    ft_config.engine_type = vectordb::server::fulltext::FullTextManager::ParseEngineType(engine_type);
+
+    // Common configuration
+    ft_config.binary_path = vectordb::globalConfig.FullTextBinaryPath;
+    ft_config.config_path = vectordb::globalConfig.FullTextConfigPath;
+    ft_config.data_dir = vectordb::globalConfig.FullTextDataDir;
+    ft_config.port = vectordb::globalConfig.FullTextPort.load();
+    ft_config.endpoint = vectordb::globalConfig.FullTextEndpoint;
+    ft_config.api_key = vectordb::globalConfig.FullTextApiKey;
+
+    // Create engine using factory
+    fulltext_engine_ = vectordb::server::fulltext::FullTextManager::CreateEngine(ft_config);
+
+    if (fulltext_engine_) {
+      // Start the engine
+      auto status = fulltext_engine_->Start();
+
+      if (status.ok()) {
+        logger_.Info("Full-text search engine (" + fulltext_engine_->GetEngineName() +
+                     ") initialized successfully");
+      } else {
+        logger_.Error("Failed to start full-text search engine: " + status.message());
+        fulltext_engine_.reset();
+      }
+    } else {
+      logger_.Error("Failed to create full-text search engine");
+    }
+  }
 }
 
 DBServer::~DBServer() {
@@ -47,6 +90,13 @@ DBServer::~DBServer() {
 
   // Stop monitoring thread
   StopMonitoringThread();
+
+  // Stop full-text search engine if enabled
+  if (fulltext_engine_) {
+    logger_.Info("Stopping full-text search engine");
+    fulltext_engine_->Stop();
+    fulltext_engine_.reset();
+  }
 
   // Stop compaction manager
   auto& compactionMgr = CompactionManager::GetInstance();
