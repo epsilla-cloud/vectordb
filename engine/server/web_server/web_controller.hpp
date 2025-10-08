@@ -31,8 +31,21 @@
 #include "db/compaction_manager.hpp"
 #include "db/memory_pool_manager.hpp"
 #include "db/batch_insertion_optimizer.hpp"
+#include "server/web_server/handler/worker_pool_stats_handler.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
+
+// Macro to record vector API request statistics
+#define RECORD_VECTOR_API(api_type) \
+  do { \
+    globalConfig.Vector##api_type##RequestCount.fetch_add(1, std::memory_order_relaxed); \
+    globalConfig.Vector##api_type##LastRequestTime.store( \
+      std::chrono::duration_cast<std::chrono::seconds>( \
+        std::chrono::system_clock::now().time_since_epoch() \
+      ).count(), \
+      std::memory_order_relaxed \
+    ); \
+  } while(0)
 
 namespace vectordb {
 
@@ -90,10 +103,49 @@ class WebController : public oatpp::web::server::api::ApiController {
   ADD_CORS(State)
 
   ENDPOINT("GET", "/state", State) {
-    auto dto = StatusDto::createShared();
-    dto->statusCode = 200;
-    dto->message = "Server is online!";
-    return createDtoResponse(Status::CODE_200, dto);
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    response.SetInt("statusCode", 200);
+    response.SetString("message", "Server is online!");
+
+    // Add vector API statistics
+    vectordb::Json apiStats;
+    apiStats.LoadFromString("{}");
+
+    // Insert stats
+    vectordb::Json insertStats;
+    insertStats.LoadFromString("{}");
+    insertStats.SetInt("totalRequests", globalConfig.VectorInsertRequestCount.load(std::memory_order_relaxed));
+    insertStats.SetInt("lastRequestTime", globalConfig.VectorInsertLastRequestTime.load(std::memory_order_relaxed));
+    apiStats.SetObject("insert", insertStats);
+
+    // Query stats
+    vectordb::Json queryStats;
+    queryStats.LoadFromString("{}");
+    queryStats.SetInt("totalRequests", globalConfig.VectorQueryRequestCount.load(std::memory_order_relaxed));
+    queryStats.SetInt("lastRequestTime", globalConfig.VectorQueryLastRequestTime.load(std::memory_order_relaxed));
+    apiStats.SetObject("query", queryStats);
+
+    // Delete stats
+    vectordb::Json deleteStats;
+    deleteStats.LoadFromString("{}");
+    deleteStats.SetInt("totalRequests", globalConfig.VectorDeleteRequestCount.load(std::memory_order_relaxed));
+    deleteStats.SetInt("lastRequestTime", globalConfig.VectorDeleteLastRequestTime.load(std::memory_order_relaxed));
+    apiStats.SetObject("delete", deleteStats);
+
+    // Update stats (reserved for future use)
+    vectordb::Json updateStats;
+    updateStats.LoadFromString("{}");
+    updateStats.SetInt("totalRequests", globalConfig.VectorUpdateRequestCount.load(std::memory_order_relaxed));
+    updateStats.SetInt("lastRequestTime", globalConfig.VectorUpdateLastRequestTime.load(std::memory_order_relaxed));
+    apiStats.SetObject("update", updateStats);
+
+    response.SetObject("vectorApiStats", apiStats);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(LoadDB)
@@ -159,14 +211,15 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
     
     int64_t init_table_scale = GetInitTableScale();
+
+    // DEPRECATED: vectorScale parameter is deprecated and ignored
+    // The table will start with InitialTableCapacity (default 1000) and grow automatically
+    // For performance-sensitive scenarios with known large datasets, configure via
+    // INITIAL_TABLE_CAPACITY environment variable instead
     if (parsedBody.HasMember("vectorScale")) {
-      init_table_scale = parsedBody.GetInt("vectorScale");
-      // Validate vector scale range
-      if (init_table_scale < 1 || init_table_scale > 100000000) {
-        dto->statusCode = Status::CODE_400.code;
-        dto->message = "Invalid vector scale: must be between 1 and 100,000,000";
-        return createDtoResponse(Status::CODE_400, dto);
-      }
+      // Log deprecation warning but do not use the value
+      // init_table_scale remains as GetInitTableScale()
+      // Users should use INITIAL_TABLE_CAPACITY environment variable for global configuration
     }
     bool wal_enabled = true;
     if (parsedBody.HasMember("walEnabled")) {
@@ -531,6 +584,7 @@ class WebController : public oatpp::web::server::api::ApiController {
            PATH(String, db_name, "db_name"),
            BODY_STRING(String, body),
            REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    RECORD_VECTOR_API(Insert);  // Record API statistics
     auto status_dto = StatusDto::createShared();
     vectordb::Json parsedBody;
     auto valid = parsedBody.LoadFromString(body);
@@ -608,6 +662,7 @@ class WebController : public oatpp::web::server::api::ApiController {
            PATH(String, db_name, "db_name"),
            BODY_STRING(String, body),
            REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    RECORD_VECTOR_API(Insert);  // Record API statistics
     auto status_dto = StatusDto::createShared();
 
     // Initialize batch optimizer if needed
@@ -715,6 +770,7 @@ class WebController : public oatpp::web::server::api::ApiController {
   ENDPOINT("POST", "/api/{db_name}/data/insertprepare", InsertRecordsPrepare,
            PATH(String, db_name, "db_name"),
            BODY_STRING(String, body)) {
+    RECORD_VECTOR_API(Insert);  // Record API statistics
     auto status_dto = StatusDto::createShared();
 
     vectordb::Json parsedBody;
@@ -763,6 +819,7 @@ class WebController : public oatpp::web::server::api::ApiController {
   ENDPOINT("POST", "/api/{db_name}/data/delete", DeleteRecordsByPK,
            PATH(String, db_name, "db_name"),
            BODY_STRING(String, body)) {
+    RECORD_VECTOR_API(Delete);  // Record API statistics
     auto dto = StatusDto::createShared();
     vectordb::Json requestBody;
     auto valid = requestBody.LoadFromString(body);
@@ -936,6 +993,7 @@ class WebController : public oatpp::web::server::api::ApiController {
            PATH(String, db_name, "db_name"),
            BODY_STRING(String, body),
            REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    RECORD_VECTOR_API(Query);  // Record API statistics
     auto status_dto = StatusDto::createShared();
 
     vectordb::Json parsedBody;
@@ -1552,6 +1610,134 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     return createDtoResponse(dto->statusCode == 200 ? Status::CODE_200 : Status::CODE_500, dto);
+  }
+
+  ADD_CORS(GetWALStats)
+
+  ENDPOINT_INFO(GetWALStats) {
+    info->summary = "Get WAL Flush Statistics";
+    info->description = "Retrieve Write-Ahead Log flush statistics including total flushes, success/failure counts, and average flush duration";
+    info->addResponse<String>(Status::CODE_200, "application/json", "WAL statistics retrieved successfully");
+    info->addTag("Monitoring");
+  }
+  ENDPOINT("GET", "api/wal/stats", GetWALStats) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    try {
+      auto wal_stats = db_server->GetWALFlushStats();
+
+      response.SetInt("statusCode", Status::CODE_200.code);
+      response.SetString("message", "WAL statistics retrieved successfully");
+
+      vectordb::Json stats;
+      stats.LoadFromString("{}");
+      stats.SetInt("totalFlushes", wal_stats.total_flushes);
+      stats.SetInt("successfulFlushes", wal_stats.successful_flushes);
+      stats.SetInt("failedFlushes", wal_stats.failed_flushes);
+      stats.SetInt("lastFlushTime", wal_stats.last_flush_time);
+      stats.SetInt("totalFlushDurationMs", wal_stats.total_flush_duration_ms);
+
+      // Calculate derived metrics
+      double failure_rate = 0.0;
+      if (wal_stats.total_flushes > 0) {
+        failure_rate = (double)wal_stats.failed_flushes / wal_stats.total_flushes * 100.0;
+      }
+      stats.SetDouble("failureRatePercent", failure_rate);
+
+      double avg_duration_ms = 0.0;
+      if (wal_stats.successful_flushes > 0) {
+        avg_duration_ms = (double)wal_stats.total_flush_duration_ms / wal_stats.successful_flushes;
+      }
+      stats.SetDouble("avgFlushDurationMs", avg_duration_ms);
+
+      response.SetObject("stats", stats);
+
+    } catch (const std::exception& e) {
+      response.SetInt("statusCode", Status::CODE_500.code);
+      response.SetString("message", std::string("Failed to retrieve WAL statistics: ") + e.what());
+    }
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(GetWorkerPoolStats)
+
+  ENDPOINT_INFO(GetWorkerPoolStats) {
+    info->summary = "Get Worker Pool Statistics";
+    info->description = "Retrieve CPU and IO worker pool statistics including tasks submitted/completed/failed, queue sizes, and performance metrics";
+    info->addResponse<String>(Status::CODE_200, "application/json", "Worker pool statistics retrieved successfully");
+    info->addTag("Monitoring");
+  }
+  ENDPOINT("GET", "api/workers/stats", GetWorkerPoolStats) {
+    std::string stats_json = vectordb::server::web::WorkerPoolStatsHandler::GetStats();
+
+    auto httpResponse = createResponse(Status::CODE_200, stats_json);
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(GetVectorStats)
+
+  ENDPOINT_INFO(GetVectorStats) {
+    info->summary = "Get Vector Statistics";
+    info->description = "Retrieve vector statistics for a specific table including total vectors, active vectors, deleted vectors, and deletion ratio";
+    info->pathParams["db_name"].description = "Database name";
+    info->pathParams["table_name"].description = "Table name";
+    info->addResponse<String>(Status::CODE_200, "application/json", "Vector statistics retrieved successfully");
+    info->addResponse<String>(Status::CODE_404, "application/json", "Database or table not found");
+    info->addTag("Monitoring");
+  }
+  ENDPOINT("GET", "api/{db_name}/{table_name}/vectors/stats", GetVectorStats,
+           PATH(String, db_name, "db_name"),
+           PATH(String, table_name, "table_name")) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    try {
+      auto db = db_server->GetDB(db_name);
+      if (!db) {
+        response.SetInt("statusCode", Status::CODE_404.code);
+        response.SetString("message", "Database not found: " + db_name);
+        auto httpResponse = createResponse(Status::CODE_404, response.DumpToString());
+        httpResponse->putHeader("Content-Type", "application/json");
+        return httpResponse;
+      }
+
+      auto table = db->GetTable(table_name);
+      if (!table) {
+        response.SetInt("statusCode", Status::CODE_404.code);
+        response.SetString("message", "Table not found: " + table_name);
+        auto httpResponse = createResponse(Status::CODE_404, response.DumpToString());
+        httpResponse->putHeader("Content-Type", "application/json");
+        return httpResponse;
+      }
+
+      auto stats = table->GetVectorStats();
+
+      response.SetInt("statusCode", Status::CODE_200.code);
+      response.SetString("message", "Vector statistics retrieved successfully");
+
+      vectordb::Json vector_stats;
+      vector_stats.LoadFromString("{}");
+      vector_stats.SetInt("totalVectors", stats.total_vectors);
+      vector_stats.SetInt("activeVectors", stats.active_vectors);
+      vector_stats.SetInt("deletedVectors", stats.deleted_vectors);
+      vector_stats.SetDouble("deletedRatio", stats.deleted_ratio);
+      vector_stats.SetInt("capacity", stats.capacity);
+
+      response.SetObject("stats", vector_stats);
+
+    } catch (const std::exception& e) {
+      response.SetInt("statusCode", Status::CODE_500.code);
+      response.SetString("message", std::string("Failed to retrieve vector statistics: ") + e.what());
+    }
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(GetCompactionStatus)

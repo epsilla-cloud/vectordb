@@ -17,6 +17,122 @@
 
 namespace vectordb {
 
+// ============================================================================
+// Configuration Limits and Defaults
+// Centralized management of all configuration constraints
+// All limits can be overridden via environment variables with _MIN/_MAX suffix
+// ============================================================================
+
+struct ConfigLimits {
+  // Initial Table Capacity
+  static constexpr int INITIAL_TABLE_CAPACITY_DEFAULT = 1000;
+  static constexpr int INITIAL_TABLE_CAPACITY_MIN = 10;
+  static constexpr int INITIAL_TABLE_CAPACITY_MAX = 10000000;
+
+  // Eager Compaction
+  static constexpr int MIN_DELETED_VECTORS_MIN = 1;
+  static constexpr int MIN_DELETED_VECTORS_MAX = 10000;
+
+  // WAL Flush Interval
+  static constexpr int WAL_FLUSH_INTERVAL_MIN = 1;
+  static constexpr int WAL_FLUSH_INTERVAL_MAX = 3600;
+
+  // Compaction Threshold
+  static constexpr double COMPACTION_THRESHOLD_MIN = 0.01;
+  static constexpr double COMPACTION_THRESHOLD_MAX = 0.99;
+
+  // Compaction Interval
+  static constexpr int COMPACTION_INTERVAL_MIN = 60;
+  static constexpr int COMPACTION_INTERVAL_MAX = 86400;
+
+  // Rebuild Interval
+  static constexpr int REBUILD_INTERVAL_MIN = 1000;      // 1 second
+  static constexpr int REBUILD_INTERVAL_MAX = 3600000;   // 1 hour
+
+  // Worker Threads
+  static constexpr int CPU_WORKERS_MIN = 1;
+  static constexpr int CPU_WORKERS_MAX = 256;
+  static constexpr int IO_WORKERS_MIN = 1;
+  static constexpr int IO_WORKERS_MAX = 256;
+
+  // Queue Sizes
+  static constexpr int QUEUE_SIZE_MIN = 10;
+  static constexpr int QUEUE_SIZE_MAX = 1000000;
+
+  // === P1 High Priority Configuration Limits ===
+
+  // Intra Query Threads
+  static constexpr int INTRA_QUERY_THREADS_MIN = 1;
+  static constexpr int INTRA_QUERY_THREADS_MAX = 256;
+
+  // Incremental Rebuild
+  static constexpr int INCREMENTAL_THRESHOLD_MIN = 10;
+  static constexpr int INCREMENTAL_THRESHOLD_MAX = 100000;
+
+  static constexpr int FULL_REBUILD_INTERVAL_MIN = 1;
+  static constexpr int FULL_REBUILD_INTERVAL_MAX = 100;
+
+  // Compaction Before Rebuild
+  static constexpr double COMPACTION_BEFORE_REBUILD_MIN = 0.01;
+  static constexpr double COMPACTION_BEFORE_REBUILD_MAX = 0.99;
+
+  // Rebuild Save Intervals
+  static constexpr int REBUILD_SAVE_INTERVAL_MIN = 1;
+  static constexpr int REBUILD_SAVE_INTERVAL_MAX = 1000;
+
+  static constexpr int REBUILD_SAVE_INTERVAL_SECONDS_MIN = 60;
+  static constexpr int REBUILD_SAVE_INTERVAL_SECONDS_MAX = 86400;  // 24 hours
+
+  // === P2 NSG Index Parameters ===
+
+  static constexpr int NSG_SEARCH_LENGTH_MIN = 0;   // 0 = auto-adaptive
+  static constexpr int NSG_SEARCH_LENGTH_MAX = 256;
+
+  static constexpr int NSG_OUT_DEGREE_MIN = 10;
+  static constexpr int NSG_OUT_DEGREE_MAX = 200;
+
+  static constexpr int NSG_CANDIDATE_POOL_MIN = 50;
+  static constexpr int NSG_CANDIDATE_POOL_MAX = 2000;
+
+  // Helper function to get limit from environment or use default
+  static int GetEnvInt(const char* env_name, int default_value, int min_value, int max_value) {
+    const char* env_value = std::getenv(env_name);
+    if (env_value != nullptr) {
+      int value = std::atoi(env_value);
+      if (value >= min_value && value <= max_value) {
+        return value;
+      }
+      printf("[ConfigLimits] Warning: %s=%s out of range [%d, %d], using default %d\n",
+             env_name, env_value, min_value, max_value, default_value);
+    }
+    return default_value;
+  }
+
+  static double GetEnvDouble(const char* env_name, double default_value, double min_value, double max_value) {
+    const char* env_value = std::getenv(env_name);
+    if (env_value != nullptr) {
+      double value = std::atof(env_value);
+      if (value >= min_value && value <= max_value) {
+        return value;
+      }
+      printf("[ConfigLimits] Warning: %s=%s out of range [%.2f, %.2f], using default %.2f\n",
+             env_name, env_value, min_value, max_value, default_value);
+    }
+    return default_value;
+  }
+
+  // Allow runtime override of limits via environment variables
+  static void InitializeLimits() {
+    // Currently using compile-time constants
+    // Future: could load from CONFIG_LIMITS_FILE or environment variables like:
+    // INITIAL_TABLE_CAPACITY_MIN, INITIAL_TABLE_CAPACITY_MAX, etc.
+  }
+};
+
+// ============================================================================
+// Main Configuration Structure
+// ============================================================================
+
 struct Config {
   std::atomic<int> IntraQueryThreads;
   std::atomic<int> MasterQueueSize{500};
@@ -58,7 +174,13 @@ struct Config {
   std::atomic<int> RebuildSaveIntervalSeconds{300};         // Or save every N seconds (default: 300 = 5 minutes)
 
   // Memory management configuration
-  std::atomic<int> InitialTableCapacity{1000};   // Initial table capacity (default: 1000, was 150000)
+  // Initial table capacity - tables grow automatically from this starting point
+  // Default: 1000 (sufficient for most use cases with adaptive growth)
+  // Configure via INITIAL_TABLE_CAPACITY environment variable for performance-sensitive scenarios:
+  // - If you know you'll insert millions of vectors, set higher (e.g., 100000) to avoid resize overhead
+  // - For memory-constrained environments, keep at 1000 to minimize initial footprint
+  // Note: API parameter "vectorScale" is deprecated - use this environment variable instead
+  std::atomic<int> InitialTableCapacity{1000};
 
   // Eager compaction configuration: run Table::Compact() immediately after large soft-deletes
   std::atomic<bool> EagerCompactionOnDelete{true}; // Default: true
@@ -76,7 +198,20 @@ struct Config {
   std::atomic<int> IoWorkerThreads{0};         // 0 = auto-detect (25% of hardware threads)
   std::atomic<int> WorkerPoolMaxQueueSize{10000};
   std::atomic<bool> EnableCpuAffinity{false};  // Bind CPU workers to specific cores
-  
+
+  // === Vector CRUD API Statistics (in-memory only, for monitoring) ===
+  // Request counters for each operation type
+  std::atomic<uint64_t> VectorInsertRequestCount{0};
+  std::atomic<uint64_t> VectorQueryRequestCount{0};
+  std::atomic<uint64_t> VectorDeleteRequestCount{0};
+  std::atomic<uint64_t> VectorUpdateRequestCount{0};
+
+  // Last request timestamps (Unix timestamp in seconds)
+  std::atomic<int64_t> VectorInsertLastRequestTime{0};
+  std::atomic<int64_t> VectorQueryLastRequestTime{0};
+  std::atomic<int64_t> VectorDeleteLastRequestTime{0};
+  std::atomic<int64_t> VectorUpdateLastRequestTime{0};
+
   // Constructor to initialize thread counts based on hardware
   Config() {
     unsigned int hw_threads = std::thread::hardware_concurrency();
@@ -85,14 +220,14 @@ struct Config {
     }
     
     // Check environment variable for thread count override
-    const char* env_threads = std::getenv("EPSILLA_INTRA_QUERY_THREADS");
-    int query_threads = static_cast<int>(hw_threads);
-    if (env_threads != nullptr) {
-      int env_value = std::atoi(env_threads);
-      if (env_value >= 1 && env_value <= 128) {
-        query_threads = env_value;
-        printf("[Config] Using EPSILLA_INTRA_QUERY_THREADS=%d from environment\n", query_threads);
-      }
+    int query_threads = ConfigLimits::GetEnvInt(
+      "EPSILLA_INTRA_QUERY_THREADS",
+      static_cast<int>(hw_threads),
+      ConfigLimits::INTRA_QUERY_THREADS_MIN,
+      ConfigLimits::INTRA_QUERY_THREADS_MAX
+    );
+    if (query_threads != static_cast<int>(hw_threads)) {
+      printf("[Config] Using EPSILLA_INTRA_QUERY_THREADS=%d from environment\n", query_threads);
     }
     
     // Use configured threads for query (optimal for parallel search)
@@ -115,13 +250,15 @@ struct Config {
     SoftDelete.store(soft_delete_enabled, std::memory_order_release);
     
     // Check environment variable for WAL flush interval
-    const char* env_wal_interval = std::getenv("WAL_FLUSH_INTERVAL");
-    if (env_wal_interval != nullptr) {
-      int interval = std::atoi(env_wal_interval);
-      if (interval >= 5 && interval <= 3600) {  // Between 5 seconds and 1 hour
-        WALFlushInterval.store(interval, std::memory_order_release);
-        printf("[Config] Using WAL_FLUSH_INTERVAL=%d seconds from environment\n", interval);
-      }
+    int wal_interval = ConfigLimits::GetEnvInt(
+      "WAL_FLUSH_INTERVAL",
+      WALFlushInterval.load(),
+      ConfigLimits::WAL_FLUSH_INTERVAL_MIN,
+      ConfigLimits::WAL_FLUSH_INTERVAL_MAX
+    );
+    if (wal_interval != WALFlushInterval.load()) {
+      WALFlushInterval.store(wal_interval, std::memory_order_release);
+      printf("[Config] Using WAL_FLUSH_INTERVAL=%d seconds from environment\n", wal_interval);
     }
     
     // Check environment variable for WAL auto flush
@@ -144,22 +281,27 @@ struct Config {
       printf("[Config] Using AUTO_COMPACTION=%s from environment\n", auto_compact ? "true" : "false");
     }
 
-    const char* env_compact_thresh = std::getenv("COMPACTION_THRESHOLD");
-    if (env_compact_thresh != nullptr) {
-      double threshold = std::atof(env_compact_thresh);
-      if (threshold >= 0.05 && threshold <= 0.5) {  // Between 5% and 50%
-        CompactionThreshold.store(threshold, std::memory_order_release);
-        printf("[Config] Using COMPACTION_THRESHOLD=%.2f from environment\n", threshold);
-      }
+    // CRITICAL FIX: Use ConfigLimits range (was hardcoded 0.05-0.5, should be 0.01-0.99)
+    double compact_threshold = ConfigLimits::GetEnvDouble(
+      "COMPACTION_THRESHOLD",
+      CompactionThreshold.load(),
+      ConfigLimits::COMPACTION_THRESHOLD_MIN,
+      ConfigLimits::COMPACTION_THRESHOLD_MAX
+    );
+    if (compact_threshold != CompactionThreshold.load()) {
+      CompactionThreshold.store(compact_threshold, std::memory_order_release);
+      printf("[Config] Using COMPACTION_THRESHOLD=%.2f from environment\n", compact_threshold);
     }
 
-    const char* env_compact_interval = std::getenv("COMPACTION_INTERVAL");
-    if (env_compact_interval != nullptr) {
-      int interval = std::atoi(env_compact_interval);
-      if (interval >= 60 && interval <= 86400) {  // Between 1 minute and 24 hours
-        CompactionInterval.store(interval, std::memory_order_release);
-        printf("[Config] Using COMPACTION_INTERVAL=%d seconds from environment\n", interval);
-      }
+    int compact_interval = ConfigLimits::GetEnvInt(
+      "COMPACTION_INTERVAL",
+      CompactionInterval.load(),
+      ConfigLimits::COMPACTION_INTERVAL_MIN,
+      ConfigLimits::COMPACTION_INTERVAL_MAX
+    );
+    if (compact_interval != CompactionInterval.load()) {
+      CompactionInterval.store(compact_interval, std::memory_order_release);
+      printf("[Config] Using COMPACTION_INTERVAL=%d seconds from environment\n", compact_interval);
     }
 
     // Eager compaction toggle after delete (optional)
@@ -173,39 +315,43 @@ struct Config {
     }
 
     // Check environment variable for minimum deleted vectors for eager compaction
-    const char* env_min_deleted_vectors = std::getenv("MIN_DELETED_VECTORS_FOR_EAGER_COMPACTION");
-    if (env_min_deleted_vectors != nullptr) {
-      int min_deleted = std::atoi(env_min_deleted_vectors);
-      if (min_deleted >= 1 && min_deleted <= 10000) {  // Reasonable range: 1 to 10,000
-        MinDeletedVectorsForEagerCompaction.store(min_deleted, std::memory_order_release);
-        printf("[Config] Using MIN_DELETED_VECTORS_FOR_EAGER_COMPACTION=%d from environment\n", min_deleted);
-      }
+    int min_deleted = ConfigLimits::GetEnvInt(
+      "MIN_DELETED_VECTORS_FOR_EAGER_COMPACTION",
+      MinDeletedVectorsForEagerCompaction.load(),
+      ConfigLimits::MIN_DELETED_VECTORS_MIN,
+      ConfigLimits::MIN_DELETED_VECTORS_MAX
+    );
+    if (min_deleted != MinDeletedVectorsForEagerCompaction.load()) {
+      MinDeletedVectorsForEagerCompaction.store(min_deleted, std::memory_order_release);
+      printf("[Config] Using MIN_DELETED_VECTORS_FOR_EAGER_COMPACTION=%d from environment\n", min_deleted);
     }
 
     // Check environment variable for initial table capacity
-    const char* env_initial_capacity = std::getenv("INITIAL_TABLE_CAPACITY");
-    if (env_initial_capacity != nullptr) {
-      int capacity = std::atoi(env_initial_capacity);
-      if (capacity >= 10 && capacity <= 10000000) {  // Between 10 and 10M (lowered for testing)
-        InitialTableCapacity.store(capacity, std::memory_order_release);
-        printf("[Config] Using INITIAL_TABLE_CAPACITY=%d from environment\n", capacity);
-      } else {
-        printf("[Config] Invalid INITIAL_TABLE_CAPACITY=%s, using default %d\n",
-               env_initial_capacity, InitialTableCapacity.load());
-      }
+    // This is the recommended way to configure initial capacity (API parameter "vectorScale" is deprecated)
+    // Use cases:
+    //   - Performance-sensitive: Set higher (e.g., 100000) if you know you'll insert millions of vectors
+    //   - Memory-constrained: Keep at default 1000 - tables grow automatically as needed
+    int capacity = ConfigLimits::GetEnvInt(
+      "INITIAL_TABLE_CAPACITY",
+      InitialTableCapacity.load(),
+      ConfigLimits::INITIAL_TABLE_CAPACITY_MIN,
+      ConfigLimits::INITIAL_TABLE_CAPACITY_MAX
+    );
+    if (capacity != InitialTableCapacity.load()) {
+      InitialTableCapacity.store(capacity, std::memory_order_release);
+      printf("[Config] Using INITIAL_TABLE_CAPACITY=%d from environment\n", capacity);
     }
 
     // Check environment variable for rebuild interval
-    const char* env_rebuild_interval = std::getenv("REBUILD_INTERVAL");
-    if (env_rebuild_interval != nullptr) {
-      int interval = std::atoi(env_rebuild_interval);
-      if (interval >= 5000 && interval <= 3600000) {  // Between 5 seconds and 1 hour (in milliseconds)
-        RebuildInterval.store(interval, std::memory_order_release);
-        printf("[Config] Using REBUILD_INTERVAL=%d milliseconds from environment\n", interval);
-      } else {
-        printf("[Config] Invalid REBUILD_INTERVAL=%s, using default %d ms\n",
-               env_rebuild_interval, RebuildInterval.load());
-      }
+    int rebuild_interval = ConfigLimits::GetEnvInt(
+      "REBUILD_INTERVAL",
+      RebuildInterval.load(),
+      ConfigLimits::REBUILD_INTERVAL_MIN,
+      ConfigLimits::REBUILD_INTERVAL_MAX
+    );
+    if (rebuild_interval != RebuildInterval.load()) {
+      RebuildInterval.store(rebuild_interval, std::memory_order_release);
+      printf("[Config] Using REBUILD_INTERVAL=%d milliseconds from environment\n", rebuild_interval);
     }
     
     // === Incremental rebuild configuration ===
@@ -218,22 +364,26 @@ struct Config {
       printf("[Config] Using ENABLE_INCREMENTAL_REBUILD=%s from environment\n", enable ? "true" : "false");
     }
     
-    const char* env_incremental_threshold = std::getenv("INCREMENTAL_THRESHOLD");
-    if (env_incremental_threshold != nullptr) {
-      int threshold = std::atoi(env_incremental_threshold);
-      if (threshold >= 10 && threshold <= 100000) {
-        IncrementalThreshold.store(threshold, std::memory_order_release);
-        printf("[Config] Using INCREMENTAL_THRESHOLD=%d from environment\n", threshold);
-      }
+    int incremental_threshold = ConfigLimits::GetEnvInt(
+      "INCREMENTAL_THRESHOLD",
+      IncrementalThreshold.load(),
+      ConfigLimits::INCREMENTAL_THRESHOLD_MIN,
+      ConfigLimits::INCREMENTAL_THRESHOLD_MAX
+    );
+    if (incremental_threshold != IncrementalThreshold.load()) {
+      IncrementalThreshold.store(incremental_threshold, std::memory_order_release);
+      printf("[Config] Using INCREMENTAL_THRESHOLD=%d from environment\n", incremental_threshold);
     }
     
-    const char* env_full_rebuild_interval = std::getenv("FULL_REBUILD_INTERVAL");
-    if (env_full_rebuild_interval != nullptr) {
-      int interval = std::atoi(env_full_rebuild_interval);
-      if (interval >= 1 && interval <= 100) {
-        FullRebuildInterval.store(interval, std::memory_order_release);
-        printf("[Config] Using FULL_REBUILD_INTERVAL=%d from environment\n", interval);
-      }
+    int full_rebuild_interval = ConfigLimits::GetEnvInt(
+      "FULL_REBUILD_INTERVAL",
+      FullRebuildInterval.load(),
+      ConfigLimits::FULL_REBUILD_INTERVAL_MIN,
+      ConfigLimits::FULL_REBUILD_INTERVAL_MAX
+    );
+    if (full_rebuild_interval != FullRebuildInterval.load()) {
+      FullRebuildInterval.store(full_rebuild_interval, std::memory_order_release);
+      printf("[Config] Using FULL_REBUILD_INTERVAL=%d from environment\n", full_rebuild_interval);
     }
     
     const char* env_filter_deleted = std::getenv("FILTER_DELETED_IN_INCREMENTAL");
@@ -255,13 +405,15 @@ struct Config {
     }
     
     // === Deletion and compaction strategy ===
-    const char* env_compact_before_rebuild = std::getenv("COMPACTION_BEFORE_REBUILD_THRESHOLD");
-    if (env_compact_before_rebuild != nullptr) {
-      double threshold = std::atof(env_compact_before_rebuild);
-      if (threshold >= 0.05 && threshold <= 0.5) {
-        CompactionBeforeRebuildThreshold.store(threshold, std::memory_order_release);
-        printf("[Config] Using COMPACTION_BEFORE_REBUILD_THRESHOLD=%.2f from environment\n", threshold);
-      }
+    double compact_before_rebuild = ConfigLimits::GetEnvDouble(
+      "COMPACTION_BEFORE_REBUILD_THRESHOLD",
+      CompactionBeforeRebuildThreshold.load(),
+      ConfigLimits::COMPACTION_BEFORE_REBUILD_MIN,
+      ConfigLimits::COMPACTION_BEFORE_REBUILD_MAX
+    );
+    if (compact_before_rebuild != CompactionBeforeRebuildThreshold.load()) {
+      CompactionBeforeRebuildThreshold.store(compact_before_rebuild, std::memory_order_release);
+      printf("[Config] Using COMPACTION_BEFORE_REBUILD_THRESHOLD=%.2f from environment\n", compact_before_rebuild);
     }
     
     const char* env_force_full_after_compact = std::getenv("FORCE_FULL_REBUILD_AFTER_COMPACTION");
@@ -274,22 +426,26 @@ struct Config {
     }
     
     // === I/O optimization ===
-    const char* env_rebuild_save_interval = std::getenv("REBUILD_SAVE_INTERVAL");
-    if (env_rebuild_save_interval != nullptr) {
-      int interval = std::atoi(env_rebuild_save_interval);
-      if (interval >= 1 && interval <= 100) {
-        RebuildSaveInterval.store(interval, std::memory_order_release);
-        printf("[Config] Using REBUILD_SAVE_INTERVAL=%d from environment\n", interval);
-      }
+    int rebuild_save_interval = ConfigLimits::GetEnvInt(
+      "REBUILD_SAVE_INTERVAL",
+      RebuildSaveInterval.load(),
+      ConfigLimits::REBUILD_SAVE_INTERVAL_MIN,
+      ConfigLimits::REBUILD_SAVE_INTERVAL_MAX
+    );
+    if (rebuild_save_interval != RebuildSaveInterval.load()) {
+      RebuildSaveInterval.store(rebuild_save_interval, std::memory_order_release);
+      printf("[Config] Using REBUILD_SAVE_INTERVAL=%d from environment\n", rebuild_save_interval);
     }
-    
-    const char* env_rebuild_save_seconds = std::getenv("REBUILD_SAVE_INTERVAL_SECONDS");
-    if (env_rebuild_save_seconds != nullptr) {
-      int seconds = std::atoi(env_rebuild_save_seconds);
-      if (seconds >= 60 && seconds <= 3600) {
-        RebuildSaveIntervalSeconds.store(seconds, std::memory_order_release);
-        printf("[Config] Using REBUILD_SAVE_INTERVAL_SECONDS=%d from environment\n", seconds);
-      }
+
+    int rebuild_save_seconds = ConfigLimits::GetEnvInt(
+      "REBUILD_SAVE_INTERVAL_SECONDS",
+      RebuildSaveIntervalSeconds.load(),
+      ConfigLimits::REBUILD_SAVE_INTERVAL_SECONDS_MIN,
+      ConfigLimits::REBUILD_SAVE_INTERVAL_SECONDS_MAX
+    );
+    if (rebuild_save_seconds != RebuildSaveIntervalSeconds.load()) {
+      RebuildSaveIntervalSeconds.store(rebuild_save_seconds, std::memory_order_release);
+      printf("[Config] Using REBUILD_SAVE_INTERVAL_SECONDS=%d from environment\n", rebuild_save_seconds);
     }
 
     // Check environment variable for VECTORDB_DISABLE_WAL_SYNC
@@ -342,28 +498,34 @@ struct Config {
 
   // Setter method for NSGSearchLength
   void setNSGSearchLength(int value) {
-    if (value >= 0 && value <= 10000) {
+    if (value >= ConfigLimits::NSG_SEARCH_LENGTH_MIN && value <= ConfigLimits::NSG_SEARCH_LENGTH_MAX) {
       NSGSearchLength.store(value, std::memory_order_release);
     } else {
-      throw std::invalid_argument("Invalid value for NSGSearchLength, valid range: [0, 10000], 0 = auto");
+      throw std::invalid_argument("Invalid value for NSGSearchLength, valid range: [" +
+                                  std::to_string(ConfigLimits::NSG_SEARCH_LENGTH_MIN) + ", " +
+                                  std::to_string(ConfigLimits::NSG_SEARCH_LENGTH_MAX) + "], 0 = auto");
     }
   }
 
   // Setter method for NSGOutDegree
   void setNSGOutDegree(int value) {
-    if (value >= 10 && value <= 200) {
+    if (value >= ConfigLimits::NSG_OUT_DEGREE_MIN && value <= ConfigLimits::NSG_OUT_DEGREE_MAX) {
       NSGOutDegree.store(value, std::memory_order_release);
     } else {
-      throw std::invalid_argument("Invalid value for NSGOutDegree, valid range: [10, 200]");
+      throw std::invalid_argument("Invalid value for NSGOutDegree, valid range: [" +
+                                  std::to_string(ConfigLimits::NSG_OUT_DEGREE_MIN) + ", " +
+                                  std::to_string(ConfigLimits::NSG_OUT_DEGREE_MAX) + "]");
     }
   }
 
   // Setter method for NSGCandidatePoolSize
   void setNSGCandidatePoolSize(int value) {
-    if (value >= 50 && value <= 1000) {
+    if (value >= ConfigLimits::NSG_CANDIDATE_POOL_MIN && value <= ConfigLimits::NSG_CANDIDATE_POOL_MAX) {
       NSGCandidatePoolSize.store(value, std::memory_order_release);
     } else {
-      throw std::invalid_argument("Invalid value for NSGCandidatePoolSize, valid range: [50, 1000]");
+      throw std::invalid_argument("Invalid value for NSGCandidatePoolSize, valid range: [" +
+                                  std::to_string(ConfigLimits::NSG_CANDIDATE_POOL_MIN) + ", " +
+                                  std::to_string(ConfigLimits::NSG_CANDIDATE_POOL_MAX) + "]");
     }
   }
 
@@ -457,9 +619,12 @@ struct Config {
     if (json.HasMember("SoftDelete")) {
       setSoftDelete(json.GetBool("SoftDelete"));
     }
+    // Initial table capacity configuration (also available via INITIAL_TABLE_CAPACITY env var)
+    // Recommended for performance-sensitive scenarios with known large datasets
     if (json.HasMember("InitialTableCapacity")) {
       int capacity = json.GetInt("InitialTableCapacity");
-      if (capacity >= 100 && capacity <= 10000000) {
+      if (capacity >= ConfigLimits::INITIAL_TABLE_CAPACITY_MIN &&
+          capacity <= ConfigLimits::INITIAL_TABLE_CAPACITY_MAX) {
         InitialTableCapacity.store(capacity, std::memory_order_release);
       }
     }

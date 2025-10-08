@@ -27,85 +27,80 @@ public:
      */
     static std::string GetStats() {
         vectordb::Json response;
-        response.SetObject();
+        response.LoadFromString("{}");
 
         try {
             auto& manager = engine::execution::WorkerPoolManager::GetInstance();
 
             if (!manager.IsInitialized()) {
                 vectordb::Json error;
-                error.SetObject();
-                error.AddMember("error", "Worker pool not initialized", error.GetAllocator());
-                error.AddMember("statusCode", 503, error.GetAllocator());
+                error.LoadFromString("{}");
+                error.SetString("error", "Worker pool not initialized");
+                error.SetInt("statusCode", 503);
                 return error.DumpToString();
             }
 
             // Get CPU pool statistics
             auto cpu_stats = manager.GetCpuStats();
             vectordb::Json cpu_json;
-            cpu_json.SetObject();
-            cpu_json.AddMember("pool_name", "CPU", cpu_json.GetAllocator());
-            cpu_json.AddMember("tasks_submitted", cpu_stats.tasks_submitted, cpu_json.GetAllocator());
-            cpu_json.AddMember("tasks_completed", cpu_stats.tasks_completed, cpu_json.GetAllocator());
-            cpu_json.AddMember("tasks_failed", cpu_stats.tasks_failed, cpu_json.GetAllocator());
-            cpu_json.AddMember("tasks_rejected", cpu_stats.tasks_rejected, cpu_json.GetAllocator());
-            cpu_json.AddMember("current_queue_size", cpu_stats.current_queue_size, cpu_json.GetAllocator());
-            cpu_json.AddMember("peak_queue_size", cpu_stats.peak_queue_size, cpu_json.GetAllocator());
-            cpu_json.AddMember("active_workers", cpu_stats.active_workers, cpu_json.GetAllocator());
-            cpu_json.AddMember("avg_wait_time_us", cpu_stats.GetAverageWaitTime(), cpu_json.GetAllocator());
-            cpu_json.AddMember("avg_exec_time_us", cpu_stats.GetAverageExecTime(), cpu_json.GetAllocator());
-            cpu_json.AddMember("throughput_ops_per_sec", cpu_stats.GetThroughput(), cpu_json.GetAllocator());
+            cpu_json.LoadFromString("{}");
+            cpu_json.SetString("pool_name", "CPU");
+            cpu_json.SetInt("tasks_submitted", cpu_stats.tasks_submitted);
+            cpu_json.SetInt("tasks_completed", cpu_stats.tasks_completed);
+            cpu_json.SetInt("tasks_failed", cpu_stats.tasks_failed);
+            cpu_json.SetInt("tasks_rejected", cpu_stats.tasks_rejected);
+            cpu_json.SetInt("current_queue_size", cpu_stats.current_queue_size);
+            cpu_json.SetInt("peak_queue_size", cpu_stats.peak_queue_size);
+            cpu_json.SetInt("active_workers", cpu_stats.active_workers);
+            cpu_json.SetDouble("avg_wait_time_us", cpu_stats.GetAverageWaitTime());
+            cpu_json.SetDouble("avg_exec_time_us", cpu_stats.GetAverageExecTime());
+            cpu_json.SetDouble("throughput_ops_per_sec", cpu_stats.GetThroughput());
 
             // Get IO pool statistics
             auto io_stats = manager.GetIoStats();
             vectordb::Json io_json;
-            io_json.SetObject();
-            io_json.AddMember("pool_name", "IO", io_json.GetAllocator());
-            io_json.AddMember("tasks_submitted", io_stats.tasks_submitted, io_json.GetAllocator());
-            io_json.AddMember("tasks_completed", io_stats.tasks_completed, io_json.GetAllocator());
-            io_json.AddMember("tasks_failed", io_stats.tasks_failed, io_json.GetAllocator());
-            io_json.AddMember("tasks_rejected", io_stats.tasks_rejected, io_json.GetAllocator());
-            io_json.AddMember("current_queue_size", io_stats.current_queue_size, io_json.GetAllocator());
-            io_json.AddMember("peak_queue_size", io_stats.peak_queue_size, io_json.GetAllocator());
-            io_json.AddMember("active_workers", io_stats.active_workers, io_json.GetAllocator());
-            io_json.AddMember("avg_wait_time_us", io_stats.GetAverageWaitTime(), io_json.GetAllocator());
-            io_json.AddMember("avg_exec_time_us", io_stats.GetAverageExecTime(), io_json.GetAllocator());
-            io_json.AddMember("throughput_ops_per_sec", io_stats.GetThroughput(), io_json.GetAllocator());
+            io_json.LoadFromString("{}");
+            io_json.SetString("pool_name", "IO");
+            io_json.SetInt("tasks_submitted", io_stats.tasks_submitted);
+            io_json.SetInt("tasks_completed", io_stats.tasks_completed);
+            io_json.SetInt("tasks_failed", io_stats.tasks_failed);
+            io_json.SetInt("tasks_rejected", io_stats.tasks_rejected);
+            io_json.SetInt("current_queue_size", io_stats.current_queue_size);
+            io_json.SetInt("peak_queue_size", io_stats.peak_queue_size);
+            io_json.SetInt("active_workers", io_stats.active_workers);
+            io_json.SetDouble("avg_wait_time_us", io_stats.GetAverageWaitTime());
+            io_json.SetDouble("avg_exec_time_us", io_stats.GetAverageExecTime());
+            io_json.SetDouble("throughput_ops_per_sec", io_stats.GetThroughput());
 
             // Combine into response
-            response.AddMember("statusCode", 200, response.GetAllocator());
-            response.AddMember("message", "Worker pool statistics retrieved successfully", response.GetAllocator());
+            response.SetInt("statusCode", 200);
+            response.SetString("message", "Worker pool statistics retrieved successfully");
 
-            vectordb::Json pools_array;
-            pools_array.SetArray();
-            pools_array.PushBack(cpu_json, response.GetAllocator());
-            pools_array.PushBack(io_json, response.GetAllocator());
-
-            response.AddMember("pools", pools_array, response.GetAllocator());
+            // Create pools array
+            std::vector<Json> pools_array;
+            pools_array.push_back(cpu_json);
+            pools_array.push_back(io_json);
+            response.SetArray("pools", pools_array);
 
             // Add summary
             vectordb::Json summary;
-            summary.SetObject();
-            summary.AddMember("total_tasks_completed",
-                            cpu_stats.tasks_completed + io_stats.tasks_completed,
-                            summary.GetAllocator());
-            summary.AddMember("total_tasks_failed",
-                            cpu_stats.tasks_failed + io_stats.tasks_failed,
-                            summary.GetAllocator());
-            summary.AddMember("total_active_workers",
-                            cpu_stats.active_workers + io_stats.active_workers,
-                            summary.GetAllocator());
+            summary.LoadFromString("{}");
+            summary.SetInt("total_tasks_completed",
+                          cpu_stats.tasks_completed + io_stats.tasks_completed);
+            summary.SetInt("total_tasks_failed",
+                          cpu_stats.tasks_failed + io_stats.tasks_failed);
+            summary.SetInt("total_active_workers",
+                          cpu_stats.active_workers + io_stats.active_workers);
 
-            response.AddMember("summary", summary, response.GetAllocator());
+            response.SetObject("summary", summary);
 
             return response.DumpToString();
 
         } catch (const std::exception& e) {
             vectordb::Json error;
-            error.SetObject();
-            error.AddMember("error", std::string("Failed to retrieve worker pool statistics: ") + e.what(),
-                          error.GetAllocator());
-            error.AddMember("statusCode", 500, error.GetAllocator());
+            error.LoadFromString("{}");
+            error.SetString("error", std::string("Failed to retrieve worker pool statistics: ") + e.what());
+            error.SetInt("statusCode", 500);
             return error.DumpToString();
         }
     }
