@@ -147,15 +147,10 @@ Status TableSegment::ResizeInternal(size_t new_capacity) {
   // IMPORTANT: Caller must hold data_rw_mutex_ lock
   // This is the internal implementation without locking
 
-  // Check if critical operations are in progress (even when called internally)
-  if (index_rebuild_in_progress_.load() || compaction_in_progress_.load()) {
-    logger_.Debug("[TableSegment] Resize deferred - critical operation in progress");
-    // Don't resize during rebuild/compaction, but don't fail either
-    // The insert will be rejected if capacity is truly insufficient
-    return Status::OK();
-  }
-
-  // CRITICAL FIX: Prevent concurrent resize operations
+  // CRITICAL BUG FIX (BUG-IDX-003): Prevent concurrent resize operations FIRST
+  // Previously: Checked index_rebuild_in_progress_ BEFORE setting resize_in_progress_,
+  // creating TOCTOU race where rebuild could start between check and resize
+  // Solution: Set resize_in_progress_ FIRST to claim exclusive access, then check other flags
   if (resize_in_progress_.exchange(true)) {
     logger_.Warning("[TableSegment] Resize already in progress, deferring this resize request");
     return Status::OK();  // Another resize is ongoing, defer this one
@@ -166,6 +161,15 @@ Status TableSegment::ResizeInternal(size_t new_capacity) {
     std::atomic<bool>& flag;
     ~ResizeGuard() { flag.store(false); }
   } resize_guard{resize_in_progress_};
+
+  // NOW check if critical operations are in progress (with resize_in_progress_ already set)
+  // This prevents race: if rebuild starts, it will see resize_in_progress_=true and defer
+  if (index_rebuild_in_progress_.load() || compaction_in_progress_.load()) {
+    logger_.Debug("[TableSegment] Resize deferred - critical operation in progress");
+    // Don't resize during rebuild/compaction, but don't fail either
+    // The insert will be rejected if capacity is truly insufficient
+    return Status::OK();  // resize_guard automatically resets flag on return
+  }
 
   if (new_capacity <= capacity_) {
     // No need to resize if new capacity is smaller or equal
@@ -238,14 +242,16 @@ Status TableSegment::ResizeInternal(size_t new_capacity) {
     for (size_t i = 0; i < var_len_attr_table_.size(); ++i) {
       auto& var_table = var_len_attr_table_[i];
       logger_.Info("Var-length table " + std::to_string(i) + " current size: " + std::to_string(var_table.size()) + ", new capacity: " + std::to_string(new_capacity));
-      // Only resize if new capacity is larger than current size
-      // var_len_attr_table may have been initialized to size_limit_ which could be >> new_capacity
-      if (new_capacity > var_table.size()) {
+
+      // CRITICAL BUG FIX (BUG-SEG-003): Always resize to maintain alignment with vector tables
+      // Previously: Only resized if new_capacity > current size, causing misalignment
+      // Solution: Always resize to exact new_capacity to match vector tables
+      if (new_capacity != var_table.size()) {
         logger_.Info("Resizing var-length table " + std::to_string(i) + " from " + std::to_string(var_table.size()) + " to " + std::to_string(new_capacity));
         var_table.resize(new_capacity);
         logger_.Info("Var-length table " + std::to_string(i) + " resized successfully");
       } else {
-        logger_.Info("Skipping resize of var-length table " + std::to_string(i) + " (already large enough)");
+        logger_.Info("Var-length table " + std::to_string(i) + " already at target size " + std::to_string(new_capacity));
       }
     }
     logger_.Info("All var-length tables resized successfully");

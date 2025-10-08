@@ -152,16 +152,35 @@ Status CompactionManager::CompactAllTables() {
 }
 
 Status CompactionManager::DoCompaction(const std::string& table_name) {
-  // Prevent concurrent compactions
-  if (is_compacting_.exchange(true)) {
-    return Status(DB_UNEXPECTED_ERROR, "Another compaction is in progress");
+  // CRITICAL BUG FIX (BUG-CMP-002): Use per-table compaction tracking
+  // Previously: Global flag rejected all compaction requests during any compaction
+  // Solution: Track which specific tables are compacting, allow concurrent compaction
+  {
+    std::lock_guard<std::mutex> lock(compacting_tables_mutex_);
+    if (compacting_tables_.find(table_name) != compacting_tables_.end()) {
+      logger_.Info("Compaction already in progress for table: " + table_name);
+      return Status(DB_UNEXPECTED_ERROR, "Compaction already in progress for this table");
+    }
+    compacting_tables_.insert(table_name);
   }
 
-  // Use a simple RAII class to ensure cleanup
-  struct CompactionGuard {
-    std::atomic<bool>& flag;
-    ~CompactionGuard() { flag = false; }
-  } guard{is_compacting_};
+  // RAII guard to ensure table is removed from compacting set
+  struct PerTableCompactionGuard {
+    std::string table_name;
+    std::set<std::string>& compacting_set;
+    std::mutex& mutex;
+    std::atomic<bool>& global_flag;
+
+    ~PerTableCompactionGuard() {
+      std::lock_guard<std::mutex> lock(mutex);
+      compacting_set.erase(table_name);
+      // Update global flag: true if any table is still compacting
+      global_flag.store(!compacting_set.empty());
+    }
+  } guard{table_name, compacting_tables_, compacting_tables_mutex_, is_compacting_};
+
+  // Update global flag to indicate at least one compaction is active
+  is_compacting_.store(true);
 
   // Get the table
   auto table_result = tables_.Get(table_name);
@@ -231,11 +250,20 @@ Status CompactionManager::DoCompaction(const std::string& table_name) {
   size_t post_records = table->GetRecordCount();
   size_t records_freed = (initial_deleted > 0) ? initial_deleted : 0;
 
+  // CRITICAL BUG FIX (BUG-CMP-003): Query actual deleted count instead of resetting to 0
+  // Previously: Reset to 0, but new deletes could have occurred during compaction
+  // Solution: Re-query the actual deleted count from the table after compaction
+  double post_deleted_ratio = 0.0;
+  if (table->table_segment_) {
+    post_deleted_ratio = table->table_segment_->GetDeletedRatio();
+  }
+  size_t post_deleted = static_cast<size_t>(post_records * post_deleted_ratio);
+
   stats.compaction_count++;
   stats.last_compaction_time = end_time;
   stats.last_compaction_duration = duration;
   stats.total_vectors = post_records;
-  stats.deleted_vectors = 0;  // Reset after compaction
+  stats.deleted_vectors = post_deleted;  // Use actual count, not 0
   stats.memory_freed_bytes += records_freed * 1000;  // Estimate memory freed
 
   table_stats_.Insert(table_name, stats);

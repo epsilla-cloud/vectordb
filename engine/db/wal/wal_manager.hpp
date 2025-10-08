@@ -294,15 +294,12 @@ private:
                 }
             );
 
-            // CRITICAL FIX: Increased timeout from 10s to 60s for critical WAL operations
-            // WAL writes must succeed, so we give them more time
-            if (future.wait_for(std::chrono::seconds(60)) == std::future_status::ready) {
-                return future.get();
-            } else {
-                failed_writes_++;
-                logger_.Error("CRITICAL: WAL async write timeout after 60 seconds");
-                return {false, -1, "Async write timeout after 60s", 0};
-            }
+            // CRITICAL BUG FIX (BUG-WAL-003): Wait indefinitely for CRITICAL tasks
+            // Previously: Had 60s timeout, but task continued running after timeout,
+            // causing data inconsistency (caller thinks write failed, but it succeeds later)
+            // Solution: CRITICAL tasks must complete - no timeout, wait indefinitely
+            // This ensures data consistency and prevents duplicate/lost transactions
+            return future.get();  // Block until complete - no timeout
 
         } catch (const std::exception& e) {
             failed_writes_++;

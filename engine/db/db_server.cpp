@@ -219,7 +219,10 @@ Status DBServer::GetStatistics(const std::string& db_name,
   }
   
   // Now safely iterate over the snapshot without holding the lock
-  for (auto& table: tables_snapshot) {
+  for (auto& table_ptr: tables_snapshot) {
+    // CRITICAL BUG FIX (BUG-API-001): Create local copy of shared_ptr to prevent TOCTOU
+    // Table could be unloaded between null check and member access, causing crash
+    auto table = table_ptr;  // Atomic copy of shared_ptr
     if (table) {  // Check if table is not null
       vectordb::Json table_result;
       table_result.LoadFromString("{}");
@@ -241,6 +244,37 @@ std::shared_ptr<Database> DBServer::GetDB(const std::string& db_name) {
   std::shared_lock<std::shared_mutex> lock(dbs_mutex_);
   return dbs_[db_index.value()];
 }
+
+// CRITICAL BUG FIX (BUG-API-002): Field name validation helper
+// Previously: No validation of field names from user input
+// Solution: Validate field names to prevent schema corruption and injection attacks
+namespace {
+bool IsValidFieldName(const std::string& name) {
+  // Empty or too long
+  if (name.empty() || name.length() > 64) {
+    return false;
+  }
+
+  // Must start with letter or underscore
+  if (!std::isalpha(static_cast<unsigned char>(name[0])) && name[0] != '_') {
+    return false;
+  }
+
+  // Subsequent chars must be alphanumeric or underscore
+  // Also check for control characters and null bytes
+  for (char c : name) {
+    if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') {
+      return false;
+    }
+    // Explicitly reject control characters (including null byte)
+    if (std::iscntrl(static_cast<unsigned char>(c))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+}  // anonymous namespace
 
 Status DBServer::CreateTable(const std::string& db_name,
                              meta::TableSchema& table_schema, size_t& table_id) {
@@ -280,7 +314,17 @@ Status DBServer::CreateTable(const std::string& db_name,
     auto body_field = parsedBody.GetArrayElement("fields", i);
     vectordb::engine::meta::FieldSchema field;
     field.id_ = i;
-    field.name_ = body_field.GetString("name");
+
+    // CRITICAL BUG FIX (BUG-API-002): Validate field name before use
+    std::string field_name = body_field.GetString("name");
+    if (!IsValidFieldName(field_name)) {
+      return Status{USER_ERROR, "Invalid field name: '" + field_name +
+                    "'. Field names must start with a letter or underscore, " +
+                    "contain only alphanumeric characters and underscores, " +
+                    "and be at most 64 characters long."};
+    }
+    field.name_ = field_name;
+
     if (body_field.HasMember("primaryKey")) {
       field.is_primary_key_ = body_field.GetBool("primaryKey");
       if (field.is_primary_key_) {

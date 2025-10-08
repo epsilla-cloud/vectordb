@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <atomic> // Include for std::atomic
 #include <cctype> // Include for ::tolower
+#include <cerrno> // Include for errno
+#include <climits> // Include for INT_MAX, INT_MIN
 #include <cstddef>
 #include <cstdlib> // Include for std::getenv and std::atoi
 #include <exception>
@@ -98,7 +100,26 @@ struct ConfigLimits {
   static int GetEnvInt(const char* env_name, int default_value, int min_value, int max_value) {
     const char* env_value = std::getenv(env_name);
     if (env_value != nullptr) {
-      int value = std::atoi(env_value);
+      // CRITICAL BUG FIX (BUG-CFG-002): Use strtol with error checking instead of atoi
+      // atoi() doesn't handle overflow - values like "999999999999" wrap around silently
+      char* end;
+      errno = 0;
+      long value_long = std::strtol(env_value, &end, 10);
+
+      // Check for conversion errors
+      if (errno == ERANGE || value_long > INT_MAX || value_long < INT_MIN) {
+        printf("[ConfigLimits] Warning: %s=%s out of range (overflow), using default %d\n",
+               env_name, env_value, default_value);
+        return default_value;
+      }
+
+      if (end == env_value || *end != '\0') {
+        printf("[ConfigLimits] Warning: %s=%s invalid integer, using default %d\n",
+               env_name, env_value, default_value);
+        return default_value;
+      }
+
+      int value = static_cast<int>(value_long);
       if (value >= min_value && value <= max_value) {
         return value;
       }

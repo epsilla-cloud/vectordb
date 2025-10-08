@@ -184,8 +184,15 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
     for (size_t i = 0; i < init_ids.size() && i < graph[navigation_point].size(); ++i) {
       // for (size_t i = 0; i < graph[navigation_point].size(); ++i) {
       // init_ids.push_back(graph[navigation_point][i]);
-      init_ids[i] = graph[navigation_point][i];
-      has_calculated_dist[init_ids[i]] = true;
+      node_t neighbor_id = graph[navigation_point][i];
+
+      // CRITICAL BUG FIX (BUG-IDX-002): Validate neighbor ID to prevent buffer overflow
+      if (neighbor_id >= static_cast<node_t>(ntotal)) {
+        continue;  // Skip invalid neighbor
+      }
+
+      init_ids[i] = neighbor_id;
+      has_calculated_dist[neighbor_id] = true;
       ++count;
     }
     while (count < buffer_size) {
@@ -297,8 +304,15 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
     for (size_t i = 0; i < init_ids.size() && i < graph[navigation_point].size(); ++i) {
       // for (size_t i = 0; i < graph[navigation_point].size(); ++i) {
       // init_ids.push_back(graph[navigation_point][i]);
-      init_ids[i] = graph[navigation_point][i];
-      has_calculated_dist[init_ids[i]] = true;
+      node_t neighbor_id = graph[navigation_point][i];
+
+      // CRITICAL BUG FIX (BUG-IDX-002): Validate neighbor ID to prevent buffer overflow
+      if (neighbor_id >= static_cast<node_t>(ntotal)) {
+        continue;  // Skip invalid neighbor
+      }
+
+      init_ids[i] = neighbor_id;
+      has_calculated_dist[neighbor_id] = true;
       ++count;
     }
     while (count < buffer_size) {
@@ -401,8 +415,15 @@ void NsgIndex::GetNeighbors(const VectorPtr query, std::vector<Neighbor>& resset
 
     // Get all neighbors
     for (size_t i = 0; i < init_ids.size() && i < graph[navigation_point].size(); ++i) {
-      init_ids[i] = graph[navigation_point][i];
-      has_calculated_dist[init_ids[i]] = true;
+      node_t neighbor_id = graph[navigation_point][i];
+
+      // CRITICAL BUG FIX (BUG-IDX-002): Validate neighbor ID to prevent buffer overflow
+      if (neighbor_id >= static_cast<node_t>(ntotal)) {
+        continue;  // Skip invalid neighbor
+      }
+
+      init_ids[i] = neighbor_id;
+      has_calculated_dist[neighbor_id] = true;
       ++count;
     }
     while (count < buffer_size) {

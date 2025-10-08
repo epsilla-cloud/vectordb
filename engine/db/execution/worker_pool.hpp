@@ -341,11 +341,18 @@ public:
             // CRITICAL FIX: For CRITICAL priority tasks (e.g., WAL writes), wait for space instead of rejecting
             // This prevents data loss due to queue saturation
             if (priority == TaskPriority::CRITICAL) {
-                // Wait for queue to have space (blocking behavior for critical tasks)
+                // ENHANCEMENT (BUG-EXE-001): Spurious wakeup handling
+                // The while loop correctly re-checks the condition after wait_for() returns,
+                // which handles spurious wakeups properly. The loop continues waiting if:
+                // 1. Queue is still full (tasks_.size() >= max_queue_size_)
+                // 2. Pool is not shutting down (!shutdown_)
+                // This is the correct pattern for condition variable usage.
                 while (tasks_.size() >= max_queue_size_ && !shutdown_) {
                     logger_.Warning("CRITICAL task waiting for queue space in pool '" + pool_name_ +
                                   "' (queue size: " + std::to_string(tasks_.size()) + ")");
                     // Wait with timeout to periodically check shutdown flag
+                    // Note: wait_for() may return due to timeout OR spurious wakeup OR actual notification
+                    // The while loop condition handles all cases correctly
                     condition_.wait_for(lock, std::chrono::milliseconds(100));
                 }
 
@@ -372,9 +379,16 @@ public:
                 size_t queue_size = tasks_.size();
                 stats_current_queue_size_.store(queue_size, std::memory_order_relaxed);
 
+                // CRITICAL BUG FIX (BUG-EXE-002): Reload queue_size in CAS loop
+                // Previously: Used stale queue_size value, missing actual peak if queue grew
+                // Solution: Reload queue_size in the loop to capture latest value
                 size_t peak = stats_peak_queue_size_.load(std::memory_order_relaxed);
                 while (queue_size > peak &&
-                       !stats_peak_queue_size_.compare_exchange_weak(peak, queue_size)) {}
+                       !stats_peak_queue_size_.compare_exchange_weak(peak, queue_size)) {
+                    // CAS failed: peak was updated by another thread
+                    // Reload current queue size to ensure we capture the true peak
+                    queue_size = tasks_.size();
+                }
             }
         }
 

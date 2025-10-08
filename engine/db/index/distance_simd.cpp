@@ -293,7 +293,9 @@ VECTORDB_PRAGMA_IMPRECISE_FUNCTION_END
 // reads 0 <= d < 4 floats as __m128
 static inline __m128 masked_read(int d, const float* x) {
     assert(0 <= d && d < 4);
-    ALIGNED(16) float buf[4] = {0, 0, 0, 0};
+    // CRITICAL BUG FIX (BUG-IDX-001): Use alignas to ensure proper alignment
+    // ALIGNED(16) macro may not guarantee alignment on all platforms
+    alignas(16) float buf[4] = {0, 0, 0, 0};
     switch (d) {
         case 3:
             buf[2] = x[2];
