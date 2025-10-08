@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 
 
 #ifdef __AVX2__
@@ -186,10 +187,9 @@ void exhaustive_L2sqr_blas_cmax_avx2(
     fvec_norms_L2sqr(x_norms.get(), x, d, nx);
 
     if (!y_norms) {
-        float* y_norms2 = new float[ny];
-        del2.reset(y_norms2);
-        fvec_norms_L2sqr(y_norms2, y, d, ny);
-        y_norms = y_norms2;
+        del2 = std::make_unique<float[]>(ny);
+        fvec_norms_L2sqr(del2.get(), y, d, ny);
+        y_norms = del2.get();
     }
 
     for (size_t i0 = 0; i0 < nx; i0 += bs_x) {

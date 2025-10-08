@@ -1,19 +1,10 @@
-FROM epsilla/base as builder
+FROM epsilla/base AS builder
 ADD ./ /vectordb
 WORKDIR /vectordb
 ENV OATPP_INSTALL_PATH=/vectordb/build/dependencies
 RUN scripts/install_oatpp_modules.sh
 RUN mkdir -p /vectordb/build && cd /vectordb/build && cmake .. && make && chmod +x vectordb && curl -o /usr/local/bin/geesefs -L https://github.com/yandex-cloud/geesefs/releases/latest/download/geesefs-linux-amd64 && \
     chmod +x /usr/local/bin/geesefs && /usr/local/bin/geesefs -v
-
-
-FROM epsilla/base
-ARG TARGETARCH
-ARG RELEASE_VERSION=latest
-ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
-COPY --from=builder /vectordb/build/vectordb /vectordb
-COPY --from=builder /usr/local/bin/geesefs   /usr/local/bin/geesefs
-
 
 FROM epsilla/base
 ARG TARGETARCH

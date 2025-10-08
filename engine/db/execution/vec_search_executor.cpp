@@ -1,9 +1,14 @@
 #include "db/execution/vec_search_executor.hpp"
+#include "utils/safe_memory_ops.hpp"
+#include "utils/memory_pool.hpp"
 
 #include <omp.h>
 
 #include <algorithm>
+#include <atomic>
 #include <numeric>
+#include <cstdlib>  // For std::getenv
+#include <cstdio>   // For fprintf
 
 #include "query/expr/expr.hpp"
 #include "utils/atomic_counter.hpp"
@@ -39,13 +44,15 @@ VecSearchExecutor::VecSearchExecutor(
     int64_t L_master,
     int64_t L_local,
     int64_t subsearch_iterations,
-    bool prefilter_enabled)
+    bool prefilter_enabled,
+    const std::string& vector_field_name)
     : total_indexed_vector_(ann_index->record_number_),
       dimension_(dimension),
       start_search_point_(start_search_point),
       offset_table_(offset_table),
       neighbor_list_(neighbor_list),
       vector_column_(vector_column),
+      vector_field_name_(vector_field_name),
       fstdistfunc_(fstdistfunc),
       dist_func_param_(dist_func_param),
       num_threads_(num_threads),
@@ -63,6 +70,53 @@ VecSearchExecutor::VecSearchExecutor(
       brute_force_queue_(BruteforceThreshold),
       prefilter_enabled_(prefilter_enabled) {
   ann_index_ = ann_index;
+  
+  // Initialize memory pool (singleton, only initialized once)
+  static bool memory_pool_initialized = false;
+  if (!memory_pool_initialized) {
+    utils::MemoryPoolConfig config;
+    config.initial_size = 128 * 1024 * 1024;  // 128MB
+    config.max_size = 1024 * 1024 * 1024;     // 1GB
+    config.enable_thread_cache = true;
+    config.enable_stats = true;
+    utils::MemoryPool::GetInstance().Initialize(config);
+    memory_pool_initialized = true;
+  }
+  
+  // Pre-allocate vectors to reduce runtime allocations
+  // These are already sized in the initializer list, but ensure capacity
+  search_result_.reserve(L_master_);
+  distance_.reserve(L_master_);
+  init_ids_.reserve(L_master_);
+  is_visited_.reserve(ann_index->record_number_);
+  set_L_.reserve((num_threads - 1) * L_local + L_master);
+  local_queues_sizes_.reserve(num_threads);
+  local_queues_starts_.reserve(num_threads);
+  if (brute_force_search_) {
+    brute_force_queue_.reserve(ann_index->record_number_);
+  }
+  
+  // Log thread configuration for debugging - only in debug builds or when explicitly enabled
+#ifdef VECTORDB_DEBUG_BUILD
+  static std::atomic<int> executor_count(0);
+  int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
+  printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld)\n",
+         executor_id, num_threads_, dimension_, total_indexed_vector_);
+#else
+  // In production, only log if explicitly enabled via environment variable
+  static bool log_enabled = std::getenv("VECTORDB_LOG_EXECUTOR") != nullptr;
+  if (log_enabled) {
+    static std::atomic<int> executor_count(0);
+    static std::atomic<int> log_count(0);
+    // Sample logging: only log every 100th instance to reduce overhead
+    if (log_count.fetch_add(1) % 100 == 0) {
+      int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
+      fprintf(stderr, "[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld) [SAMPLED]\n",
+              executor_id, num_threads_, dimension_, total_indexed_vector_);
+    }
+  }
+#endif
+  
   for (int q_i = 0; q_i < num_threads; ++q_i) {
     local_queues_starts_[q_i] = q_i * L_local;
   }
@@ -107,10 +161,16 @@ int64_t VecSearchExecutor::AddIntoQueue(
       return queue_capacity;
     }
   }
-  // Add into queue
-  memmove(reinterpret_cast<char *>(queue.data() + insert_loc + 1),
-          reinterpret_cast<char *>(queue.data() + insert_loc),
-          (queue_end - insert_loc) * sizeof(Candidate));
+  // Add into queue with bounds checking
+  size_t elements_to_move = queue_end - insert_loc;
+  if (elements_to_move > 0 && insert_loc + 1 + elements_to_move <= queue.size()) {
+    utils::SafeMemoryOps::SafeMemmove(
+        queue.data() + insert_loc + 1,
+        queue.data() + insert_loc,
+        elements_to_move,
+        queue.size() - insert_loc - 1,
+        queue.size() - insert_loc);
+  }
   queue[insert_loc] = cand;
   ++queue_size;
   return insert_loc - queue_start;
@@ -127,9 +187,15 @@ void VecSearchExecutor::AddIntoQueueAt(
   if (queue_size == queue_capacity) {
     --queue_size;
   }
-  memmove(reinterpret_cast<char *>(queue.data() + dest_index + 1),
-          reinterpret_cast<char *>(queue.data() + dest_index),
-          (queue_size - insert_index) * sizeof(Candidate));
+  size_t elements_to_move = queue_size - insert_index;
+  if (elements_to_move > 0 && dest_index + 1 + elements_to_move <= queue.size()) {
+    utils::SafeMemoryOps::SafeMemmove(
+        queue.data() + dest_index + 1,
+        queue.data() + dest_index,
+        elements_to_move,
+        queue.size() - dest_index - 1,
+        queue.size() - dest_index);
+  }
   queue[dest_index] = cand;
   ++queue_size;
 }
@@ -141,9 +207,15 @@ void VecSearchExecutor::InsertOneElementAt(
     const int64_t queue_start,
     const int64_t queue_size) {
   const int64_t dest_index = queue_start + insert_index;
-  memmove(reinterpret_cast<char *>(queue.data() + dest_index + 1),
-          reinterpret_cast<char *>(queue.data() + dest_index),
-          (queue_size - insert_index - 1) * sizeof(Candidate));
+  size_t elements_to_move = queue_size - insert_index - 1;
+  if (elements_to_move > 0 && dest_index + 1 + elements_to_move <= queue.size()) {
+    utils::SafeMemoryOps::SafeMemmove(
+        queue.data() + dest_index + 1,
+        queue.data() + dest_index,
+        elements_to_move,
+        queue.size() - dest_index - 1,
+        queue.size() - dest_index);
+  }
   queue[dest_index] = cand;
 }
 
@@ -397,8 +469,21 @@ int64_t VecSearchExecutor::ExpandOneCandidate(
 
   int64_t nk = local_queue_capacity;
 
+  // Boundary check: ensure cand_id is valid and offset_table_[cand_id + 1] exists
+  if (cand_id < 0 || cand_id >= total_indexed_vector_) {
+    // Invalid candidate ID, cannot expand
+    local_count_computation += tmp_count_computation;
+    return nk;
+  }
+
   for (int64_t e_i = offset_table_[cand_id]; e_i < offset_table_[cand_id + 1]; ++e_i) {
     int64_t nb_id = neighbor_list_[e_i];
+
+    // Boundary check: ensure neighbor ID is valid
+    if (nb_id < 0 || nb_id >= total_indexed_vector_) {
+      continue;
+    }
+
     {  // Sequential edition
       if (is_visited[nb_id]) {
         continue;
@@ -487,18 +572,34 @@ void VecSearchExecutor::InitializeSetLPara(
 void VecSearchExecutor::PrepareInitIds(
     std::vector<int64_t> &init_ids,
     const int64_t L) const {
+  // Boundary check: ensure we have valid data and navigation point
+  if (total_indexed_vector_ == 0) {
+    // No vectors indexed, cannot prepare init IDs
+    return;
+  }
+
   std::vector<bool> is_selected(total_indexed_vector_);
   int64_t init_ids_end = 0;
-  for (
-      int64_t e_i = offset_table_[start_search_point_];
-      e_i < offset_table_[start_search_point_ + 1] && init_ids_end < L;
-      ++e_i) {
-    int64_t v_id = neighbor_list_[e_i];
-    if (is_selected[v_id]) {
-      continue;
+
+  // Boundary check: ensure offset_table_[start_search_point_ + 1] exists
+  // offset_table_ size is record_number_ + 1, so we need start_search_point_ + 1 < record_number_ + 1
+  // which means start_search_point_ < record_number_ (i.e., < total_indexed_vector_)
+  if (start_search_point_ < total_indexed_vector_) {
+    for (
+        int64_t e_i = offset_table_[start_search_point_];
+        e_i < offset_table_[start_search_point_ + 1] && init_ids_end < L;
+        ++e_i) {
+      int64_t v_id = neighbor_list_[e_i];
+      // Additional safety check for valid neighbor ID
+      if (v_id < 0 || v_id >= total_indexed_vector_) {
+        continue;
+      }
+      if (is_selected[v_id]) {
+        continue;
+      }
+      is_selected[v_id] = true;
+      init_ids[init_ids_end++] = v_id;
     }
-    is_selected[v_id] = true;
-    init_ids[init_ids_end++] = v_id;
   }
 
   int64_t tmp_id = start_search_point_ + 1;
@@ -720,28 +821,72 @@ bool VecSearchExecutor::BruteForceSearch(
     const int64_t end,
     const ConcurrentBitset &deleted,
     vectordb::query::expr::ExprEvaluator &expr_evaluator,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const int root_node_index) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
-  float dist;
+
+  // Determine whether to use indexed data or table segment data
+  // When total_indexed_vector_ == 0, the index hasn't been built yet,
+  // so we need to use table_segment's vector data instead of vector_column_
+  bool use_table_segment_data = (total_indexed_vector_ == 0 && !vector_field_name_.empty());
+
+  // Use thread-local computation to avoid race conditions
   if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
-#pragma omp parallel for
+    DenseVectorPtr data_ptr;
+
+    if (use_table_segment_data) {
+      // Use TableSegment's vector data when index not built
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;  // Field not found
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->vector_tables_.size()) {
+        return false;  // Invalid field offset
+      }
+      data_ptr = table_segment->vector_tables_[field_offset]->GetData();
+    } else {
+      // Use ANNGraphSegment's vector data (indexed data)
+      data_ptr = std::get<DenseVectorPtr>(vector_column_);
+    }
+
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-          std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+          data_ptr + dimension_ * v_id,
           std::get<DenseVectorPtr>(query_data),
           dist_func_param_);
+      // Direct array write is safe with static scheduling
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   } else {
-#pragma omp parallel for
+    VariableLenAttrColumnContainer* data_container;
+
+    if (use_table_segment_data) {
+      // Use TableSegment's sparse vector data when index not built
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;  // Field not found
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->var_len_attr_table_.size()) {
+        return false;  // Invalid field offset
+      }
+      data_container = &table_segment->var_len_attr_table_[field_offset];
+    } else {
+      // Use ANNGraphSegment's sparse vector data (indexed data)
+      data_container = std::get<VariableLenAttrColumnContainer *>(vector_column_);
+    }
+
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
-      auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+      auto &vecData = data_container->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
           *std::get<SparseVectorPtr>(vecData),
           *std::get<SparseVectorPtr>(query_data));
+      // Direct array write is safe with static scheduling
       brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
     }
   }
@@ -773,35 +918,73 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
     const int64_t end,
     const ConcurrentBitset &deleted,
     vectordb::query::expr::ExprEvaluator &expr_evaluator,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const int root_node_index) {
   if (brute_force_queue_.size() < end - start) {
     brute_force_queue_.resize(end - start);
   }
-  float dist;
+
+  // Determine whether to use indexed data or table segment data
+  bool use_table_segment_data = (total_indexed_vector_ == 0 && !vector_field_name_.empty());
+
+  // Use thread-local computation with static scheduling to avoid race conditions
   if (std::holds_alternative<DenseVectorPtr>(vector_column_)) {
-#pragma omp parallel for
+    DenseVectorPtr data_ptr;
+
+    if (use_table_segment_data) {
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->vector_tables_.size()) {
+        return false;
+      }
+      data_ptr = table_segment->vector_tables_[field_offset]->GetData();
+    } else {
+      data_ptr = std::get<DenseVectorPtr>(vector_column_);
+    }
+
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
         float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
-            std::get<DenseVectorPtr>(vector_column_) + dimension_ * v_id,
+            data_ptr + dimension_ * v_id,
             std::get<DenseVectorPtr>(query_data),
             dist_func_param_);
+        // Direct array write is safe with static scheduling
         brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
       } else {
         brute_force_queue_[v_id - start] = Candidate(v_id, std::numeric_limits<float>::max(), true);
       }
     }
   } else {
-#pragma omp parallel for
+    VariableLenAttrColumnContainer* data_container;
+
+    if (use_table_segment_data) {
+      auto field_offset_it = table_segment->field_name_mem_offset_map_.find(vector_field_name_);
+      if (field_offset_it == table_segment->field_name_mem_offset_map_.end()) {
+        return false;
+      }
+      size_t field_offset = field_offset_it->second;
+      if (field_offset >= table_segment->var_len_attr_table_.size()) {
+        return false;
+      }
+      data_container = &table_segment->var_len_attr_table_[field_offset];
+    } else {
+      data_container = std::get<VariableLenAttrColumnContainer *>(vector_column_);
+    }
+
+    #pragma omp parallel for schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
-        auto &vecData = std::get<VariableLenAttrColumnContainer *>(vector_column_)->at(v_id);
+        auto &vecData = data_container->at(v_id);
         float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
             *std::get<SparseVectorPtr>(vecData),
             *std::get<SparseVectorPtr>(query_data));
+        // Direct array write is safe with static scheduling
         brute_force_queue_[v_id - start] = Candidate(v_id, dist, false);
       } else {
         brute_force_queue_[v_id - start] = Candidate(v_id, std::numeric_limits<float>::max(), true);
@@ -832,7 +1015,7 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
 
 Status VecSearchExecutor::Search(
     const VectorPtr query_data,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const size_t limit,
     std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
     int64_t &result_size) {
@@ -843,7 +1026,7 @@ Status VecSearchExecutor::Search(
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
       table_segment->var_len_attr_num_,
-      table_segment->attribute_table_,
+      table_segment->attribute_table_->GetData(),
       table_segment->var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
   // currently the max returned result is L_local_
@@ -852,15 +1035,41 @@ Status VecSearchExecutor::Search(
   //           << " indexed_vector: " << total_indexed_vector_ << ", total vector: "
   //           << total_vector << std::endl;
 
+  // CRITICAL FIX: If total_vector > total_indexed_vector_, the index is out of date
+  // This happens when data is inserted but rebuild hasn't completed yet
+  bool use_brute_force = brute_force_search_ && (total_vector <= total_indexed_vector_);
+
+  // Special case: if no vectors are indexed yet, use brute force search
+  // This provides results even when the index hasn't been built yet
+  if (total_indexed_vector_ == 0 && total_vector > 0 && !vector_field_name_.empty()) {
+    fprintf(stderr, "[VecSearchExecutor] Using brute force fallback: total_indexed=%ld, total_vector=%ld, field=%s\n",
+            total_indexed_vector_, total_vector, vector_field_name_.c_str());
+    BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+    result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
+    fprintf(stderr, "[VecSearchExecutor] Brute force returned %ld results\n", result_size);
+    for (int64_t k_i = 0; k_i < result_size; ++k_i) {
+      search_result_[k_i] = brute_force_queue_[k_i].id_;
+      distance_[k_i] = brute_force_queue_[k_i].distance_;
+    }
+    return Status::OK();
+  }
+
+  // If total_indexed_vector_ == 0 but vector_field_name_ is empty, we can't do brute force
+  // This shouldn't happen in normal operation, but handle it gracefully
+  if (total_indexed_vector_ == 0) {
+    result_size = 0;
+    return Status::OK();
+  }
+
   if (prefilter_enabled_) {
-    PreFilterBruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+    PreFilterBruteForceSearch(query_data, 0, std::min(total_vector, total_indexed_vector_), deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       distance_[k_i] = brute_force_queue_[k_i].distance_;
     }
-  } else if (brute_force_search_) {
-    BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
+  } else if (use_brute_force) {
+    BruteForceSearch(query_data, 0, total_indexed_vector_, deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
@@ -870,6 +1079,8 @@ Status VecSearchExecutor::Search(
     // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
     // create circular dependency)
     auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
+    fprintf(stderr, "[VecSearchExecutor] Using NSG search: total_indexed=%ld, total_vector=%ld, searchLimit=%zu, L_master=%ld, L_local=%ld\n",
+            total_indexed_vector_, total_vector, searchLimit, L_master_, L_local_);
     SearchImpl(
         query_data,
         searchLimit,
@@ -883,6 +1094,8 @@ Status VecSearchExecutor::Search(
         is_visited_,
         subsearch_iterations_);
     if (total_vector > total_indexed_vector_) {
+      fprintf(stderr, "[VecSearchExecutor] Index out of date: adding brute force for vectors [%ld, %ld)\n",
+              total_indexed_vector_, total_vector);
       // Need to brute force search the newly added but haven't been indexed vectors.
       BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
       // Merge the brute force results into the search result.
@@ -936,7 +1149,7 @@ Status VecSearchExecutor::Search(
 
 Status VecSearchExecutor::SearchByAttribute(
     meta::TableSchema &table_schema,
-    vectordb::engine::TableSegmentMVP *table_segment,
+    vectordb::engine::TableSegment *table_segment,
     const size_t skip,
     const size_t raw_limit,
     vectordb::Json &primary_keys,
@@ -951,7 +1164,7 @@ Status VecSearchExecutor::SearchByAttribute(
       table_segment->field_name_mem_offset_map_,
       table_segment->primitive_offset_,
       table_segment->var_len_attr_num_,
-      table_segment->attribute_table_,
+      table_segment->attribute_table_->GetData(),
       table_segment->var_len_attr_table_);
   int filter_root_index = filter_nodes.size() - 1;
   result_size = 0;

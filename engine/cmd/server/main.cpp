@@ -8,6 +8,7 @@
 
 #include "server/server.hpp"
 #include "logger/logger.hpp"
+#include "db/config_manager.hpp"
 
 void print_help(const std::string &app_name) {
   std::cout << std::endl
@@ -28,6 +29,10 @@ void print_banner() {
 
 int main(int argc, char *argv[]) {
   print_banner();
+
+  // Initialize configuration manager with default values
+  vectordb::engine::db::ConfigManager::Initialize();
+
   vectordb::engine::Logger logger;
 
   static struct option long_options[] = {{"conf_file", required_argument, nullptr, 'c'},

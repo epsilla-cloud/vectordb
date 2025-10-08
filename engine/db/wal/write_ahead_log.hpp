@@ -5,12 +5,13 @@
 #include <unordered_map>
 
 #include <chrono>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 
 #include "db/catalog/meta_types.hpp"
-#include "db/table_segment_mvp.hpp"
+#include "db/table_segment.hpp"
 #include "utils/atomic_counter.hpp"
 #include "utils/common_util.hpp"
 #include "utils/json.hpp"
@@ -78,22 +79,37 @@ class WriteAheadLog {
     if (now - last_rotation_time_ > ROTATION_INTERVAL) {
       RotateFile();
     }
-    int64_t next = global_counter_.IncrementAndGet();
+
+    // CRITICAL FIX: Increment counter AFTER successful write, not before
+    // This prevents ID holes when fsync fails
+    int64_t next = global_counter_.Get() + 1;
+
 #ifdef __APPLE__
     fprintf(file_, "%lld %d %s\n", next, type, entry.c_str());
 #else
     fprintf(file_, "%ld %d %s\n", next, type, entry.c_str());
 #endif
     fflush(file_);
-    // Tradeoff of data consistency. We use fflush for now.
-    // fsync(fileno(file_));
+
+    // CRITICAL FIX: Ensure data is written to disk BEFORE incrementing counter
+    // This guarantees durability and prevents data loss
+    if (fsync(fileno(file_)) != 0) {
+      std::string error_msg = "Critical: WAL fsync failed: " + std::string(strerror(errno));
+      logger_.Error(error_msg);
+      // For critical operations, throw exception to prevent data loss
+      // Counter is NOT incremented, so retry will use the same ID
+      throw std::runtime_error(error_msg);
+    }
+
+    // Only increment counter after successful fsync
+    global_counter_.IncrementAndGet();
     return next;
   }
 
   void Replay(
     meta::TableSchema &table_schema,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    std::shared_ptr<TableSegmentMVP> segment,
+    std::shared_ptr<TableSegment> segment,
     std::unordered_map<std::string, std::string> &headers
   ) {
     std::vector<std::filesystem::path> files;
@@ -175,6 +191,17 @@ class WriteAheadLog {
     enabled_ = enabled;
   }
 
+  void Flush() {
+    if (file_ != nullptr) {
+      fflush(file_);
+      // Force sync to disk - critical for data safety
+      if (fsync(fileno(file_)) != 0) {
+        logger_.Error("Critical: WAL fsync failed during flush: " + std::string(strerror(errno)));
+        throw std::runtime_error("WAL flush failed: " + std::string(strerror(errno)));
+      }
+    }
+  }
+
   void SetLeader(bool is_leader) {
     is_leader_ = is_leader;
     if (is_leader) {
@@ -187,7 +214,7 @@ class WriteAheadLog {
   void ApplyEntry(
     meta::TableSchema &table_schema,
     std::unordered_map<std::string, meta::FieldType>& field_name_type_map,
-    std::shared_ptr<TableSegmentMVP> segment,
+    std::shared_ptr<TableSegment> segment,
     int64_t global_id,
     LogEntryType &type,
     std::string &content,

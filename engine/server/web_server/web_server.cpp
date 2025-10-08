@@ -46,6 +46,10 @@ Status WebServer::StartService() {
     user_controller->db_server->SetLeader(is_leader_);
     auto router = components.http_router.getObject();
     router->addController(user_controller);
+    
+    // Add Swagger UI controller for API documentation (after other controllers)
+    auto swagger_controller = components.createSwaggerController(user_controller);
+    router->addController(swagger_controller);
 
     /* Get connection handler component */
     auto connection_handler =

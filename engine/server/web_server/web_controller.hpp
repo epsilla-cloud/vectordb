@@ -9,22 +9,28 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <thread>
+#include <cstdlib>
 
 #include "db/catalog/basic_meta_impl.hpp"
 #include "db/catalog/meta.hpp"
-#include "db/db_mvp.hpp"
+#include "db/database.hpp"
 #include "db/db_server.hpp"
-#include "db/table_mvp.hpp"
+#include "db/table.hpp"
 #include "db/vector.hpp"
 #include "server/web_server/dto/db_dto.hpp"
 #include "server/web_server/dto/status_dto.hpp"
 #include "server/web_server/handler/web_request_handler.hpp"
 #include "server/web_server/utils/util.hpp"
 #include "utils/error.hpp"
+#include "utils/path_validator.hpp"
 #include "utils/json.hpp"
 #include "utils/status.hpp"
 #include "utils/constants.hpp"
 #include "config/config.hpp"
+#include "db/compaction_manager.hpp"
+#include "db/memory_pool_manager.hpp"
+#include "db/batch_insertion_optimizer.hpp"
 
 #define WEB_LOG_PREFIX "[Web] "
 
@@ -35,7 +41,10 @@ extern Config globalConfig;
 namespace server {
 namespace web {
 
-constexpr const int64_t InitTableScale = 150000;
+// Use configurable value instead of hardcoded 150000
+inline int64_t GetInitTableScale() {
+  return globalConfig.InitialTableCapacity.load(std::memory_order_acquire);
+}
 
 class WebController : public oatpp::web::server::api::ApiController {
  public:
@@ -51,6 +60,19 @@ class WebController : public oatpp::web::server::api::ApiController {
   }
 
   std::shared_ptr<vectordb::engine::DBServer> db_server;
+  std::shared_ptr<vectordb::engine::db::BatchInsertionOptimizer> batch_optimizer;
+
+  // Initialize batch optimizer
+  void InitBatchOptimizer() {
+    if (!batch_optimizer) {
+      vectordb::engine::db::BatchInsertionConfig config;
+      config.max_batch_size = 1000;
+      config.worker_threads = 4;
+      config.enable_async_wal = true;
+      config.enable_simd = true;
+      batch_optimizer = std::make_shared<vectordb::engine::db::BatchInsertionOptimizer>(config);
+    }
+  }
 
 /**
  *  Begin ENDPOINTs generation ('ApiController' codegen)
@@ -115,11 +137,36 @@ class WebController : public oatpp::web::server::api::ApiController {
       headers[MISTRALAI_KEY_HEADER] = headerValue->c_str();
     }
 
-    std::string db_path = parsedBody.GetString("path");
-    std::string db_name = parsedBody.GetString("name");
-    int64_t init_table_scale = InitTableScale;
+    std::string raw_db_path = parsedBody.GetString("path");
+    std::string raw_db_name = parsedBody.GetString("name");
+    
+    // Validate and sanitize the database path
+    std::string db_path;
+    vectordb::Status validation_status = vectordb::engine::PathValidator::ValidatePath(raw_db_path, db_path, false);
+    if (!validation_status.ok()) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid database path: " + validation_status.message();
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    
+    // Validate and sanitize the database name
+    std::string db_name;
+    validation_status = vectordb::engine::PathValidator::ValidateDbName(raw_db_name, db_name);
+    if (!validation_status.ok()) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid database name: " + validation_status.message();
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    
+    int64_t init_table_scale = GetInitTableScale();
     if (parsedBody.HasMember("vectorScale")) {
       init_table_scale = parsedBody.GetInt("vectorScale");
+      // Validate vector scale range
+      if (init_table_scale < 1 || init_table_scale > 100000000) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid vector scale: must be between 1 and 100,000,000";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
     }
     bool wal_enabled = true;
     if (parsedBody.HasMember("walEnabled")) {
@@ -257,7 +304,17 @@ class WebController : public oatpp::web::server::api::ApiController {
       dto->message = "Missing table name in your payload.";
       return createDtoResponse(Status::CODE_400, dto);
     }
-    table_schema.name_ = parsedBody.GetString("name");
+    
+    // Validate and sanitize table name
+    std::string raw_table_name = parsedBody.GetString("name");
+    std::string sanitized_table_name;
+    vectordb::Status validation_status = vectordb::engine::PathValidator::ValidateTableName(raw_table_name, sanitized_table_name);
+    if (!validation_status.ok()) {
+      dto->statusCode = Status::CODE_400.code;
+      dto->message = "Invalid table name: " + validation_status.message();
+      return createDtoResponse(Status::CODE_400, dto);
+    }
+    table_schema.name_ = sanitized_table_name;
 
     if (!parsedBody.HasMember("fields")) {
       dto->statusCode = Status::CODE_400.code;
@@ -270,7 +327,17 @@ class WebController : public oatpp::web::server::api::ApiController {
       auto body_field = parsedBody.GetArrayElement("fields", i);
       vectordb::engine::meta::FieldSchema field;
       field.id_ = i;
-      field.name_ = body_field.GetString("name");
+      
+      // Validate and sanitize field name
+      std::string raw_field_name = body_field.GetString("name");
+      std::string sanitized_field_name;
+      validation_status = vectordb::engine::PathValidator::ValidateFieldName(raw_field_name, sanitized_field_name);
+      if (!validation_status.ok()) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid field name '" + raw_field_name + "': " + validation_status.message();
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+      field.name_ = sanitized_field_name;
       if (body_field.HasMember("primaryKey")) {
         field.is_primary_key_ = body_field.GetBool("primaryKey");
         if (field.is_primary_key_) {
@@ -431,6 +498,33 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, res_dto);
   }
 
+  // Add RESTful endpoint for listing tables
+  ADD_CORS(ListTablesREST)
+  
+  ENDPOINT("GET", "/api/{db_name}/schema/tables", ListTablesREST, PATH(String, db_name, "db_name")) {
+    auto dto = TableListDto::createShared();
+    auto res_dto = TableListDto::createShared();
+
+    std::vector<std::string> table_names;
+    vectordb::Status status = db_server->ListTables(db_name, table_names);
+
+    if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+
+    res_dto->statusCode = Status::CODE_200.code;
+    res_dto->message = "";
+    res_dto->result = {};
+    
+    // Return table names directly (similar to the original endpoint but with simplified response)
+    for (const auto& name : table_names) {
+      res_dto->result->push_back(name);
+    }
+    return createDtoResponse(Status::CODE_200, res_dto);
+  }
+
   ADD_CORS(InsertRecords)
 
   ENDPOINT("POST", "/api/{db_name}/data/insert", InsertRecords,
@@ -503,7 +597,117 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.LoadFromString("{\"result\": " + insert_status.message() + "}");
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "Insert data to " + table_name + " successfully.");
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(InsertRecordsOptimized)
+
+  ENDPOINT("POST", "/api/{db_name}/data/insert_optimized", InsertRecordsOptimized,
+           PATH(String, db_name, "db_name"),
+           BODY_STRING(String, body),
+           REQUEST(std::shared_ptr<IncomingRequest>, request)) {
+    auto status_dto = StatusDto::createShared();
+
+    // Initialize batch optimizer if needed
+    InitBatchOptimizer();
+
+    vectordb::Json parsedBody;
+    auto valid = parsedBody.LoadFromString(body);
+    if (!valid) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "Invalid payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    if (!parsedBody.HasMember("table")) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "table is missing in your payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    if (!parsedBody.HasMember("records")) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "records is missing in your payload.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    std::string table_name = parsedBody.GetString("table");
+
+    // Get table dimension (assuming we can get it from db_server)
+    // For now, we'll extract it from the first record
+    auto records = parsedBody.GetArray("records");
+    if (records.GetSize() == 0) {
+      status_dto->statusCode = Status::CODE_400.code;
+      status_dto->message = "No records to insert.";
+      return createDtoResponse(Status::CODE_400, status_dto);
+    }
+
+    auto first_record = records.GetArrayElement(0);
+    auto vec_array = first_record.GetArray("vec");
+    size_t dimension = vec_array.GetSize();
+
+    // Process with batch optimizer
+    auto start_time = std::chrono::high_resolution_clock::now();
+    auto optimized_batches = batch_optimizer->ProcessInsertionRequest(parsedBody, dimension);
+
+    // Insert optimized batches
+    size_t total_inserted = 0;
+    for (const auto& batch : optimized_batches) {
+      // Convert batch to JSON format expected by db_server
+      vectordb::Json batch_data;
+      batch_data.LoadFromString("[]");
+
+      for (size_t i = 0; i < batch.count; ++i) {
+        vectordb::Json record;
+        record.SetInt("id", batch.ids[i]);
+
+        std::vector<vectordb::Json> vec_array;
+        vec_array.reserve(batch.dimension);
+        for (size_t j = 0; j < batch.dimension; ++j) {
+          vectordb::Json val;
+          val.LoadFromString(std::to_string(batch.vectors[i * batch.dimension + j]));
+          vec_array.push_back(val);
+        }
+        record.SetArray("vec", vec_array);
+
+        batch_data.AddObjectToArray(record);
+      }
+
+      // Collect headers
+      std::unordered_map<std::string, std::string> headers;
+
+      // Insert batch
+      bool upsert = parsedBody.HasMember("upsert") ? parsedBody.GetBool("upsert") : false;
+      vectordb::Status insert_status = db_server->Insert(db_name, table_name, batch_data, headers, upsert);
+
+      if (!insert_status.ok()) {
+        status_dto->statusCode = Status::CODE_500.code;
+        status_dto->message = insert_status.message();
+        return createDtoResponse(Status::CODE_500, status_dto);
+      }
+
+      total_inserted += batch.count;
+    }
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        end_time - start_time).count();
+
+    // Get metrics
+    auto metrics = batch_optimizer->GetMetrics();
+
+    vectordb::Json response;
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Optimized insert completed successfully");
+    response.SetInt("inserted", total_inserted);
+    response.SetInt("duration_ms", duration_ms);
+    response.SetDouble("vectors_per_second", metrics.avg_vectors_per_second);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(InsertRecordsPrepare)
@@ -549,7 +753,9 @@ class WebController : public oatpp::web::server::api::ApiController {
     response.SetInt("statusCode", Status::CODE_200.code);
     response.SetString("message", "");
     response.SetObject("result", result);
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(DeleteRecordsByPK)
@@ -575,9 +781,11 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     vectordb::Json pks;
     pks.LoadFromString("[]");
+    size_t pk_count = 0;
     if (requestBody.HasMember("primaryKeys")) {
       pks = requestBody.GetArray("primaryKeys");
-      if (pks.GetSize() == 0) {
+      pk_count = pks.GetSize();
+      if (pk_count == 0) {
         dto->statusCode = Status::CODE_400.code;
         dto->message = "If the primaryKeys field is provided, it cannot be empty.";
         return createDtoResponse(Status::CODE_400, dto);
@@ -595,14 +803,36 @@ class WebController : public oatpp::web::server::api::ApiController {
     }
 
     auto table = requestBody.GetString("table");
+    
+    // Log deletion request details
+    std::string log_msg = "[WEB] Starting deletion request for db=" + db_name + 
+                         ", table=" + table;
+    if (pk_count > 0) {
+      log_msg += ", primaryKeys=" + std::to_string(pk_count) + " items";
+    }
+    if (!filter.empty()) {
+      log_msg += ", filter=[" + filter + "]";
+    }
+    OATPP_LOGD("WebController", "%s", log_msg.c_str());
+    
     auto status = db_server->Delete(db_name, table, pks, filter);
     if (status.ok()) {
+      // Log successful deletion
+      OATPP_LOGD("WebController", "[WEB] Deletion completed successfully for db=%s, table=%s, result=%s", 
+                 db_name->c_str(), table.c_str(), status.message().c_str());
+      
       vectordb::Json response;
       response.LoadFromString("{\"result\": " + status.message() + "}");
       response.SetInt("statusCode", Status::CODE_200.code);
       response.SetString("message", "Delete data from " + table + " successfully.");
-      return createResponse(Status::CODE_200, response.DumpToString());
+      auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
     } else {
+      // Log deletion failure
+      OATPP_LOGE("WebController", "[WEB] Deletion failed for db=%s, table=%s, error=%s", 
+                 db_name->c_str(), table.c_str(), status.message().c_str());
+      
       dto->statusCode = Status::CODE_400.code;
       dto->message = status.message();
       return createDtoResponse(Status::CODE_400, dto);
@@ -638,7 +868,66 @@ class WebController : public oatpp::web::server::api::ApiController {
       return createDtoResponse(Status::CODE_500, status_dto);
     }
 
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+  
+  // Get record count for database and/or table
+  ADD_CORS(GetRecordCount)
+  
+  ENDPOINT("GET", "/api/{db_name}/records/count", GetRecordCount,
+           PATH(String, db_name, "db_name"),
+           QUERY(String, table_name, "table", "")) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    
+    vectordb::Status count_status = db_server->GetRecordCount(
+        db_name, 
+        table_name ? std::string(table_name) : "", 
+        response);
+
+    if (!count_status.ok()) {
+      auto status_dto = StatusDto::createShared();
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = count_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Success");
+    
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+  
+  // Get record count for all databases
+  ADD_CORS(GetAllRecordCount)
+  
+  ENDPOINT("GET", "/api/records/count", GetAllRecordCount,
+           QUERY(String, table_name, "table", "")) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+    
+    vectordb::Status count_status = db_server->GetRecordCount(
+        "", 
+        table_name ? std::string(table_name) : "", 
+        response);
+
+    if (!count_status.ok()) {
+      auto status_dto = StatusDto::createShared();
+      status_dto->statusCode = Status::CODE_500.code;
+      status_dto->message = count_status.message();
+      return createDtoResponse(Status::CODE_500, status_dto);
+    }
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Success");
+    
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(Query)
@@ -860,7 +1149,9 @@ class WebController : public oatpp::web::server::api::ApiController {
       final_result.SetObject("facets", facets);
       response.SetObject("result", final_result);
     }
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(Project)
@@ -959,7 +1250,9 @@ class WebController : public oatpp::web::server::api::ApiController {
       response.SetObject("result", final_result);
     }
     
-    return createResponse(Status::CODE_200, response.DumpToString());
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
   ADD_CORS(Rebuild)
@@ -976,6 +1269,89 @@ class WebController : public oatpp::web::server::api::ApiController {
 
     dto->statusCode = Status::CODE_200.code;
     dto->message = "Rebuild finished!";
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(Compact)
+
+  ENDPOINT("POST", "/api/{db_name}/compact", Compact, PATH(String, db_name, "db_name"), BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    
+    // Handle empty body
+    if (body->empty()) {
+      parsedBody.LoadFromString("{}");
+    } else {
+      auto valid = parsedBody.LoadFromString(body);
+      if (!valid) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid JSON payload.";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    std::string table_name = "";
+    if (parsedBody.HasMember("tableName")) {
+      table_name = parsedBody.GetString("tableName");
+    }
+    
+    double threshold = 0.3;  // Default 30% deleted records threshold
+    if (parsedBody.HasMember("threshold")) {
+      threshold = parsedBody.GetDouble("threshold");
+      if (threshold < 0.0 || threshold > 1.0) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Threshold must be between 0.0 and 1.0";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    vectordb::Status status = db_server->Compact(db_name, table_name, threshold);
+    if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = status.message();
+    return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(CompactAll)
+
+  ENDPOINT("POST", "/api/compact", CompactAll, BODY_STRING(String, body)) {
+    vectordb::Json parsedBody;
+    auto dto = StatusDto::createShared();
+    
+    // Handle empty body
+    if (body->empty()) {
+      parsedBody.LoadFromString("{}");
+    } else {
+      auto valid = parsedBody.LoadFromString(body);
+      if (!valid) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid JSON payload.";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    double threshold = 0.3;  // Default 30% deleted records threshold
+    if (parsedBody.HasMember("threshold")) {
+      threshold = parsedBody.GetDouble("threshold");
+      if (threshold < 0.0 || threshold > 1.0) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Threshold must be between 0.0 and 1.0";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+    }
+    
+    vectordb::Status status = db_server->Compact("", "", threshold);
+    if (!status.ok()) {
+      dto->statusCode = Status::CODE_500.code;
+      dto->message = status.message();
+      return createDtoResponse(Status::CODE_500, dto);
+    }
+    dto->statusCode = Status::CODE_200.code;
+    dto->message = status.message();
     return createDtoResponse(Status::CODE_200, dto);
   }
 
@@ -999,8 +1375,84 @@ class WebController : public oatpp::web::server::api::ApiController {
     return createDtoResponse(Status::CODE_200, dto);
   }
 
+  ADD_CORS(GetConfig)
+
+  ENDPOINT_INFO(GetConfig) {
+    info->summary = "Get Runtime Configuration";
+    info->description = "Retrieve the current runtime configuration of VectorDB including thread settings, queue sizes, deletion mode, WAL configuration, and environment variables";
+    info->addResponse<Object<StatusDto>>(Status::CODE_200, "application/json", "Configuration retrieved successfully");
+    info->addTag("Configuration");
+  }
+  ENDPOINT("GET", "api/config", GetConfig) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    // Get runtime configuration
+    vectordb::Json config = globalConfig.getConfigAsJson();
+
+    // Add environment variable information
+    vectordb::Json envVars;
+    envVars.LoadFromString("{}");
+
+    // Check and add environment variables
+    const char* soft_delete_env = std::getenv("SOFT_DELETE");
+    envVars.SetString("SOFT_DELETE", soft_delete_env ? soft_delete_env : "(not set)");
+
+    const char* wal_interval_env = std::getenv("WAL_FLUSH_INTERVAL");
+    envVars.SetString("WAL_FLUSH_INTERVAL", wal_interval_env ? wal_interval_env : "(not set)");
+
+    const char* wal_auto_env = std::getenv("WAL_AUTO_FLUSH");
+    envVars.SetString("WAL_AUTO_FLUSH", wal_auto_env ? wal_auto_env : "(not set)");
+
+    const char* threads_env = std::getenv("EPSILLA_INTRA_QUERY_THREADS");
+    envVars.SetString("EPSILLA_INTRA_QUERY_THREADS", threads_env ? threads_env : "(not set)");
+
+    // Build response
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Get configuration successfully.");
+    response.SetObject("config", config);
+    response.SetObject("environmentVariables", envVars);
+
+    // Add hardware info
+    vectordb::Json hardwareInfo;
+    hardwareInfo.LoadFromString("{}");
+    unsigned int hw_threads = std::thread::hardware_concurrency();
+    hardwareInfo.SetInt("hardwareThreads", hw_threads ? hw_threads : 4);
+    response.SetObject("hardware", hardwareInfo);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(GetMemoryStats)
+
+  ENDPOINT_INFO(GetMemoryStats) {
+    info->summary = "Get Memory Statistics";
+    info->description = "Returns current memory usage statistics and allocation strategy";
+  }
+
+  ENDPOINT("GET", "api/memory/stats", GetMemoryStats) {
+    // Get memory statistics from the pool manager
+    auto& memoryManager = vectordb::engine::MemoryPoolManager::GetInstance();
+    vectordb::Json response = memoryManager.GetStatsAsJson();
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
   ADD_CORS(UpdateConfig)
 
+  ENDPOINT_INFO(UpdateConfig) {
+    info->summary = "Update Runtime Configuration";
+    info->description = "Update the runtime configuration of VectorDB. Supports dynamic configuration changes for thread counts, queue sizes, and other operational parameters";
+    info->addConsumes<String>("application/json");
+    info->addResponse<Object<StatusDto>>(Status::CODE_200, "application/json", "Configuration updated successfully");
+    info->addResponse<Object<StatusDto>>(Status::CODE_400, "application/json", "Invalid configuration payload");
+    info->addResponse<Object<StatusDto>>(Status::CODE_500, "application/json", "Configuration update failed");
+    info->addTag("Configuration");
+  }
   ENDPOINT("POST", "api/config", UpdateConfig, BODY_STRING(String, body)) {
     vectordb::Json parsedBody;
     auto dto = StatusDto::createShared();
@@ -1027,6 +1479,103 @@ class WebController : public oatpp::web::server::api::ApiController {
     dto->statusCode = Status::CODE_200.code;
     dto->message = std::string("Config updated successfully.");
     return createDtoResponse(Status::CODE_200, dto);
+  }
+
+  ADD_CORS(GetStats)
+
+  ENDPOINT_INFO(GetStats) {
+    info->summary = "Get Compaction Statistics";
+    info->description = "Retrieve compaction statistics including deleted vector ratios, compaction counts, and memory freed";
+    info->addResponse<String>(Status::CODE_200, "application/json", "Statistics retrieved successfully");
+    info->addTag("Compaction");
+  }
+  ENDPOINT("GET", "api/stats", GetStats) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    // Get compaction statistics from CompactionManager
+    auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+    vectordb::Json stats = compactionMgr.GetAllStatsAsJson();
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Get statistics successfully.");
+    response.SetObject("stats", stats);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(TriggerCompaction)
+
+  ENDPOINT_INFO(TriggerCompaction) {
+    info->summary = "Trigger Manual Compaction";
+    info->description = "Manually trigger compaction for a specific table or all tables to reclaim memory from soft-deleted vectors";
+    info->addConsumes<String>("application/json");
+    info->addResponse<Object<StatusDto>>(Status::CODE_200, "application/json", "Compaction triggered successfully");
+    info->addResponse<Object<StatusDto>>(Status::CODE_400, "application/json", "Invalid request");
+    info->addResponse<Object<StatusDto>>(Status::CODE_500, "application/json", "Compaction failed");
+    info->addTag("Compaction");
+  }
+  ENDPOINT("POST", "api/compact", TriggerCompaction, BODY_STRING(String, body)) {
+    auto dto = StatusDto::createShared();
+
+    if (!body || body->length() == 0) {
+      // Compact all tables if no body provided
+      auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+      auto status = compactionMgr.CompactAllTables();
+
+      dto->statusCode = status.ok() ? Status::CODE_200.code : Status::CODE_500.code;
+      dto->message = status.ok() ? "All tables compacted successfully" : status.message();
+    } else {
+      // Parse body for specific table
+      vectordb::Json parsedBody;
+      auto valid = parsedBody.LoadFromString(body);
+      if (!valid) {
+        dto->statusCode = Status::CODE_400.code;
+        dto->message = "Invalid JSON payload";
+        return createDtoResponse(Status::CODE_400, dto);
+      }
+
+      std::string table_name = parsedBody.GetString("table");
+      auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+
+      if (table_name.empty()) {
+        auto status = compactionMgr.CompactAllTables();
+        dto->statusCode = status.ok() ? Status::CODE_200.code : Status::CODE_500.code;
+        dto->message = status.ok() ? "All tables compacted successfully" : status.message();
+      } else {
+        auto status = compactionMgr.CompactTable(table_name);
+        dto->statusCode = status.ok() ? Status::CODE_200.code : Status::CODE_500.code;
+        dto->message = status.ok() ? "Table " + table_name + " compacted successfully" : status.message();
+      }
+    }
+
+    return createDtoResponse(dto->statusCode == 200 ? Status::CODE_200 : Status::CODE_500, dto);
+  }
+
+  ADD_CORS(GetCompactionStatus)
+
+  ENDPOINT_INFO(GetCompactionStatus) {
+    info->summary = "Get Compaction Status";
+    info->description = "Check if compaction is currently running";
+    info->addResponse<String>(Status::CODE_200, "application/json", "Status retrieved successfully");
+    info->addTag("Compaction");
+  }
+  ENDPOINT("GET", "api/compact/status", GetCompactionStatus) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    auto& compactionMgr = vectordb::engine::CompactionManager::GetInstance();
+    bool isCompacting = compactionMgr.IsCompacting();
+
+    response.SetInt("statusCode", Status::CODE_200.code);
+    response.SetString("message", "Get compaction status successfully.");
+    response.SetBool("isCompacting", isCompacting);
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
   }
 
 /**

@@ -43,6 +43,16 @@ INSTALL_PATH="$CURRENT_DIR/../build/dependencies"
 echo "Installing to: $INSTALL_PATH"
 mkdir -p "${INSTALL_PATH}"
 
+# Load version configuration
+VERSION_CONFIG="${CURRENT_DIR}/versions.conf"
+if [ -f "$VERSION_CONFIG" ]; then
+    echo "Loading versions from: $VERSION_CONFIG"
+    source "$VERSION_CONFIG"
+else
+    echo "Warning: Version config not found, using defaults"
+    OATPP_VERSION="1.3.0"
+fi
+
 N_PROCESSOR=1
 PLATFORM="$(uname -s)"
 if [[ "$PLATFORM" == "Darwin" ]]; then
@@ -57,10 +67,13 @@ else
     echo "Unknown platform: $PLATFORM"
 fi
 
-# Install oatpp
-install_module "oatpp" "oatpp" "1.3.0"
+# Install oatpp (using version from config)
+install_module "oatpp" "oatpp" "${OATPP_VERSION}"
 
 # Install oatpp-curl
 install_module "epsilla-cloud" "oatpp-curl" "epsilla"
+
+# Install oatpp-swagger (using version from config)
+install_module "oatpp" "oatpp-swagger" "${OATPP_VERSION}"
 
 ##########################################################
