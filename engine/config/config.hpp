@@ -220,6 +220,23 @@ struct Config {
   std::atomic<int> WorkerPoolMaxQueueSize{10000};
   std::atomic<bool> EnableCpuAffinity{false};  // Bind CPU workers to specific cores
 
+  // === Full-Text Search Integration ===
+  std::atomic<bool> EnableFullText{false};     // Enable full-text search integration
+  std::string FullTextEngine;                  // Full-text engine type (quickwit, elasticsearch, meilisearch)
+  std::string FullTextBinaryPath;              // Path to engine binary (for Quickwit)
+  std::string FullTextConfigPath;              // Path to engine config file
+  std::string FullTextDataDir;                 // Data directory (default: ./fulltext_data)
+  std::atomic<int> FullTextPort{7280};         // HTTP port (default: 7280)
+  std::string FullTextEndpoint;                // HTTP endpoint (for Elasticsearch/Meilisearch)
+  std::string FullTextApiKey;                  // API key (optional)
+
+  // Backward compatibility (deprecated - use FullText* instead)
+  std::atomic<bool> EnableQuickwit{false};
+  std::string QuickwitBinaryPath;
+  std::string QuickwitConfigPath;
+  std::string QuickwitDataDir;
+  std::atomic<int> QuickwitPort{7280};
+
   // === Vector CRUD API Statistics (in-memory only, for monitoring) ===
   // Request counters for each operation type
   std::atomic<uint64_t> VectorInsertRequestCount{0};
@@ -573,6 +590,153 @@ struct Config {
     } else {
       return 250;
     }
+  }
+
+  // Load full-text search config from environment variables (called at startup)
+  void loadFullTextConfigFromEnv() {
+    // Check new environment variables first: VECTORDB_FULLTEXT_SEARCH_ENABLE
+    const char* enable_env = std::getenv("VECTORDB_FULLTEXT_SEARCH_ENABLE");
+    if (enable_env != nullptr) {
+      std::string val_str(enable_env);
+      std::transform(val_str.begin(), val_str.end(), val_str.begin(), ::tolower);
+      if (val_str == "true" || val_str == "1" || val_str == "yes") {
+        EnableFullText.store(true, std::memory_order_release);
+        printf("[Config] Full-text search integration enabled from VECTORDB_FULLTEXT_SEARCH_ENABLE\n");
+      }
+    } else {
+      // Backward compatibility: check VECTORDB_ENABLE_FULLTEXT
+      const char* old_enable_env = std::getenv("VECTORDB_ENABLE_FULLTEXT");
+      if (old_enable_env != nullptr) {
+        std::string val_str(old_enable_env);
+        std::transform(val_str.begin(), val_str.end(), val_str.begin(), ::tolower);
+        if (val_str == "true" || val_str == "1" || val_str == "yes") {
+          EnableFullText.store(true, std::memory_order_release);
+          printf("[Config] Full-text search enabled via deprecated VECTORDB_ENABLE_FULLTEXT\n");
+        }
+      } else {
+        // Backward compatibility: check old VECTORDB_ENABLE_QUICKWIT
+        const char* quickwit_enable_env = std::getenv("VECTORDB_ENABLE_QUICKWIT");
+        if (quickwit_enable_env != nullptr) {
+          std::string val_str(quickwit_enable_env);
+          std::transform(val_str.begin(), val_str.end(), val_str.begin(), ::tolower);
+          if (val_str == "true" || val_str == "1" || val_str == "yes") {
+            EnableFullText.store(true, std::memory_order_release);
+            EnableQuickwit.store(true, std::memory_order_release);
+            printf("[Config] Full-text search enabled via deprecated VECTORDB_ENABLE_QUICKWIT\n");
+          }
+        }
+      }
+    }
+
+    // Engine type: VECTORDB_FULLTEXT_SEARCH_PROVIDER (preferred) or VECTORDB_FULLTEXT_ENGINE (deprecated)
+    const char* provider_env = std::getenv("VECTORDB_FULLTEXT_SEARCH_PROVIDER");
+    if (provider_env != nullptr) {
+      FullTextEngine = std::string(provider_env);
+      printf("[Config] Full-text engine set to %s from VECTORDB_FULLTEXT_SEARCH_PROVIDER\n", provider_env);
+    } else {
+      const char* engine_env = std::getenv("VECTORDB_FULLTEXT_ENGINE");
+      if (engine_env != nullptr) {
+        FullTextEngine = std::string(engine_env);
+        printf("[Config] Full-text engine set to %s from deprecated VECTORDB_FULLTEXT_ENGINE\n", engine_env);
+      } else {
+        FullTextEngine = "quickwit";  // Default to Quickwit
+      }
+    }
+
+    // Binary path (for Quickwit)
+    const char* binary_env = std::getenv("VECTORDB_FULLTEXT_BINARY");
+    if (binary_env != nullptr) {
+      FullTextBinaryPath = std::string(binary_env);
+      printf("[Config] Full-text binary path set to %s from environment\n", binary_env);
+    } else {
+      const char* old_binary_env = std::getenv("VECTORDB_QUICKWIT_BINARY");
+      if (old_binary_env != nullptr) {
+        FullTextBinaryPath = std::string(old_binary_env);
+        QuickwitBinaryPath = FullTextBinaryPath;
+      } else {
+        FullTextBinaryPath = "/usr/local/bin/quickwit";
+      }
+    }
+
+    // Config path
+    const char* config_env = std::getenv("VECTORDB_FULLTEXT_CONFIG");
+    if (config_env != nullptr) {
+      FullTextConfigPath = std::string(config_env);
+      printf("[Config] Full-text config path set to %s from environment\n", config_env);
+    } else {
+      const char* old_config_env = std::getenv("VECTORDB_QUICKWIT_CONFIG");
+      if (old_config_env != nullptr) {
+        FullTextConfigPath = std::string(old_config_env);
+        QuickwitConfigPath = FullTextConfigPath;
+      } else {
+        FullTextConfigPath = "";
+      }
+    }
+
+    // Data directory
+    // Priority: QW_DATA_DIR > VECTORDB_FULLTEXT_DATA_DIR > VECTORDB_QUICKWIT_DATA_DIR > default
+    const char* qw_data_env = std::getenv("QW_DATA_DIR");
+    if (qw_data_env != nullptr) {
+      FullTextDataDir = std::string(qw_data_env);
+      QuickwitDataDir = FullTextDataDir;
+      printf("[Config] Full-text data dir set to %s from QW_DATA_DIR\n", qw_data_env);
+    } else {
+      const char* data_env = std::getenv("VECTORDB_FULLTEXT_DATA_DIR");
+      if (data_env != nullptr) {
+        FullTextDataDir = std::string(data_env);
+        printf("[Config] Full-text data dir set to %s from VECTORDB_FULLTEXT_DATA_DIR\n", data_env);
+      } else {
+        const char* old_data_env = std::getenv("VECTORDB_QUICKWIT_DATA_DIR");
+        if (old_data_env != nullptr) {
+          FullTextDataDir = std::string(old_data_env);
+          QuickwitDataDir = FullTextDataDir;
+        } else {
+          FullTextDataDir = "/tmp/qwdata";  // Updated default path
+        }
+      }
+    }
+
+    // Port
+    const char* port_env = std::getenv("VECTORDB_FULLTEXT_PORT");
+    if (port_env != nullptr) {
+      try {
+        int val = std::stoi(port_env);
+        if (val > 0 && val < 65536) {
+          FullTextPort.store(val, std::memory_order_release);
+          printf("[Config] Full-text port set to %d from environment\n", val);
+        }
+      } catch (...) {}
+    } else {
+      const char* old_port_env = std::getenv("VECTORDB_QUICKWIT_PORT");
+      if (old_port_env != nullptr) {
+        try {
+          int val = std::stoi(old_port_env);
+          if (val > 0 && val < 65536) {
+            FullTextPort.store(val, std::memory_order_release);
+            QuickwitPort.store(val, std::memory_order_release);
+          }
+        } catch (...) {}
+      }
+    }
+
+    // Endpoint (for Elasticsearch/Meilisearch)
+    const char* endpoint_env = std::getenv("VECTORDB_FULLTEXT_ENDPOINT");
+    if (endpoint_env != nullptr) {
+      FullTextEndpoint = std::string(endpoint_env);
+      printf("[Config] Full-text endpoint set to %s from environment\n", endpoint_env);
+    }
+
+    // API key
+    const char* api_key_env = std::getenv("VECTORDB_FULLTEXT_API_KEY");
+    if (api_key_env != nullptr) {
+      FullTextApiKey = std::string(api_key_env);
+      printf("[Config] Full-text API key set from environment\n");
+    }
+  }
+
+  // Deprecated: use loadFullTextConfigFromEnv() instead
+  void loadQuickwitConfigFromEnv() {
+    loadFullTextConfigFromEnv();
   }
 
   // Load NSG config from environment variables (called at startup)

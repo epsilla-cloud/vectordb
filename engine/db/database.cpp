@@ -54,7 +54,7 @@ Status Database::CreateTable(meta::TableSchema& table_schema) {
   }
   std::unordered_map<std::string, std::string> headers;
   auto table = std::make_shared<Table>(table_schema, db_catalog_path_, init_table_scale_, is_leader_, embedding_service_, headers);
-  
+
   // Thread-safe insertion
   size_t table_index;
   {
@@ -72,6 +72,16 @@ Status Database::CreateTable(meta::TableSchema& table_schema) {
     logger_.Debug("Registered table " + full_table_name + " with CompactionManager");
   }
 
+  // Initialize full-text index if enabled
+  if (vectordb::globalConfig.EnableFullText.load()) {
+    auto ft_status = table->InitFullTextIndex(database_schema_.name_);
+    if (!ft_status.ok()) {
+      logger_.Warning("[Database] Failed to initialize full-text index for table " +
+                      table_schema.name_ + ": " + ft_status.ToString());
+      // Don't fail table creation - full-text is optional
+    }
+  }
+
   return Status::OK();
 }
 
@@ -82,11 +92,21 @@ Status Database::DeleteTable(const std::string& table_name) {
   }
   auto table_id = table->table_schema_.id_;
 
+  // Drop full-text index before deleting the table
+  if (vectordb::globalConfig.EnableFullText.load() && table->IsFullTextEnabled()) {
+    auto ft_status = table->DropFullTextIndex();
+    if (!ft_status.ok()) {
+      logger_.Warning("[Database] Failed to drop full-text index for table " +
+                      table_name + ": " + ft_status.ToString());
+      // Continue with table deletion even if full-text cleanup fails
+    }
+  }
+
   auto table_index = table_name_to_id_map_.find(table_name);
   if (!table_index.has_value()) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
-  
+
   // Safely remove table with proper synchronization
   std::shared_ptr<Table> table_to_delete;
   {
@@ -96,7 +116,7 @@ Status Database::DeleteTable(const std::string& table_name) {
     // Reset the shared_ptr in the vector (but the table still exists via table_to_delete)
     tables_[table_index.value()].reset();
   }
-  
+
   // Remove from name map after releasing the lock
   table_name_to_id_map_.erase(table_name);
 
