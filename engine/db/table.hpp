@@ -24,6 +24,7 @@
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
 #include "db/execution/aggregation.hpp"
+#include "server/fulltext/fulltext_engine.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -230,10 +231,29 @@ class Table {
   
   // Incremental compactor for background compaction
   std::unique_ptr<IncrementalCompactor> compactor_;
-  
+
   // Enable/disable incremental compaction
   void EnableIncrementalCompaction(const CompactionConfig& config = CompactionConfig());
   void DisableIncrementalCompaction();
+
+  // === Full-text search integration ===
+  std::shared_ptr<vectordb::server::fulltext::FullTextEngine> fulltext_engine_;
+  std::string fulltext_index_id_;  // Format: {db_name}_{table_name}
+
+  // Initialize full-text search for this table
+  Status InitFullTextIndex(const std::string& db_name);
+
+  // Drop full-text search index for this table
+  Status DropFullTextIndex();
+
+  // Check if full-text search is enabled for this table
+  bool IsFullTextEnabled() const {
+    return fulltext_engine_ != nullptr;
+  }
+
+  // Generate normalized full-text index ID
+  static std::string GenerateFullTextIndexId(const std::string& db_name,
+                                               const std::string& table_name);
 };
 
 // Backward compatibility typedef

@@ -17,6 +17,8 @@
 #include "services/embedding_service.hpp"
 #include "logger/logger.hpp"
 #include "config/config.hpp"
+#include "server/fulltext/fulltext_engine.hpp"
+#include "server/fulltext/fulltext_manager.hpp"
 
 namespace vectordb {
 namespace engine {
@@ -183,6 +185,9 @@ class DBServer {
   bool stop_rebuild_thread_ = false;
   bool rebuild_started_ = false;
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
+
+  // Full-text search engine integration
+  std::unique_ptr<vectordb::server::fulltext::FullTextEngine> fulltext_engine_;
 
   // WAL flush thread management
   std::thread wal_flush_thread_;
