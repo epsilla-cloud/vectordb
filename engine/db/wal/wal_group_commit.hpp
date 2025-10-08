@@ -328,7 +328,11 @@ private:
             pending_requests_.pop();
         }
 
-        pending_size_ = 0;  // Reset pending size
+        // CRITICAL BUG FIX (BUG-WAL-001): Fix race condition in pending_size tracking
+        // Previously: Reset to 0, but new requests could have been added concurrently
+        // Solution: Subtract only the size of requests actually moved to this group
+        size_t group_total_size = group->total_size;
+        pending_size_.fetch_sub(group_total_size, std::memory_order_relaxed);
 
         return group;
     }

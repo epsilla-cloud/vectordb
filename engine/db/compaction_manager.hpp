@@ -138,6 +138,12 @@ class CompactionManager {
   std::atomic<bool> stop_worker_{false};
   std::atomic<bool> is_compacting_{false};
 
+  // CRITICAL BUG FIX (BUG-CMP-002): Track compacting tables per-table
+  // Previously: Global is_compacting_ flag rejected ALL compaction requests
+  // Solution: Track which specific tables are being compacted, allow concurrent compaction
+  std::set<std::string> compacting_tables_;
+  std::mutex compacting_tables_mutex_;
+
   // Synchronization
   mutable std::mutex compaction_mutex_;
   std::condition_variable compaction_cv_;

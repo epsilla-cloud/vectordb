@@ -1,6 +1,6 @@
 #pragma once
 
-// SIMD 配置
+// SIMD Configuration
 #if defined(USE_AVX2)
     #define SIMD_WIDTH 8
     #define SIMD_TYPE "AVX2"
