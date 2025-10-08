@@ -338,11 +338,31 @@ public:
                 throw std::runtime_error("Cannot submit task to shutdown pool '" + pool_name_ + "'");
             }
 
-            if (tasks_.size() >= max_queue_size_) {
-                if (enable_stats_) {
-                    stats_tasks_rejected_.fetch_add(1, std::memory_order_relaxed);
+            // CRITICAL FIX: For CRITICAL priority tasks (e.g., WAL writes), wait for space instead of rejecting
+            // This prevents data loss due to queue saturation
+            if (priority == TaskPriority::CRITICAL) {
+                // Wait for queue to have space (blocking behavior for critical tasks)
+                while (tasks_.size() >= max_queue_size_ && !shutdown_) {
+                    logger_.Warning("CRITICAL task waiting for queue space in pool '" + pool_name_ +
+                                  "' (queue size: " + std::to_string(tasks_.size()) + ")");
+                    // Wait with timeout to periodically check shutdown flag
+                    condition_.wait_for(lock, std::chrono::milliseconds(100));
                 }
-                throw std::runtime_error("Task queue full in pool '" + pool_name_ + "'");
+
+                // Check again if shutdown occurred during wait
+                if (shutdown_) {
+                    throw std::runtime_error("Cannot submit task to shutdown pool '" + pool_name_ + "'");
+                }
+            } else {
+                // For non-critical tasks, reject if queue is full
+                if (tasks_.size() >= max_queue_size_) {
+                    if (enable_stats_) {
+                        stats_tasks_rejected_.fetch_add(1, std::memory_order_relaxed);
+                    }
+                    throw std::runtime_error("Task queue full in pool '" + pool_name_ +
+                                           "' (size: " + std::to_string(tasks_.size()) +
+                                           ", max: " + std::to_string(max_queue_size_) + ")");
+                }
             }
 
             tasks_.emplace(priority, wrapped_task);

@@ -740,9 +740,13 @@ Status Table::Search(const std::string &field_name,
     }
   }
 
-  // Log search query start
+  // Log search query start with vector statistics
+  size_t total_vectors = table_segment_->GetRecordCount();
+  size_t active_vectors = GetActiveVectorCount();
   logger_.Info("[CRUD-QUERY] Starting vector search on table=" + table_schema_.name_ +
-               ", field=" + field_name + ", limit=" + std::to_string(limit));
+               ", field=" + field_name + ", limit=" + std::to_string(limit) +
+               ", total_vectors=" + std::to_string(total_vectors) +
+               ", active_vectors=" + std::to_string(active_vectors));
 
   // Get the field offset in the vector table.
   int64_t field_offset = table_segment_->vec_field_name_executor_pool_idx_map_[field_name];
@@ -795,7 +799,8 @@ Status Table::Search(const std::string &field_name,
     }
   }
 
-  logger_.Info("[CRUD-QUERY] Vector search completed, returned " + std::to_string(result_num) + " results");
+  logger_.Info("[CRUD-QUERY] Vector search completed, returned " + std::to_string(result_num) + " results" +
+               ", searched_in=" + std::to_string(active_vectors) + " active vectors");
   return Status::OK();
 }
 

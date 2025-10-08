@@ -252,32 +252,35 @@ Status CompactionManager::DoCompaction(const std::string& table_name) {
 }
 
 void CompactionManager::RegisterTable(const std::string& table_name, std::shared_ptr<Table> table) {
+  // CRITICAL FIX: Lock table_names_mutex_ FIRST to ensure consistent lock ordering
+  // This prevents deadlock with CompactionWorker which also acquires table_names_mutex_ first
+  {
+    std::lock_guard<std::mutex> lock(table_names_mutex_);
+    table_names_.insert(table_name);
+  }
+
+  // Then update concurrent hash maps (these have internal locks)
   tables_.Insert(table_name, table);
 
   // Initialize stats if not exists
   CompactionStats stats;
   table_stats_.Insert(table_name, stats);
 
-  // Track table name for iteration
-  {
-    std::lock_guard<std::mutex> lock(table_names_mutex_);
-    table_names_.insert(table_name);
-  }
-
   logger_.Debug("Registered table for compaction: " + table_name);
 }
 
 void CompactionManager::UnregisterTable(const std::string& table_name) {
-  // Note: ConcurrentHashMap doesn't have Erase, so we'll mark as invalid
-  // by inserting nullptr for tables and empty stats
-  tables_.Insert(table_name, nullptr);
-  table_stats_.Insert(table_name, CompactionStats());
-
-  // Remove from tracked names
+  // CRITICAL FIX: Lock table_names_mutex_ FIRST to maintain consistent lock ordering
   {
     std::lock_guard<std::mutex> lock(table_names_mutex_);
     table_names_.erase(table_name);
   }
+
+  // Then update concurrent hash maps (these have internal locks)
+  // Note: ConcurrentHashMap doesn't have Erase, so we'll mark as invalid
+  // by inserting nullptr for tables and empty stats
+  tables_.Insert(table_name, nullptr);
+  table_stats_.Insert(table_name, CompactionStats());
 
   logger_.Debug("Unregistered table from compaction: " + table_name);
 }
