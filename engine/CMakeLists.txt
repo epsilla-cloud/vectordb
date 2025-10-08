@@ -90,6 +90,11 @@ list(APPEND LIB_FILES ${DB_SERVER_FILES})
 file(GLOB_RECURSE WEB_SERVER_FILES "server/web_server/*")
 list(APPEND LIB_FILES ${WEB_SERVER_FILES})
 
+# Add source files in fulltext directory (generic full-text search)
+file(GLOB FULLTEXT_FILES "server/fulltext/*.cpp")
+file(GLOB_RECURSE FULLTEXT_IMPL_FILES "server/fulltext/implementations/*/*.cpp")
+list(APPEND LIB_FILES ${FULLTEXT_FILES} ${FULLTEXT_IMPL_FILES})
+
 # Add source files in logger directory
 file(GLOB LOGGER_FILES "logger/*.cpp")
 list(APPEND LIB_FILES ${LOGGER_FILES})
@@ -215,6 +220,10 @@ list(APPEND DB_TEST_FILES ${ENGINE_DB_TEST_FILES})
 # Add source files in the utils test directory
 file(GLOB ENGINE_UTILS_TEST_FILES "test/engine/utils/*.cpp")
 list(APPEND DB_TEST_FILES ${ENGINE_UTILS_TEST_FILES})
+
+# Add source files in the server test directory (Full-text search tests)
+file(GLOB_RECURSE ENGINE_SERVER_TEST_FILES "test/engine/server/*.cpp")
+list(APPEND DB_TEST_FILES ${ENGINE_SERVER_TEST_FILES})
 
 add_executable(
   vector_db_test

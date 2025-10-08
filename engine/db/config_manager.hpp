@@ -92,6 +92,9 @@ public:
         // Load NSG configuration from environment variables
         vectordb::globalConfig.loadNSGConfigFromEnv();
 
+        // Load Quickwit configuration from environment variables
+        vectordb::globalConfig.loadQuickwitConfigFromEnv();
+
         initialized_ = true;
 
         PrintConfiguration();
@@ -180,6 +183,38 @@ public:
                   << (env_log_exec ? " (from env)" : " (default)") << "\n";
         std::cout << "\n";
 
+        // Full-Text Search Configuration
+        const char* env_ft_enable = std::getenv("VECTORDB_FULLTEXT_SEARCH_ENABLE");
+        const char* env_ft_provider = std::getenv("VECTORDB_FULLTEXT_SEARCH_PROVIDER");
+        const char* env_quickwit_binary = std::getenv("VECTORDB_QUICKWIT_BINARY");
+        const char* env_ft_port = std::getenv("VECTORDB_FULLTEXT_PORT");
+        const char* env_qw_data_dir = std::getenv("QW_DATA_DIR");
+
+        bool ft_enabled = vectordb::globalConfig.EnableFullText.load();
+        std::string ft_engine = vectordb::globalConfig.FullTextEngine;
+        std::string ft_binary = vectordb::globalConfig.FullTextBinaryPath;
+        std::string ft_data_dir = vectordb::globalConfig.FullTextDataDir;
+        int ft_port = vectordb::globalConfig.FullTextPort.load();
+
+        std::cout << " Full-Text Search Configuration:\n";
+        std::cout << "   - Full-Text Search          : " << (ft_enabled ? "ENABLED" : "DISABLED");
+        if (ft_enabled) {
+            std::cout << " ✓";
+        }
+        std::cout << (env_ft_enable ? " (from env)" : " (default)") << "\n";
+
+        if (ft_enabled) {
+            std::cout << "   - Search Provider           : " << ft_engine
+                      << (env_ft_provider ? " (from env)" : " (default)") << "\n";
+            std::cout << "   - Quickwit Binary           : " << ft_binary
+                      << (env_quickwit_binary ? " (from env)" : " (default)") << "\n";
+            std::cout << "   - Data Directory            : " << ft_data_dir
+                      << (env_qw_data_dir ? " (from env)" : " (default)") << "\n";
+            std::cout << "   - Port                      : " << ft_port
+                      << (env_ft_port ? " (from env)" : " (default)") << "\n";
+        }
+        std::cout << "\n";
+
         std::cout << " Environment Variables Set:\n";
         int env_count = 0;
         if (env_initial_capacity) { std::cout << "   - INITIAL_TABLE_CAPACITY=" << env_initial_capacity << "\n"; env_count++; }
@@ -194,6 +229,11 @@ public:
         if (env_compact_thresh) { std::cout << "   - COMPACTION_THRESHOLD=" << env_compact_thresh << "\n"; env_count++; }
         if (env_compact_interval) { std::cout << "   - COMPACTION_INTERVAL=" << env_compact_interval << "\n"; env_count++; }
         if (env_eager_delete_compact) { std::cout << "   - EAGER_DELETE_COMPACT=" << env_eager_delete_compact << "\n"; env_count++; }
+        if (env_ft_enable) { std::cout << "   - VECTORDB_FULLTEXT_SEARCH_ENABLE=" << env_ft_enable << "\n"; env_count++; }
+        if (env_ft_provider) { std::cout << "   - VECTORDB_FULLTEXT_SEARCH_PROVIDER=" << env_ft_provider << "\n"; env_count++; }
+        if (env_quickwit_binary) { std::cout << "   - VECTORDB_QUICKWIT_BINARY=" << env_quickwit_binary << "\n"; env_count++; }
+        if (env_qw_data_dir) { std::cout << "   - QW_DATA_DIR=" << env_qw_data_dir << "\n"; env_count++; }
+        if (env_ft_port) { std::cout << "   - VECTORDB_FULLTEXT_PORT=" << env_ft_port << "\n"; env_count++; }
         if (env_count == 0) {
             std::cout << "   (none - using all defaults)\n";
         }
