@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdlib> // Include for std::getenv and std::atoi
 #include <exception>
+#include <fstream> // Include for std::ifstream (cgroup detection)
 #include <memory>
 #include <set>
 #include <string>
@@ -142,6 +143,88 @@ struct ConfigLimits {
     return default_value;
   }
 
+  /**
+   * @brief Detect CPU quota from cgroup (K8s-aware CPU detection)
+   *
+   * In Kubernetes environments, containers may have CPU limits set via cgroups
+   * that are lower than the physical CPU count. This function detects those limits.
+   *
+   * Priority:
+   * 1. Check cgroup v1 (K8s < 1.25): /sys/fs/cgroup/cpu/cpu.cfs_quota_us
+   * 2. Check cgroup v2 (K8s >= 1.25): /sys/fs/cgroup/cpu.max
+   * 3. Fallback to hardware_concurrency()
+   *
+   * @return Effective CPU cores available (minimum 1)
+   */
+  static size_t DetectCgroupCpuQuota() {
+    size_t hardware_cores = std::thread::hardware_concurrency();
+    if (hardware_cores == 0) {
+      hardware_cores = 4; // Fallback
+    }
+
+#ifdef __linux__
+    // Try cgroup v1 (used by most K8s versions)
+    try {
+      std::ifstream quota_file("/sys/fs/cgroup/cpu/cpu.cfs_quota_us");
+      std::ifstream period_file("/sys/fs/cgroup/cpu/cpu.cfs_period_us");
+
+      if (quota_file && period_file) {
+        int64_t quota = -1, period = -1;
+        quota_file >> quota;
+        period_file >> period;
+
+        // quota = -1 means no limit set
+        if (quota > 0 && period > 0) {
+          size_t cgroup_cores = static_cast<size_t>(quota / period);
+          // Handle fractional cores (e.g., 0.5 CPU = 500m in K8s)
+          if (cgroup_cores == 0 && quota < period) {
+            cgroup_cores = 1; // Round up fractional cores to 1
+          }
+          if (cgroup_cores > 0 && cgroup_cores < hardware_cores) {
+            printf("[Config] Detected cgroup v1 CPU quota: %zu cores (quota=%ld, period=%ld, hw=%zu)\n",
+                   cgroup_cores, quota, period, hardware_cores);
+            return cgroup_cores;
+          }
+        }
+      }
+    } catch (...) {
+      // Silently continue to next detection method
+    }
+
+    // Try cgroup v2 (newer K8s 1.25+)
+    try {
+      std::ifstream cgroup_v2_file("/sys/fs/cgroup/cpu.max");
+      if (cgroup_v2_file) {
+        std::string quota_str, period_str;
+        cgroup_v2_file >> quota_str >> period_str;
+
+        // "max" means no limit
+        if (quota_str != "max" && !period_str.empty()) {
+          int64_t quota = std::stoll(quota_str);
+          int64_t period = std::stoll(period_str);
+
+          if (quota > 0 && period > 0) {
+            size_t cgroup_cores = static_cast<size_t>(quota / period);
+            if (cgroup_cores == 0 && quota < period) {
+              cgroup_cores = 1;
+            }
+            if (cgroup_cores > 0 && cgroup_cores < hardware_cores) {
+              printf("[Config] Detected cgroup v2 CPU quota: %zu cores (quota=%ld, period=%ld, hw=%zu)\n",
+                     cgroup_cores, quota, period, hardware_cores);
+              return cgroup_cores;
+            }
+          }
+        }
+      }
+    } catch (...) {
+      // Silently continue to fallback
+    }
+#endif
+
+    // No cgroup limit detected or not on Linux - use hardware count
+    return hardware_cores;
+  }
+
   // Allow runtime override of limits via environment variables
   static void InitializeLimits() {
     // Currently using compile-time constants
@@ -252,27 +335,33 @@ struct Config {
 
   // Constructor to initialize thread counts based on hardware
   Config() {
-    unsigned int hw_threads = std::thread::hardware_concurrency();
-    if (hw_threads == 0) {
-      hw_threads = 4; // Fallback if detection fails
-    }
-    
+    // CRITICAL FIX: Use cgroup-aware CPU detection for K8s compatibility
+    // In K8s, hardware_concurrency() returns the host's CPU count, not the container's limit
+    // This caused severe over-subscription (e.g., 4 threads fighting for 1 CPU core)
+    size_t effective_cores = ConfigLimits::DetectCgroupCpuQuota();
+
     // Check environment variable for thread count override
     int query_threads = ConfigLimits::GetEnvInt(
       "EPSILLA_INTRA_QUERY_THREADS",
-      static_cast<int>(hw_threads),
+      static_cast<int>(effective_cores),
       ConfigLimits::INTRA_QUERY_THREADS_MIN,
       ConfigLimits::INTRA_QUERY_THREADS_MAX
     );
-    if (query_threads != static_cast<int>(hw_threads)) {
-      printf("[Config] Using EPSILLA_INTRA_QUERY_THREADS=%d from environment\n", query_threads);
+    if (query_threads != static_cast<int>(effective_cores)) {
+      printf("[Config] Using EPSILLA_INTRA_QUERY_THREADS=%d from environment (detected cores=%zu)\n",
+             query_threads, effective_cores);
     }
-    
+
     // Use configured threads for query (optimal for parallel search)
     IntraQueryThreads.store(query_threads, std::memory_order_release);
-    
+
     // Use up to 4 threads for rebuild to avoid overwhelming the system
-    RebuildThreads.store(static_cast<int>(std::min(hw_threads, 4u)), std::memory_order_release);
+    // In K8s with 1-2 cores, this will automatically limit to 1-2 threads
+    RebuildThreads.store(static_cast<int>(std::min(effective_cores, size_t(4))), std::memory_order_release);
+
+    // Log the final configuration for debugging K8s deployments
+    printf("[Config] Thread configuration: IntraQuery=%d, Rebuild=%d (effective_cores=%zu)\n",
+           IntraQueryThreads.load(), RebuildThreads.load(), effective_cores);
     
     // Check environment variable for soft delete mode
     const char* env_soft_delete = std::getenv("SOFT_DELETE");

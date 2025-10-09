@@ -113,9 +113,18 @@ Table::Table(meta::TableSchema &table_schema,
 }
 
 Status Table::Rebuild(const std::string &db_catalog_path) {
-  // Limit how many threads rebuild takes.
-  omp_set_num_threads(globalConfig.RebuildThreads);
-  logger_.Debug("Rebuild table segment with threads: " + std::to_string(globalConfig.RebuildThreads));
+  // CRITICAL FIX: Removed global omp_set_num_threads() call
+  // Problem: omp_set_num_threads() is global and affects ALL OpenMP regions in the process
+  // This caused conflicts with vec_search_executor and other concurrent OpenMP operations
+  //
+  // New approach (K8s-compatible):
+  // 1. OpenMP automatically uses OMP_NUM_THREADS environment variable
+  // 2. In K8s, set OMP_NUM_THREADS to match CPU limits
+  // 3. Each parallel region can override with num_threads(N) clause if needed
+  //
+  // Expected threads: globalConfig.RebuildThreads (auto-detected from cgroup in K8s)
+  logger_.Debug("Rebuild table segment with threads: " + std::to_string(globalConfig.RebuildThreads) +
+                " (configured via OMP_NUM_THREADS env var or auto-detected from cgroup)");
 
   // CRITICAL: Set flag to prevent resize during ANN graph rebuild
   // This prevents Insert from resizing vector_tables_ while we're reading them

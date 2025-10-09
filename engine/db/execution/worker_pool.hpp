@@ -167,7 +167,18 @@ private:
      * - 4 cores: cpu=3, io=3  (total 6 workers)
      * - 8+ cores: cpu=cores-2, io=4 (leave headroom for system)
      */
+    /**
+     * @brief Check if running in Kubernetes environment
+     */
+    static bool IsInKubernetes() {
+        // K8s always sets this environment variable
+        return (std::getenv("KUBERNETES_SERVICE_HOST") != nullptr ||
+                std::getenv("KUBERNETES_PORT") != nullptr);
+    }
+
     void ApplyOptimalConfig(size_t cpu_limit) {
+        bool in_k8s = IsInKubernetes();
+
         if (cpu_limit <= 1) {
             // 1-core environment (K8S pods with cpu: "1000m")
             cpu_workers = 1;
@@ -180,20 +191,25 @@ private:
             cpu_workers = 2;
             io_workers = 2;
             max_queue_size = 1000;
-            enable_cpu_affinity = false;
+            // In K8s, low-core containers are dynamically scheduled by CFS
+            // CPU affinity can actually hurt performance as it restricts scheduler flexibility
+            enable_cpu_affinity = !in_k8s;  // Disable in K8s
 
         } else if (cpu_limit <= 4) {
             // 4-core environment (cpu: "4000m")
             cpu_workers = 3;
             io_workers = 3;
             max_queue_size = 2000;
-            enable_cpu_affinity = true;
+            // 4+ cores: CPU affinity can help with cache locality
+            // But in K8s, only enable if cpuset is likely assigned
+            enable_cpu_affinity = !in_k8s || cpu_limit >= 4;
 
         } else {
             // 8+ core environment
             cpu_workers = cpu_limit - 2;  // Leave 2 cores for system
             io_workers = std::min(size_t(4), cpu_limit / 2);
             max_queue_size = 5000;
+            // Large pods likely have dedicated CPUs
             enable_cpu_affinity = true;
         }
 

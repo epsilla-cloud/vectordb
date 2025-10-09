@@ -520,7 +520,10 @@ void NsgIndex::Link() {
     std::vector<Neighbor> fullset;
     std::vector<Neighbor> temp;
     boost::dynamic_bitset<> flags{ntotal, 0};
-#pragma omp for schedule(dynamic, 100)
+// K8s-aware scheduling: Use runtime to allow OMP_SCHEDULE env var control
+// In K8s, set OMP_SCHEDULE="static" for low-core (1-2 cores) environments
+// or OMP_SCHEDULE="dynamic,100" for high-core environments
+#pragma omp for schedule(runtime)
     for (size_t n = 0; n < ntotal; ++n) {
       BuilderSuspend::check_wait();
       fullset.clear();
@@ -555,7 +558,7 @@ void NsgIndex::Link() {
   // }
 
   std::vector<std::mutex> mutex_vec(ntotal);
-#pragma omp for schedule(dynamic, 100)
+#pragma omp for schedule(runtime)
   for (unsigned n = 0; n < ntotal; ++n) {
     BuilderSuspend::check_wait();
     InterInsert(n, mutex_vec, cut_graph_dist);

@@ -1,6 +1,7 @@
 #include "db/execution/vec_search_executor.hpp"
 #include "utils/safe_memory_ops.hpp"
 #include "utils/memory_pool.hpp"
+#include "config/config.hpp"  // For ConfigLimits::DetectCgroupCpuQuota()
 
 #include <omp.h>
 
@@ -123,7 +124,33 @@ VecSearchExecutor::VecSearchExecutor(
   if (!brute_force_search_) {
     PrepareInitIds(init_ids_, L_master);
   }
-  omp_set_num_threads(num_threads_);
+
+  // CRITICAL FIX: Removed global omp_set_num_threads() call
+  // Problem: This setting is global and conflicts with other OpenMP regions
+  // Solution: Use num_threads(N) clause in each #pragma omp parallel directive
+  // OpenMP will also respect OMP_NUM_THREADS environment variable set in K8s
+  // Note: num_threads_ is stored and used in parallel regions via num_threads clause
+
+  // K8s-aware nested parallelism configuration
+  // In K8s low-core environments (1-2 cores), nested parallelism adds overhead without benefit
+  // Check environment variable first, then auto-detect based on CPU quota
+  const char* omp_max_levels_env = std::getenv("OMP_MAX_ACTIVE_LEVELS");
+  if (omp_max_levels_env) {
+    int max_levels = std::atoi(omp_max_levels_env);
+    omp_set_max_active_levels(max_levels);
+    fprintf(stderr, "[VecSearchExecutor] Using OMP_MAX_ACTIVE_LEVELS=%d from environment\n", max_levels);
+  } else {
+    // Auto-detect based on CPU quota (K8s-aware)
+    size_t cpu_quota = ConfigLimits::DetectCgroupCpuQuota();
+    if (cpu_quota <= 2) {
+      // Low core count: disable nested parallelism
+      omp_set_max_active_levels(1);
+      fprintf(stderr, "[VecSearchExecutor] Disabled nested parallelism (cpu_quota=%zu)\n", cpu_quota);
+    } else {
+      // Higher core count: allow 2 levels of nesting
+      omp_set_max_active_levels(2);
+    }
+  }
 }
 
 int64_t VecSearchExecutor::AddIntoQueue(
@@ -543,7 +570,7 @@ void VecSearchExecutor::InitializeSetLPara(
 
   // Get the distances of all candidates, store in the set set_L.
   uint64_t tmp_count_computation = 0;
-#pragma omp parallel for reduction(+ : tmp_count_computation)
+#pragma omp parallel for num_threads(num_threads_) reduction(+ : tmp_count_computation)
   for (int64_t i = 0; i < L; i++) {
     int64_t v_id = init_ids[i];
     ++tmp_count_computation;
@@ -628,8 +655,8 @@ void VecSearchExecutor::SearchImpl(
     std::vector<int64_t> &local_queues_sizes,  // Sizes of local queue
     std::vector<bool> &is_visited,
     const int64_t subsearch_iterations) {
-  // Set thread parallel.
-  omp_set_num_threads(num_threads_);
+  // CRITICAL FIX: Removed global omp_set_num_threads() call
+  // Use num_threads clause in #pragma omp parallel directives instead
   // const int64_t index_threshold) { // AUP optimization.
   const int64_t master_queue_start = local_queues_starts[num_threads_ - 1];
   int64_t &master_queue_size = local_queues_sizes[num_threads_ - 1];
@@ -714,7 +741,7 @@ void VecSearchExecutor::SearchImpl(
       float dist_thresh = last_dist;
       AtomicCounter thread_counter;
       thread_counter.SetValue(0);
-#pragma omp parallel reduction(+ : tmp_count_computation)
+#pragma omp parallel num_threads(num_threads_) reduction(+ : tmp_count_computation)
       {
         int w_i = thread_counter.GetAndIncrement();
         const int64_t local_queue_start = local_queues_starts[w_i];
@@ -852,7 +879,7 @@ bool VecSearchExecutor::BruteForceSearch(
       data_ptr = std::get<DenseVectorPtr>(vector_column_);
     }
 
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for num_threads(num_threads_) schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       float dist = std::get<DenseVecDistFunc<float>>(fstdistfunc_)(
           data_ptr + dimension_ * v_id,
@@ -880,7 +907,7 @@ bool VecSearchExecutor::BruteForceSearch(
       data_container = std::get<VariableLenAttrColumnContainer *>(vector_column_);
     }
 
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for num_threads(num_threads_) schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       auto &vecData = data_container->at(v_id);
       float dist = std::get<SparseVecDistFunc>(fstdistfunc_)(
@@ -945,7 +972,7 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
       data_ptr = std::get<DenseVectorPtr>(vector_column_);
     }
 
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for num_threads(num_threads_) schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {
@@ -976,7 +1003,7 @@ bool VecSearchExecutor::PreFilterBruteForceSearch(
       data_container = std::get<VariableLenAttrColumnContainer *>(vector_column_);
     }
 
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for num_threads(num_threads_) schedule(static)
     for (int64_t v_id = start; v_id < end; ++v_id) {
       // FIXME: pre-filter combined with @distance filter is not supported.
       if (!deleted.test(v_id) && expr_evaluator.LogicalEvaluate(root_node_index, v_id)) {

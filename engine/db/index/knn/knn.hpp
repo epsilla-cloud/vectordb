@@ -111,7 +111,9 @@ class KNNGraph {
 
     // Convert the graph.
     const vector<KNN> &nn = nndes.getNN();
-#pragma omp parallel for
+// K8s-aware scheduling: Use runtime to allow OMP_SCHEDULE env var control
+// Recommended: OMP_SCHEDULE="static" for K8s low-core environments
+#pragma omp parallel for schedule(runtime)
     for (size_t id = 0; id < nn.size(); ++id) {
       const KNN &knn = nn[id];
       BOOST_FOREACH (KNN::Element const &e, knn) {
