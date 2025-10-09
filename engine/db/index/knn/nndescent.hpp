@@ -96,7 +96,8 @@ class NNDescent {
   int iterate() {
     long long int cc = 0;
     // local joins
-#pragma omp parallel for default(shared) reduction(+ : cc)
+// K8s-aware: Use runtime scheduling + explicit shared/private clauses
+#pragma omp parallel for schedule(runtime) shared(nn_new, nn_old, rnn_new, rnn_old) reduction(+ : cc)
     for (int i = 0; i < N; ++i) {
       BOOST_FOREACH (int j, nn_new[i]) {
         BOOST_FOREACH (int k, nn_new[i]) {
@@ -136,7 +137,7 @@ class NNDescent {
     cost += cc;
 
     int t = 0;
-#pragma omp parallel for default(shared) reduction(+ : t)
+#pragma omp parallel for schedule(runtime) shared(nn, nn_old, nn_new) reduction(+ : t)
     for (int i = 0; i < N; ++i) {
       nn_old[i].clear();
       nn_new[i].clear();
@@ -176,7 +177,7 @@ class NNDescent {
       }
     }
 
-#pragma omp parallel for default(shared) reduction(+ : t)
+#pragma omp parallel for schedule(runtime) shared(rnn_old, rnn_new) reduction(+ : t)
     for (int i = 0; i < N; ++i) {
       if (rnn_old[i].size() > unsigned(S)) {
         random_shuffle(rnn_old[i].begin(), rnn_old[i].end());
