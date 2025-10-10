@@ -237,6 +237,23 @@ public:
         if (env_count == 0) {
             std::cout << "   (none - using all defaults)\n";
         }
+        std::cout << "\n";
+
+        // Environment Variable Documentation
+        std::cout << " Environment Variable Guide:\n";
+        std::cout << "   Data Directory (Priority: highest to lowest):\n";
+        std::cout << "     • QW_DATA_DIR                      - Short alias (recommended)\n";
+        std::cout << "     • VECTORDB_FULLTEXT_DATA_DIR       - Full name\n";
+        std::cout << "     • VECTORDB_QUICKWIT_DATA_DIR       - Legacy name\n";
+        std::cout << "\n";
+        std::cout << "   Full-Text Search:\n";
+        std::cout << "     • VECTORDB_FULLTEXT_SEARCH_ENABLE  - Enable/disable (true/false)\n";
+        std::cout << "     • VECTORDB_FULLTEXT_SEARCH_PROVIDER- Provider (quickwit/elasticsearch)\n";
+        std::cout << "     • VECTORDB_QUICKWIT_BINARY         - Path to Quickwit binary\n";
+        std::cout << "     • VECTORDB_FULLTEXT_PORT           - Port for full-text service\n";
+        std::cout << "\n";
+        std::cout << "   Health Check:\n";
+        std::cout << "     • curl http://localhost:8888/health - Check service status\n";
 
         std::cout << "\n Performance Impact Summary:\n";
         if (config_.initial_table_capacity >= 1000) {

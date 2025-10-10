@@ -333,6 +333,30 @@ struct Config {
   std::atomic<int64_t> VectorDeleteLastRequestTime{0};
   std::atomic<int64_t> VectorUpdateLastRequestTime{0};
 
+  // Request latency statistics (in microseconds for precision)
+  // Histogram buckets: <1ms, <5ms, <10ms, <50ms, <100ms, <500ms, <1s, <5s, >=5s
+  std::atomic<uint64_t> VectorQueryLatencyBucket_1ms{0};     // < 1ms
+  std::atomic<uint64_t> VectorQueryLatencyBucket_5ms{0};     // < 5ms
+  std::atomic<uint64_t> VectorQueryLatencyBucket_10ms{0};    // < 10ms
+  std::atomic<uint64_t> VectorQueryLatencyBucket_50ms{0};    // < 50ms
+  std::atomic<uint64_t> VectorQueryLatencyBucket_100ms{0};   // < 100ms
+  std::atomic<uint64_t> VectorQueryLatencyBucket_500ms{0};   // < 500ms
+  std::atomic<uint64_t> VectorQueryLatencyBucket_1s{0};      // < 1s
+  std::atomic<uint64_t> VectorQueryLatencyBucket_5s{0};      // < 5s
+  std::atomic<uint64_t> VectorQueryLatencyBucket_inf{0};     // >= 5s
+
+  // Total query latency sum for calculating average (in microseconds)
+  std::atomic<uint64_t> VectorQueryLatencySum{0};
+
+  // Memory and resource statistics
+  std::atomic<uint64_t> MemoryUsedBytes{0};      // Current memory usage
+  std::atomic<uint64_t> MemoryPeakBytes{0};      // Peak memory usage
+
+  // Database/Table statistics
+  std::atomic<uint64_t> DatabaseCount{0};        // Number of databases
+  std::atomic<uint64_t> TableCount{0};           // Number of tables
+  std::atomic<uint64_t> TotalVectorCount{0};     // Total vectors across all tables
+
   // Constructor to initialize thread counts based on hardware
   Config() {
     // CRITICAL FIX: Use cgroup-aware CPU detection for K8s compatibility
