@@ -37,7 +37,17 @@ Status QuickwitProcess::Start(const std::string& binary_path,
 
   // 检查二进制文件是否存在
   if (access(binary_path.c_str(), X_OK) != 0) {
-    return Status(DB_UNEXPECTED_ERROR, "Quickwit binary not found or not executable: " + binary_path);
+    std::string error_msg =
+      "Failed to start Quickwit full-text search engine\n"
+      "Reason: Binary not found or not executable\n"
+      "Path: " + binary_path + "\n"
+      "Troubleshooting:\n"
+      "  1. Check if binary exists: ls -l " + binary_path + "\n"
+      "  2. Check permissions: chmod +x " + binary_path + "\n"
+      "  3. Install Quickwit: https://quickwit.io/docs/get-started/installation\n"
+      "  4. Set correct path: export VECTORDB_QUICKWIT_BINARY=/path/to/quickwit";
+    logger_.Error(error_msg);
+    return Status(DB_UNEXPECTED_ERROR, error_msg);
   }
 
   logger_.Info("[Quickwit] Starting subprocess [binary=" + binary_path +
@@ -149,7 +159,26 @@ bool QuickwitProcess::WaitForReady(int timeout_secs) {
 
     if (result == pid_) {
       // 进程已退出
-      logger_.Error("[Quickwit] Process exited unexpectedly during startup");
+      std::string error_msg =
+        "Failed to start Quickwit full-text search engine\n"
+        "Reason: Process exited unexpectedly during startup\n"
+        "Configuration:\n"
+        "  Binary: " + binary_path_ + "\n"
+        "  Data Dir: " + data_dir_ + "\n"
+        "  Port: " + std::to_string(port_) + "\n"
+        "Troubleshooting:\n"
+        "  1. Check data directory permissions:\n"
+        "     ls -ld " + data_dir_ + "\n"
+        "     mkdir -p " + data_dir_ + " && chmod 755 " + data_dir_ + "\n"
+        "  2. Check port availability:\n"
+        "     netstat -tuln | grep " + std::to_string(port_) + "\n"
+        "     lsof -i :" + std::to_string(port_) + "\n"
+        "  3. Check Quickwit logs:\n"
+        "     " + binary_path_ + " --version\n"
+        "     tail -f " + data_dir_ + "/*.log\n"
+        "  4. Test Quickwit manually:\n"
+        "     QW_DATA_DIR=" + data_dir_ + " " + binary_path_ + " run";
+      logger_.Error(error_msg);
       running_ = false;
       return false;
     }
@@ -165,7 +194,25 @@ bool QuickwitProcess::WaitForReady(int timeout_secs) {
       std::chrono::steady_clock::now() - start).count();
 
     if (elapsed >= timeout_secs) {
-      logger_.Error("[Quickwit] Startup timeout [timeout=" + std::to_string(timeout_secs) + "s]");
+      std::string error_msg =
+        "Failed to start Quickwit full-text search engine\n"
+        "Reason: Startup timeout (process running but not responding)\n"
+        "Timeout: " + std::to_string(timeout_secs) + " seconds\n"
+        "Configuration:\n"
+        "  Binary: " + binary_path_ + "\n"
+        "  Data Dir: " + data_dir_ + "\n"
+        "  Port: " + std::to_string(port_) + "\n"
+        "Troubleshooting:\n"
+        "  1. Check if process is running:\n"
+        "     ps aux | grep quickwit\n"
+        "  2. Check port connectivity:\n"
+        "     curl -v http://127.0.0.1:" + std::to_string(port_) + "/health\n"
+        "  3. Check system resources:\n"
+        "     free -h  # Available memory\n"
+        "     df -h " + data_dir_ + "  # Disk space\n"
+        "  4. Increase timeout (if needed):\n"
+        "     This may indicate slow system or heavy load";
+      logger_.Error(error_msg);
       return false;
     }
 

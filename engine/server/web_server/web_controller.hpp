@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <iomanip>
 #include <oatpp/core/Types.hpp>
 #include <oatpp/core/macro/codegen.hpp>
 #include <oatpp/core/macro/component.hpp>
@@ -97,6 +98,214 @@ class WebController : public oatpp::web::server::api::ApiController {
   ENDPOINT("GET", "/", root) {
     auto response = createResponse(Status::CODE_200, "Welcome to Epsilla VectorDB.");
     response->putHeader(Header::CONTENT_TYPE, "text/plain");
+    return response;
+  }
+
+  ADD_CORS(Health)
+
+  ENDPOINT("GET", "/health", Health) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    // Overall status
+    bool all_healthy = true;
+    std::string status = "healthy";
+
+    // VectorDB core is always healthy if this endpoint responds
+    vectordb::Json components;
+    components.LoadFromString("{}");
+
+    vectordb::Json vectordbStatus;
+    vectordbStatus.LoadFromString("{}");
+    vectordbStatus.SetString("status", "healthy");
+    vectordbStatus.SetString("message", "Vector database is running");
+    components.SetObject("vectordb", vectordbStatus);
+
+    // Check full-text search engine status
+    vectordb::Json fulltextStatus;
+    fulltextStatus.LoadFromString("{}");
+
+    bool ftEnabled = globalConfig.EnableFullText.load(std::memory_order_relaxed);
+
+    if (ftEnabled) {
+      fulltextStatus.SetString("status", "enabled");
+      fulltextStatus.SetString("provider", globalConfig.FullTextEngine);
+      fulltextStatus.SetString("message", "Full-text search is configured");
+    } else {
+      fulltextStatus.SetString("status", "disabled");
+      fulltextStatus.SetString("message", "Full-text search is not enabled");
+    }
+    components.SetObject("fulltext", fulltextStatus);
+
+    // Worker pools status
+    vectordb::Json workerPoolStatus;
+    workerPoolStatus.LoadFromString("{}");
+    workerPoolStatus.SetString("status", "healthy");
+    workerPoolStatus.SetInt("cpu_workers", globalConfig.CpuWorkerThreads.load(std::memory_order_relaxed));
+    workerPoolStatus.SetInt("io_workers", globalConfig.IoWorkerThreads.load(std::memory_order_relaxed));
+    components.SetObject("worker_pools", workerPoolStatus);
+
+    response.SetString("status", status);
+    response.SetObject("components", components);
+    response.SetInt("timestamp", std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count());
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
+  ADD_CORS(Metrics)
+
+  ENDPOINT("GET", "/metrics", Metrics) {
+    std::stringstream metrics;
+
+    // Prometheus format metrics
+    metrics << "# HELP vectordb_info VectorDB server information\n";
+    metrics << "# TYPE vectordb_info gauge\n";
+    metrics << "vectordb_info{version=\"1.4.0\"} 1\n\n";
+
+    // Vector operations - Insert
+    metrics << "# HELP vectordb_insert_requests_total Total number of insert requests\n";
+    metrics << "# TYPE vectordb_insert_requests_total counter\n";
+    metrics << "vectordb_insert_requests_total "
+            << globalConfig.VectorInsertRequestCount.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_insert_last_request_timestamp Unix timestamp of last insert request\n";
+    metrics << "# TYPE vectordb_insert_last_request_timestamp gauge\n";
+    metrics << "vectordb_insert_last_request_timestamp "
+            << globalConfig.VectorInsertLastRequestTime.load(std::memory_order_relaxed) << "\n\n";
+
+    // Vector operations - Query
+    metrics << "# HELP vectordb_query_requests_total Total number of query requests\n";
+    metrics << "# TYPE vectordb_query_requests_total counter\n";
+    metrics << "vectordb_query_requests_total "
+            << globalConfig.VectorQueryRequestCount.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_query_last_request_timestamp Unix timestamp of last query request\n";
+    metrics << "# TYPE vectordb_query_last_request_timestamp gauge\n";
+    metrics << "vectordb_query_last_request_timestamp "
+            << globalConfig.VectorQueryLastRequestTime.load(std::memory_order_relaxed) << "\n\n";
+
+    // Vector operations - Delete
+    metrics << "# HELP vectordb_delete_requests_total Total number of delete requests\n";
+    metrics << "# TYPE vectordb_delete_requests_total counter\n";
+    metrics << "vectordb_delete_requests_total "
+            << globalConfig.VectorDeleteRequestCount.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_delete_last_request_timestamp Unix timestamp of last delete request\n";
+    metrics << "# TYPE vectordb_delete_last_request_timestamp gauge\n";
+    metrics << "vectordb_delete_last_request_timestamp "
+            << globalConfig.VectorDeleteLastRequestTime.load(std::memory_order_relaxed) << "\n\n";
+
+    // Vector operations - Update
+    metrics << "# HELP vectordb_update_requests_total Total number of update requests\n";
+    metrics << "# TYPE vectordb_update_requests_total counter\n";
+    metrics << "vectordb_update_requests_total "
+            << globalConfig.VectorUpdateRequestCount.load(std::memory_order_relaxed) << "\n\n";
+
+    // Worker pool configuration
+    metrics << "# HELP vectordb_cpu_workers Number of CPU worker threads\n";
+    metrics << "# TYPE vectordb_cpu_workers gauge\n";
+    metrics << "vectordb_cpu_workers "
+            << globalConfig.CpuWorkerThreads.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_io_workers Number of IO worker threads\n";
+    metrics << "# TYPE vectordb_io_workers gauge\n";
+    metrics << "vectordb_io_workers "
+            << globalConfig.IoWorkerThreads.load(std::memory_order_relaxed) << "\n\n";
+
+    // Configuration
+    metrics << "# HELP vectordb_fulltext_enabled Whether full-text search is enabled\n";
+    metrics << "# TYPE vectordb_fulltext_enabled gauge\n";
+    metrics << "vectordb_fulltext_enabled "
+            << (globalConfig.EnableFullText.load(std::memory_order_relaxed) ? "1" : "0") << "\n\n";
+
+    metrics << "# HELP vectordb_wal_auto_flush Whether WAL auto flush is enabled\n";
+    metrics << "# TYPE vectordb_wal_auto_flush gauge\n";
+    metrics << "vectordb_wal_auto_flush "
+            << (globalConfig.WALAutoFlush.load(std::memory_order_relaxed) ? "1" : "0") << "\n\n";
+
+    metrics << "# HELP vectordb_wal_flush_interval_seconds WAL flush interval in seconds\n";
+    metrics << "# TYPE vectordb_wal_flush_interval_seconds gauge\n";
+    metrics << "vectordb_wal_flush_interval_seconds "
+            << globalConfig.WALFlushInterval.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_auto_compaction_enabled Whether auto compaction is enabled\n";
+    metrics << "# TYPE vectordb_auto_compaction_enabled gauge\n";
+    metrics << "vectordb_auto_compaction_enabled "
+            << (globalConfig.AutoCompaction.load(std::memory_order_relaxed) ? "1" : "0") << "\n\n";
+
+    metrics << "# HELP vectordb_compaction_threshold Compaction threshold (ratio of deleted vectors)\n";
+    metrics << "# TYPE vectordb_compaction_threshold gauge\n";
+    metrics << "vectordb_compaction_threshold "
+            << globalConfig.CompactionThreshold.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_soft_delete_enabled Whether soft delete is enabled\n";
+    metrics << "# TYPE vectordb_soft_delete_enabled gauge\n";
+    metrics << "vectordb_soft_delete_enabled "
+            << (globalConfig.SoftDelete.load(std::memory_order_relaxed) ? "1" : "0") << "\n\n";
+
+    // Query latency histogram
+    metrics << "# HELP vectordb_query_duration_seconds Query duration histogram\n";
+    metrics << "# TYPE vectordb_query_duration_seconds histogram\n";
+
+    uint64_t bucket_1ms = globalConfig.VectorQueryLatencyBucket_1ms.load(std::memory_order_relaxed);
+    uint64_t bucket_5ms = globalConfig.VectorQueryLatencyBucket_5ms.load(std::memory_order_relaxed);
+    uint64_t bucket_10ms = globalConfig.VectorQueryLatencyBucket_10ms.load(std::memory_order_relaxed);
+    uint64_t bucket_50ms = globalConfig.VectorQueryLatencyBucket_50ms.load(std::memory_order_relaxed);
+    uint64_t bucket_100ms = globalConfig.VectorQueryLatencyBucket_100ms.load(std::memory_order_relaxed);
+    uint64_t bucket_500ms = globalConfig.VectorQueryLatencyBucket_500ms.load(std::memory_order_relaxed);
+    uint64_t bucket_1s = globalConfig.VectorQueryLatencyBucket_1s.load(std::memory_order_relaxed);
+    uint64_t bucket_5s = globalConfig.VectorQueryLatencyBucket_5s.load(std::memory_order_relaxed);
+    uint64_t bucket_inf = globalConfig.VectorQueryLatencyBucket_inf.load(std::memory_order_relaxed);
+
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"0.001\"} " << bucket_1ms << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"0.005\"} " << bucket_5ms << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"0.01\"} " << bucket_10ms << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"0.05\"} " << bucket_50ms << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"0.1\"} " << bucket_100ms << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"0.5\"} " << bucket_500ms << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"1\"} " << bucket_1s << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"5\"} " << bucket_5s << "\n";
+    metrics << "vectordb_query_duration_seconds_bucket{le=\"+Inf\"} " << bucket_inf << "\n";
+
+    uint64_t query_count = globalConfig.VectorQueryRequestCount.load(std::memory_order_relaxed);
+    uint64_t query_sum_us = globalConfig.VectorQueryLatencySum.load(std::memory_order_relaxed);
+    double query_sum_seconds = query_sum_us / 1000000.0;
+
+    metrics << "vectordb_query_duration_seconds_sum " << std::fixed << std::setprecision(6) << query_sum_seconds << "\n";
+    metrics << "vectordb_query_duration_seconds_count " << query_count << "\n\n";
+
+    // Memory statistics
+    metrics << "# HELP vectordb_memory_used_bytes Memory currently used in bytes\n";
+    metrics << "# TYPE vectordb_memory_used_bytes gauge\n";
+    metrics << "vectordb_memory_used_bytes "
+            << globalConfig.MemoryUsedBytes.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_memory_peak_bytes Peak memory usage in bytes\n";
+    metrics << "# TYPE vectordb_memory_peak_bytes gauge\n";
+    metrics << "vectordb_memory_peak_bytes "
+            << globalConfig.MemoryPeakBytes.load(std::memory_order_relaxed) << "\n\n";
+
+    // Database/Table statistics
+    metrics << "# HELP vectordb_database_count Number of databases\n";
+    metrics << "# TYPE vectordb_database_count gauge\n";
+    metrics << "vectordb_database_count "
+            << globalConfig.DatabaseCount.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_table_count Number of tables\n";
+    metrics << "# TYPE vectordb_table_count gauge\n";
+    metrics << "vectordb_table_count "
+            << globalConfig.TableCount.load(std::memory_order_relaxed) << "\n\n";
+
+    metrics << "# HELP vectordb_total_vector_count Total number of vectors across all tables\n";
+    metrics << "# TYPE vectordb_total_vector_count gauge\n";
+    metrics << "vectordb_total_vector_count "
+            << globalConfig.TotalVectorCount.load(std::memory_order_relaxed) << "\n\n";
+
+    auto response = createResponse(Status::CODE_200, metrics.str());
+    response->putHeader(Header::CONTENT_TYPE, "text/plain; version=0.0.4");
     return response;
   }
 
