@@ -42,6 +42,11 @@ constexpr size_t FieldTypeSizeMVP(meta::FieldType type) {
       // like the length of the string or the dimension of the vector. You might want
       // to handle these cases differently.
       return 0;
+    case meta::FieldType::SET:
+    case meta::FieldType::LIST:
+      // For these types, we can't determine the size without additional information
+      // like the length of the set or the list.
+      return 0;
     case meta::FieldType::UNKNOWN:
     default:
       // Unknown type
@@ -54,13 +59,15 @@ Status TableSegmentMVP::Init(meta::TableSchema& table_schema, int64_t size_limit
   primitive_offset_ = 0;
   schema = table_schema;
 
-  // Get how many primitive, vectors, and variable-length attributes (string, sparse vectors).
+  // Get how many primitive, vectors, and variable-length attributes (string, sparse vectors, set, list).
   for (auto& field_schema : table_schema.fields_) {
     auto current_total_vec_num = dense_vector_num_ + sparse_vector_num_;
     if (field_schema.field_type_ == meta::FieldType::STRING ||
         field_schema.field_type_ == meta::FieldType::JSON ||
         field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
-        field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT) {
+        field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+        field_schema.field_type_ == meta::FieldType::SET ||
+        field_schema.field_type_ == meta::FieldType::LIST) {
       field_id_mem_offset_map_[field_schema.id_] = var_len_attr_num_;
       field_name_mem_offset_map_[field_schema.name_] = var_len_attr_num_;
       if (field_schema.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE ||
@@ -265,6 +272,47 @@ TableSegmentMVP::TableSegmentMVP(meta::TableSchema& table_schema, const std::str
             file.read(reinterpret_cast<char*>(v->data()), dataLen);
             var_len_attr_table_[attrIdx][recordIdx] = std::move(v);
             break;
+          case meta::FieldType::SET:
+          case meta::FieldType::LIST: {
+            // set or list contains elements of primitive data types
+            switch (field.element_type) {
+              case meta::FieldType::INT1:
+              case meta::FieldType::INT2:
+              case meta::FieldType::INT4:
+              case meta::FieldType::INT8: {
+                std::vector<int64_t> values(dataLen / sizeof(int64_t));
+                file.read(reinterpret_cast<char*>(values.data()), dataLen);
+                var_len_attr_table_[attrIdx][recordIdx] = std::move(values);
+                break;
+              }
+              case meta::FieldType::FLOAT: {
+                std::vector<float> values(dataLen / sizeof(float));
+                file.read(reinterpret_cast<char*>(values.data()), dataLen);
+                var_len_attr_table_[attrIdx][recordIdx] = std::move(values);
+                break;
+              }
+              case meta::FieldType::DOUBLE: {
+                std::vector<double> values(dataLen / sizeof(double));
+                file.read(reinterpret_cast<char*>(values.data()), dataLen);
+                var_len_attr_table_[attrIdx][recordIdx] = std::move(values);
+                break;
+              }
+              case meta::FieldType::STRING: {
+                std::string str(dataLen, '\0');
+                file.read(&str[0], dataLen);
+                var_len_attr_table_[attrIdx][recordIdx] = str;
+                break;
+              }
+              case meta::FieldType::BOOL: {
+                std::vector<bool> values(dataLen / sizeof(bool));
+                file.read(reinterpret_cast<char*>(values.data()), dataLen);
+                var_len_attr_table_[attrIdx][recordIdx] = std::move(values);
+                break;
+              }
+              default:
+                break;
+            }
+          }
         }
       }
     }
@@ -663,7 +711,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
           } else {
             // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
             skipped_entry++;
-            goto LOOP_END; 
+            goto LOOP_END;
           }
         }
       } else {
@@ -679,7 +727,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
               } else {
                 // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
-                goto LOOP_END; 
+                goto LOOP_END;
               }
             }
             break;
@@ -695,7 +743,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
               } else {
                 // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
-                goto LOOP_END; 
+                goto LOOP_END;
               }
             }
             break;
@@ -711,7 +759,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
               } else {
                 // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
-                goto LOOP_END; 
+                goto LOOP_END;
               }
             }
             break;
@@ -727,7 +775,7 @@ Status TableSegmentMVP::Insert(meta::TableSchema& table_schema, Json& records, i
               } else {
                 // std::cerr << "primary key [" << value << "] already exists, skipping." << std::endl;
                 skipped_entry++;
-                goto LOOP_END; 
+                goto LOOP_END;
               }
             }
             break;
