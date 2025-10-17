@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <queue>
 #include <regex>
+#include <sstream>
 #include <stack>
 #include <unordered_map>
 #include <vector>

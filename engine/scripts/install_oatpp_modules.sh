@@ -26,6 +26,7 @@ install_module() {
         -DOATPP_BUILD_TESTS=OFF \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_INSTALL_PREFIX:PATH="${INSTALL_PATH}" \
         ..
     make -j "${N_PROCESSOR}"
@@ -56,8 +57,8 @@ fi
 N_PROCESSOR=1
 PLATFORM="$(uname -s)"
 if [[ "$PLATFORM" == "Darwin" ]]; then
-    export CC=gcc-13
-    export CXX=g++-13
+    export CC=gcc
+    export CXX=g++
     N_PROCESSOR="$(sysctl -n hw.ncpu)"
 elif [[ "$PLATFORM" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"

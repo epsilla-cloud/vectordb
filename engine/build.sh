@@ -8,8 +8,8 @@ cd build
 N_PROCESSOR=1
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
-    export CC=gcc-13
-    export CXX=g++-13
+    export CC=gcc
+    export CXX=g++
     N_PROCESSOR="$(sysctl -n hw.ncpu)"
 elif [[ "$(uname -s)" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"

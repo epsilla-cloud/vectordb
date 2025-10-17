@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vector>
+#include <random>
+#include <algorithm>
 
 #include "db/index/knn/nndescent_common.hpp"
 
@@ -158,7 +160,9 @@ class NNDescent {
       t += nn_new[i].size();
       // sample
       if (nn_new[i].size() > unsigned(S)) {
-        random_shuffle(nn_new[i].begin(), nn_new[i].end());
+        thread_local std::random_device rd;
+        thread_local std::mt19937 gen(rd());
+        std::shuffle(nn_new[i].begin(), nn_new[i].end(), gen);
         nn_new[i].resize(S);
       }
       BOOST_FOREACH (int &v, nn_new[i]) {
@@ -179,12 +183,14 @@ class NNDescent {
 
 #pragma omp parallel for schedule(runtime) shared(rnn_old, rnn_new) reduction(+ : t)
     for (int i = 0; i < N; ++i) {
+      thread_local std::random_device rd;
+      thread_local std::mt19937 gen(rd());
       if (rnn_old[i].size() > unsigned(S)) {
-        random_shuffle(rnn_old[i].begin(), rnn_old[i].end());
+        std::shuffle(rnn_old[i].begin(), rnn_old[i].end(), gen);
         rnn_old[i].resize(S);
       }
       if (rnn_new[i].size() > unsigned(S)) {
-        random_shuffle(rnn_new[i].begin(), rnn_new[i].end());
+        std::shuffle(rnn_new[i].begin(), rnn_new[i].end(), gen);
         rnn_new[i].resize(S);
       }
     }
