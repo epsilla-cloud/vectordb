@@ -28,6 +28,7 @@ install_module() {
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_INSTALL_PREFIX:PATH="${INSTALL_PATH}" \
+        ${CMAKE_EXTRA_FLAGS} \
         ..
     make -j "${N_PROCESSOR}"
     echo "Installing ${ORG_NAME}/${MODULE_NAME} to path ${INSTALL_PATH}"
@@ -56,9 +57,31 @@ fi
 
 N_PROCESSOR=1
 PLATFORM="$(uname -s)"
+CMAKE_EXTRA_FLAGS=""
+
 if [[ "$PLATFORM" == "Darwin" ]]; then
-    export CC=gcc
-    export CXX=g++
+    # Let CMake auto-detect the compiler on macOS
+    # Use xcrun to find the actual SDK path
+    MACOS_SDK="$(xcrun --show-sdk-path 2>/dev/null)"
+    if [ -z "$MACOS_SDK" ] || [ ! -d "$MACOS_SDK" ]; then
+        # Fallback to checking common SDK locations
+        for sdk in /Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk; do
+            if [ -d "$sdk" ] && [ ! -L "$sdk" ]; then
+                MACOS_SDK="$sdk"
+                break
+            fi
+        done
+    fi
+    
+    if [ -n "$MACOS_SDK" ] && [ -d "$MACOS_SDK" ]; then
+        echo "Using macOS SDK: $MACOS_SDK"
+        CMAKE_EXTRA_FLAGS="-DCMAKE_OSX_SYSROOT=${MACOS_SDK}"
+        # Also ensure the compiler can find headers
+        export CPLUS_INCLUDE_PATH="${MACOS_SDK}/usr/include/c++/v1:${CPLUS_INCLUDE_PATH}"
+        export CPATH="${MACOS_SDK}/usr/include:${CPATH}"
+    else
+        echo "Warning: Could not find macOS SDK"
+    fi
     N_PROCESSOR="$(sysctl -n hw.ncpu)"
 elif [[ "$PLATFORM" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"
