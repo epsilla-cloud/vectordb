@@ -1,6 +1,64 @@
 cmake_minimum_required(VERSION 3.10)
 project(vectordb)
 
+# Configure macOS SDK for header file discovery
+if(APPLE)
+    # Find the newest SDK with C++ standard library headers
+    file(GLOB SDK_DIRS LIST_DIRECTORIES true "/Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk")
+    set(ACTUAL_SDK "")
+    set(NEWEST_VERSION "0.0")
+    
+    foreach(sdk_dir ${SDK_DIRS})
+        # Skip symlinks, check for actual C++ headers
+        if(NOT IS_SYMLINK "${sdk_dir}" AND EXISTS "${sdk_dir}/usr/include/c++/v1/memory")
+            # Extract version from SDK name (e.g., MacOSX15.5.sdk -> 15.5)
+            string(REGEX MATCH "MacOSX([0-9]+\\.[0-9]+)\\.sdk" VERSION_MATCH "${sdk_dir}")
+            if(VERSION_MATCH)
+                set(SDK_VERSION "${CMAKE_MATCH_1}")
+                if(SDK_VERSION VERSION_GREATER NEWEST_VERSION)
+                    set(NEWEST_VERSION "${SDK_VERSION}")
+                    set(ACTUAL_SDK "${sdk_dir}")
+                endif()
+            endif()
+        endif()
+    endforeach()
+    
+    if(ACTUAL_SDK)
+        set(CMAKE_OSX_SYSROOT "${ACTUAL_SDK}")
+        message(STATUS "Using macOS SDK: ${ACTUAL_SDK}")
+        
+        # Explicitly add C++ standard library include paths
+        include_directories(SYSTEM "${ACTUAL_SDK}/usr/include/c++/v1")
+        include_directories(SYSTEM "${ACTUAL_SDK}/usr/include")
+        
+        # Add compiler flags to ensure headers are found
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${ACTUAL_SDK}/usr/include/c++/v1")
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${ACTUAL_SDK}/usr/include")
+    else()
+        # Fallback to xcrun if actual SDK not found
+        execute_process(
+            COMMAND xcrun --show-sdk-path
+            OUTPUT_VARIABLE MACOS_SDK_PATH
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+        )
+        if(MACOS_SDK_PATH AND EXISTS "${MACOS_SDK_PATH}")
+            set(CMAKE_OSX_SYSROOT "${MACOS_SDK_PATH}")
+            message(STATUS "Using macOS SDK (xcrun): ${MACOS_SDK_PATH}")
+            
+            # Explicitly add C++ standard library include paths
+            include_directories(SYSTEM "${MACOS_SDK_PATH}/usr/include/c++/v1")
+            include_directories(SYSTEM "${MACOS_SDK_PATH}/usr/include")
+            
+            # Add compiler flags to ensure headers are found
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem ${MACOS_SDK_PATH}/usr/include/c++/v1")
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -isystem ${MACOS_SDK_PATH}/usr/include")
+        else()
+            message(WARNING "Could not find macOS SDK with C++ headers. Compilation may fail.")
+        endif()
+    endif()
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # enable symbol flag for every build type
@@ -130,9 +188,75 @@ set_target_properties(oatpp_swagger PROPERTIES
 
 set_property(TARGET oatpp_swagger APPEND PROPERTY INTERFACE_LINK_LIBRARIES oatpp)
 
+# Configure OpenMP before defining libraries
+if(APPLE)
+    # Try to find libomp using Homebrew
+    execute_process(
+        COMMAND brew --prefix libomp
+        OUTPUT_VARIABLE LIBOMP_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    
+    if(LIBOMP_PREFIX AND EXISTS "${LIBOMP_PREFIX}")
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+        set(OpenMP_C_LIB_NAMES "omp")
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
+        set(OpenMP_CXX_LIB_NAMES "omp")
+        set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.dylib")
+        
+        # Add include directory and link flags
+        include_directories(${LIBOMP_PREFIX}/include)
+        link_directories(${LIBOMP_PREFIX}/lib)
+        
+        message(STATUS "Found libomp at: ${LIBOMP_PREFIX}")
+    else()
+        message(WARNING "libomp not found. Install with: brew install libomp")
+    endif()
+endif()
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    message(STATUS "OpenMP found via find_package")
+elseif(APPLE AND LIBOMP_PREFIX)
+    # Manual OpenMP setup for macOS if find_package fails
+    message(STATUS "Using manual OpenMP configuration for macOS")
+    
+    # Use -fopenmp=libomp for both compile and link
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp=libomp -I${LIBOMP_PREFIX}/include")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp=libomp -I${LIBOMP_PREFIX}/include")
+    
+    # CRITICAL: Add -fopenmp=libomp to linker flags too
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fopenmp=libomp -L${LIBOMP_PREFIX}/lib -Wl,-rpath,${LIBOMP_PREFIX}/lib")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fopenmp=libomp -L${LIBOMP_PREFIX}/lib -Wl,-rpath,${LIBOMP_PREFIX}/lib")
+else()
+    message(WARNING "OpenMP not found. Some features may be disabled.")
+endif()
+
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
 find_package(Boost REQUIRED COMPONENTS filesystem)
+
+# Link OpenMP to libraries - Use special macOS linker flags
+if(APPLE AND LIBOMP_PREFIX)
+    # Create interface library with OpenMP
+    add_library(openmp_interface INTERFACE)
+    target_link_libraries(openmp_interface INTERFACE omp)
+    target_link_directories(openmp_interface INTERFACE ${LIBOMP_PREFIX}/lib)
+    target_link_options(openmp_interface INTERFACE "-Wl,-rpath,${LIBOMP_PREFIX}/lib")
+    
+    # Link OpenMP to the libraries
+    target_link_libraries(vectordb_lib PUBLIC openmp_interface)
+    target_link_libraries(vectordb_dylib PUBLIC openmp_interface)
+    
+    # CRITICAL: Add linker flag to force load ALL symbols from static library
+    # This ensures OpenMP symbols are resolved even though libomp comes after libvectordb_lib.a
+    # Note: These will be applied later after vectordb target is created
+    target_link_options(vectordb_dylib PUBLIC "LINKER:-all_load")
+    
+    message(STATUS "Created OpenMP interface library with force_load flags")
+endif()
+
 target_include_directories(vectordb_lib PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(vectordb_lib PUBLIC oatpp)
 target_link_libraries(vectordb_lib PUBLIC oatpp_curl)
@@ -149,6 +273,11 @@ target_link_libraries(vectordb PUBLIC vectordb_lib)
 target_link_libraries(vectordb PUBLIC oatpp)
 target_link_libraries(vectordb PUBLIC oatpp_curl)
 target_link_libraries(vectordb PUBLIC oatpp_swagger)
+
+# Apply force_load for vectordb executable on macOS to resolve OpenMP symbols
+if(APPLE AND LIBOMP_PREFIX)
+    target_link_options(vectordb PUBLIC "LINKER:-force_load,$<TARGET_FILE:vectordb_lib>")
+endif()
 
 find_package(CURL REQUIRED)
 if(CURL_FOUND)
@@ -187,12 +316,7 @@ if(Python3_FOUND)
   endif()
 endif()
 
-if(APPLE)
-    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I/opt/homebrew/Cellar/libomp/21.1.3/include")
-    set(OpenMP_CXX_LIB_NAMES "omp")
-    set(OpenMP_omp_LIBRARY "/opt/homebrew/Cellar/libomp/21.1.3/lib/libomp.dylib")
-endif()
-find_package(OpenMP)
+# Apply OpenMP to specific targets if found via find_package
 if(OpenMP_CXX_FOUND)
     target_link_libraries(vectordb PUBLIC OpenMP::OpenMP_CXX)
     target_link_libraries(vectordb_lib PUBLIC OpenMP::OpenMP_CXX)
@@ -236,6 +360,11 @@ target_link_libraries(
   GTest::gtest_main
   vectordb_lib
 )
+
+# Apply force_load for vector_db_test executable on macOS to resolve OpenMP symbols
+if(APPLE AND LIBOMP_PREFIX)
+    target_link_options(vector_db_test PUBLIC "LINKER:-force_load,$<TARGET_FILE:vectordb_lib>")
+endif()
 
 gtest_discover_tests(vector_db_test)
 

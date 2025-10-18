@@ -8,8 +8,9 @@ cd build
 N_PROCESSOR=1
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
-    export CC=gcc
-    export CXX=g++
+    # On macOS, explicitly use clang/clang++ to avoid g++ issues
+    export CC=clang
+    export CXX=clang++
     N_PROCESSOR="$(sysctl -n hw.ncpu)"
 elif [[ "$(uname -s)" == "Linux" ]]; then
     N_PROCESSOR="$(nproc)"
