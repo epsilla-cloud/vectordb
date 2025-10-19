@@ -59,6 +59,18 @@ N_PROCESSOR=1
 PLATFORM="$(uname -s)"
 CMAKE_EXTRA_FLAGS=""
 
+# On macOS, try to upgrade libomp to ensure compatibility with Apple Clang 17+
+# libomp 21.1.3+ is required for ___kmpc_dispatch_deinit symbol
+if [[ "$PLATFORM" == "Darwin" ]]; then
+    echo "Checking libomp version on macOS..."
+    if command -v brew &> /dev/null; then
+        echo "Attempting to upgrade libomp (required for OpenMP compatibility)..."
+        brew upgrade libomp 2>/dev/null || echo "libomp upgrade failed or not needed, continuing..."
+    else
+        echo "Warning: Homebrew not found, skipping libomp upgrade"
+    fi
+fi
+
 if [[ "$PLATFORM" == "Darwin" ]]; then
     # Let CMake auto-detect the compiler on macOS
     # Use xcrun to find the actual SDK path
