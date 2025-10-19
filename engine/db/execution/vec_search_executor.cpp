@@ -10,6 +10,7 @@
 #include <numeric>
 #include <cstdlib>  // For std::getenv
 #include <cstdio>   // For fprintf
+#include <cinttypes> // For PRId64, PRIu64 format macros
 
 #include "query/expr/expr.hpp"
 #include "utils/atomic_counter.hpp"
@@ -101,7 +102,7 @@ VecSearchExecutor::VecSearchExecutor(
 #ifdef VECTORDB_DEBUG_BUILD
   static std::atomic<int> executor_count(0);
   int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
-  printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld)\n",
+  printf("[VecSearchExecutor %d] Created with num_threads=%d (dimension=%" PRId64 ", indexed_vectors=%" PRId64 ")\n",
          executor_id, num_threads_, dimension_, total_indexed_vector_);
 #else
   // In production, only log if explicitly enabled via environment variable
@@ -112,7 +113,7 @@ VecSearchExecutor::VecSearchExecutor(
     // Sample logging: only log every 100th instance to reduce overhead
     if (log_count.fetch_add(1) % 100 == 0) {
       int executor_id = executor_count.fetch_add(1, std::memory_order_seq_cst);
-      fprintf(stderr, "[VecSearchExecutor %d] Created with num_threads=%d (dimension=%ld, indexed_vectors=%ld) [SAMPLED]\n",
+      fprintf(stderr, "[VecSearchExecutor %d] Created with num_threads=%d (dimension=%" PRId64 ", indexed_vectors=%" PRId64 ") [SAMPLED]\n",
               executor_id, num_threads_, dimension_, total_indexed_vector_);
     }
   }
@@ -1069,11 +1070,11 @@ Status VecSearchExecutor::Search(
   // Special case: if no vectors are indexed yet, use brute force search
   // This provides results even when the index hasn't been built yet
   if (total_indexed_vector_ == 0 && total_vector > 0 && !vector_field_name_.empty()) {
-    fprintf(stderr, "[VecSearchExecutor] Using brute force fallback: total_indexed=%ld, total_vector=%ld, field=%s\n",
+    fprintf(stderr, "[VecSearchExecutor] Using brute force fallback: total_indexed=%" PRId64 ", total_vector=%" PRId64 ", field=%s\n",
             total_indexed_vector_, total_vector, vector_field_name_.c_str());
     BruteForceSearch(query_data, 0, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);
     result_size = std::min({brute_force_queue_.size(), limit, size_t(L_local_)});
-    fprintf(stderr, "[VecSearchExecutor] Brute force returned %ld results\n", result_size);
+    fprintf(stderr, "[VecSearchExecutor] Brute force returned %" PRId64 " results\n", result_size);
     for (int64_t k_i = 0; k_i < result_size; ++k_i) {
       search_result_[k_i] = brute_force_queue_[k_i].id_;
       distance_[k_i] = brute_force_queue_[k_i].distance_;
@@ -1106,7 +1107,7 @@ Status VecSearchExecutor::Search(
     // warning, this value cannot exceed LocalQueueSize (we don't check it here because it will
     // create circular dependency)
     auto searchLimit = std::min({size_t(total_indexed_vector_), limit, size_t(L_local_)});
-    fprintf(stderr, "[VecSearchExecutor] Using NSG search: total_indexed=%ld, total_vector=%ld, searchLimit=%zu, L_master=%ld, L_local=%ld\n",
+    fprintf(stderr, "[VecSearchExecutor] Using NSG search: total_indexed=%" PRId64 ", total_vector=%" PRId64 ", searchLimit=%zu, L_master=%" PRId64 ", L_local=%" PRId64 "\n",
             total_indexed_vector_, total_vector, searchLimit, L_master_, L_local_);
     SearchImpl(
         query_data,
@@ -1121,7 +1122,7 @@ Status VecSearchExecutor::Search(
         is_visited_,
         subsearch_iterations_);
     if (total_vector > total_indexed_vector_) {
-      fprintf(stderr, "[VecSearchExecutor] Index out of date: adding brute force for vectors [%ld, %ld)\n",
+      fprintf(stderr, "[VecSearchExecutor] Index out of date: adding brute force for vectors [%" PRId64 ", %" PRId64 ")\n",
               total_indexed_vector_, total_vector);
       // Need to brute force search the newly added but haven't been indexed vectors.
       BruteForceSearch(query_data, total_indexed_vector_, total_vector, deleted, expr_evaluator, table_segment, filter_root_index);

@@ -7,6 +7,7 @@ namespace engine {
 namespace index {
 
 struct Distance {
+  virtual ~Distance() = default;
   virtual float Compare(const DenseVectorPtr a, const DenseVectorPtr b, unsigned size) const = 0;
   virtual float Compare(const SparseVector a, const SparseVector b) const = 0;
   virtual float Compare(const VectorPtr a, const VectorPtr b) const = 0;
