@@ -155,6 +155,60 @@ class WebController : public oatpp::web::server::api::ApiController {
     return httpResponse;
   }
 
+  ADD_CORS(ApiHealth)
+
+  ENDPOINT("GET", "/api/health", ApiHealth) {
+    vectordb::Json response;
+    response.LoadFromString("{}");
+
+    // Overall status
+    bool all_healthy = true;
+    std::string status = "healthy";
+
+    // VectorDB core is always healthy if this endpoint responds
+    vectordb::Json components;
+    components.LoadFromString("{}");
+
+    vectordb::Json vectordbStatus;
+    vectordbStatus.LoadFromString("{}");
+    vectordbStatus.SetString("status", "healthy");
+    vectordbStatus.SetString("message", "Vector database is running");
+    components.SetObject("vectordb", vectordbStatus);
+
+    // Check full-text search engine status
+    vectordb::Json fulltextStatus;
+    fulltextStatus.LoadFromString("{}");
+
+    bool ftEnabled = globalConfig.EnableFullText.load(std::memory_order_relaxed);
+
+    if (ftEnabled) {
+      fulltextStatus.SetString("status", "enabled");
+      fulltextStatus.SetString("provider", globalConfig.FullTextEngine);
+      fulltextStatus.SetString("message", "Full-text search is configured");
+    } else {
+      fulltextStatus.SetString("status", "disabled");
+      fulltextStatus.SetString("message", "Full-text search is not enabled");
+    }
+    components.SetObject("fulltext", fulltextStatus);
+
+    // Worker pools status
+    vectordb::Json workerPoolStatus;
+    workerPoolStatus.LoadFromString("{}");
+    workerPoolStatus.SetString("status", "healthy");
+    workerPoolStatus.SetInt("cpu_workers", globalConfig.CpuWorkerThreads.load(std::memory_order_relaxed));
+    workerPoolStatus.SetInt("io_workers", globalConfig.IoWorkerThreads.load(std::memory_order_relaxed));
+    components.SetObject("worker_pools", workerPoolStatus);
+
+    response.SetString("status", status);
+    response.SetObject("components", components);
+    response.SetInt("timestamp", std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count());
+
+    auto httpResponse = createResponse(Status::CODE_200, response.DumpToString());
+    httpResponse->putHeader("Content-Type", "application/json");
+    return httpResponse;
+  }
+
   ADD_CORS(Metrics)
 
   ENDPOINT("GET", "/metrics", Metrics) {
