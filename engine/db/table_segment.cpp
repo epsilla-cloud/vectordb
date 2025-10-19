@@ -533,11 +533,15 @@ TableSegment::TableSegment(meta::TableSchema& table_schema, const std::string& d
             break;
           }
           case meta::FieldType::SPARSE_VECTOR_DOUBLE:
-          case meta::FieldType::SPARSE_VECTOR_FLOAT:
+          case meta::FieldType::SPARSE_VECTOR_FLOAT: {
             auto v = std::make_shared<SparseVector>(dataLen / sizeof(SparseVectorElement));
             file.read(reinterpret_cast<char*>(v->data()), dataLen);
             var_len_attr_table_[attrIdx][recordIdx] = std::move(v);
             break;
+          }
+          default:
+            // Fixed-length types (INT1/2/4/8, FLOAT, DOUBLE, etc.) are not stored in var_len_attr
+            throw std::runtime_error("Unexpected field type in variable-length attribute table");
         }
       }
     }
@@ -704,6 +708,8 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
             }
 #endif
             break;
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       } else if (isStringPK()) {
         auto pk = pkField.GetString();
@@ -768,6 +774,8 @@ Status TableSegment::Delete(Json& records, std::vector<vectordb::query::expr::Ex
             item_deleted = DeleteByIntPK(pk, expr_evaluator, filter_root_index).ok();
             break;
           }
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       } else if (isStringPK()) {
         auto pk = std::get<std::string>(var_len_attr_table_[field_id_mem_offset_map_[pkFieldIdx()]][id]);
@@ -805,6 +813,8 @@ bool TableSegment::PK2ID(Json& record, size_t& id) {
         return primary_key_.getKeyWithLock(static_cast<int32_t>(pk), id);
       case meta::FieldType::INT8:
         return primary_key_.getKeyWithLock(static_cast<int64_t>(pk), id);
+      default:
+        throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
     }
   } else if (isStringPK()) {
     auto pk = record.GetString();
@@ -897,6 +907,8 @@ Status TableSegment::HardDelete(Json& records, std::vector<vectordb::query::expr
           case meta::FieldType::INT8:
             found = primary_key_.getKey(static_cast<int64_t>(pk), record_id);
             break;
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       } else if (isStringPK()) {
         auto pk = pkField.GetString();
@@ -990,6 +1002,8 @@ Status TableSegment::BatchHardDelete(const std::vector<size_t>& sorted_ids) {
           logger_.Debug("[TableSegment] Removed INT64 pk=" + std::to_string(pk) + " from index for record id=" + std::to_string(id));
           break;
         }
+        default:
+          throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
       }
     }
   }
@@ -1136,6 +1150,8 @@ void TableSegment::RebuildPrimaryKeyIndex() {
             primary_key_.addKeyIfNotExist(pk, id);
             break;
           }
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       }
     }
@@ -1573,6 +1589,8 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
             }
             break;
           }
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       }
     }
@@ -1626,6 +1644,8 @@ Status TableSegment::Insert(meta::TableSchema& table_schema, Json& records, int6
           case meta::FieldType::INT8:
             primary_key_.updateKey(static_cast<int64_t>(updated_int_ids[idx]), updated_ids_new_idx[idx]);
             break;
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       } else if (isStringPK()) {
         primary_key_.updateKey(updated_string_ids[idx], updated_ids_new_idx[idx]);
@@ -1714,6 +1734,8 @@ Status TableSegment::InsertPrepare(meta::TableSchema& table_schema, Json& pks, J
               mask -= 1 << mod;
             }
             break;
+          default:
+            throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
         }
       } else if (isStringPK()) {
         auto val = pk.GetString();
@@ -2018,7 +2040,7 @@ Status TableSegment::CompactSegment() {
               break;
             }
             default:
-              break;
+              throw std::runtime_error("Primary key must be integer type (INT1/2/4/8)");
           }
         } else if (isStringPK()) {
           auto& pk = std::get<std::string>(var_len_attr_table_[*string_pk_offset_][old_idx]);

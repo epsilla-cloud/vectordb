@@ -308,9 +308,9 @@ target_link_libraries(vectordb_dylib PUBLIC oatpp_swagger)
 
 add_executable(vectordb cmd/server/main.cpp)
 target_link_libraries(vectordb PUBLIC vectordb_lib)
-target_link_libraries(vectordb PUBLIC oatpp)
-target_link_libraries(vectordb PUBLIC oatpp_curl)
-target_link_libraries(vectordb PUBLIC oatpp_swagger)
+#target_link_libraries(vectordb PUBLIC oatpp)
+#target_link_libraries(vectordb PUBLIC oatpp_curl)
+#target_link_libraries(vectordb PUBLIC oatpp_swagger)
 
 # Add OpenMP linker flags for vectordb executable
 if(USING_MANUAL_OPENMP)
@@ -331,8 +331,8 @@ if(CURL_FOUND)
   target_include_directories(vectordb_dylib PUBLIC ${CURL_INCLUDE_DIRS})
   target_link_libraries(vectordb_dylib PUBLIC ${CURL_LIBRARIES})
 
-  target_include_directories(vectordb PUBLIC ${CURL_INCLUDE_DIRS})
-  target_link_libraries(vectordb PUBLIC ${CURL_LIBRARIES})
+  #target_include_directories(vectordb PUBLIC ${CURL_INCLUDE_DIRS})
+  #target_link_libraries(vectordb PUBLIC ${CURL_LIBRARIES})
 endif()
 
 # Only build Python binding if Python has shared libraries available
