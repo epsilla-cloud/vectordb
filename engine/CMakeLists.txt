@@ -190,71 +190,109 @@ set_property(TARGET oatpp_swagger APPEND PROPERTY INTERFACE_LINK_LIBRARIES oatpp
 
 # Configure OpenMP before defining libraries
 if(APPLE)
-    # Try to find libomp using Homebrew
+    # Try to find libomp using Homebrew (works for both Intel and Apple Silicon)
     execute_process(
         COMMAND brew --prefix libomp
         OUTPUT_VARIABLE LIBOMP_PREFIX
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
+        RESULT_VARIABLE BREW_RESULT
     )
     
-    if(LIBOMP_PREFIX AND EXISTS "${LIBOMP_PREFIX}")
-        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
-        set(OpenMP_C_LIB_NAMES "omp")
-        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include")
-        set(OpenMP_CXX_LIB_NAMES "omp")
+    if(BREW_RESULT EQUAL 0 AND LIBOMP_PREFIX AND EXISTS "${LIBOMP_PREFIX}")
+        # Found via Homebrew - this is the preferred method
         set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.dylib")
         
-        # Add include directory and link flags
-        include_directories(${LIBOMP_PREFIX}/include)
-        link_directories(${LIBOMP_PREFIX}/lib)
-        
-        message(STATUS "Found libomp at: ${LIBOMP_PREFIX}")
+        # Check if the library exists and has the required symbol
+        if(EXISTS "${OpenMP_omp_LIBRARY}")
+            # Try to get libomp version
+            execute_process(
+                COMMAND brew list --versions libomp
+                OUTPUT_VARIABLE LIBOMP_VERSION_OUTPUT
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            
+            message(STATUS "Found libomp via Homebrew at: ${LIBOMP_PREFIX}")
+            if(LIBOMP_VERSION_OUTPUT)
+                message(STATUS "libomp version: ${LIBOMP_VERSION_OUTPUT}")
+            endif()
+            message(STATUS "OpenMP library: ${OpenMP_omp_LIBRARY}")
+        else()
+            message(WARNING "libomp library not found at: ${OpenMP_omp_LIBRARY}")
+            set(LIBOMP_PREFIX "")
+        endif()
     else()
-        message(WARNING "libomp not found. Install with: brew install libomp")
+        # Homebrew not available or libomp not installed
+        message(WARNING "Could not find libomp via Homebrew.")
+        message(WARNING "Please install it with: brew install libomp")
+        message(WARNING "Note: libomp 21.1.3+ is required for compatibility with Apple Clang 17+")
+        set(LIBOMP_PREFIX "")
     endif()
 endif()
 
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    message(STATUS "OpenMP found via find_package")
-elseif(APPLE AND LIBOMP_PREFIX)
-    # Manual OpenMP setup for macOS if find_package fails
-    message(STATUS "Using manual OpenMP configuration for macOS")
+# Choose OpenMP implementation based on platform and availability
+if(APPLE AND LIBOMP_PREFIX)
+    # On macOS, always prefer Homebrew libomp when available
+    # This ensures compatibility with Apple Clang and avoids conflicts with gcc/llvm@14 OpenMP
+    message(STATUS "Using Homebrew libomp for macOS (preferred for Apple Clang compatibility)")
     
-    # Use -fopenmp=libomp for both compile and link
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp=libomp -I${LIBOMP_PREFIX}/include")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fopenmp=libomp -I${LIBOMP_PREFIX}/include")
+    # CRITICAL: Set include directory with BEFORE to ensure it has highest priority
+    # This prevents conflicts with other OpenMP installations (gcc, llvm@14, etc.)
+    include_directories(BEFORE SYSTEM ${LIBOMP_PREFIX}/include)
+    link_directories(${LIBOMP_PREFIX}/lib)
     
-    # CRITICAL: Add -fopenmp=libomp to linker flags too
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fopenmp=libomp -L${LIBOMP_PREFIX}/lib -Wl,-rpath,${LIBOMP_PREFIX}/lib")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fopenmp=libomp -L${LIBOMP_PREFIX}/lib -Wl,-rpath,${LIBOMP_PREFIX}/lib")
+    # Apply OpenMP flags globally to ensure all source files are compiled with OpenMP
+    # On macOS with Apple Clang, we must use -Xpreprocessor -fopenmp
+    add_compile_options(-Xpreprocessor -fopenmp)
+    
+    # Do NOT add -lomp to global linker flags as it causes linking order issues
+    # Instead, we explicitly link libomp.dylib to each target via target_link_libraries
+    
+    message(STATUS "Applied global OpenMP compile flags: -Xpreprocessor -fopenmp")
+    message(STATUS "OpenMP include directory (highest priority): ${LIBOMP_PREFIX}/include")
+    message(STATUS "OpenMP will be linked explicitly to each target")
+    
+    # Set flag to indicate we're using manual OpenMP configuration
+    set(USING_MANUAL_OPENMP TRUE)
 else()
-    message(WARNING "OpenMP not found. Some features may be disabled.")
+    # Try standard find_package for non-macOS or if Homebrew libomp not found
+    find_package(OpenMP)
+    if(OpenMP_CXX_FOUND)
+        message(STATUS "OpenMP found via find_package")
+        
+        # Apply OpenMP flags globally to ensure all source files are compiled with OpenMP
+        separate_arguments(OpenMP_CXX_FLAGS_LIST UNIX_COMMAND "${OpenMP_CXX_FLAGS}")
+        add_compile_options(${OpenMP_CXX_FLAGS_LIST})
+        
+        message(STATUS "Applied global OpenMP compile flags: ${OpenMP_CXX_FLAGS}")
+        message(STATUS "OpenMP libraries: ${OpenMP_CXX_LIBRARIES}")
+        
+        set(USING_MANUAL_OPENMP FALSE)
+    else()
+        message(WARNING "OpenMP not found. Some features may be disabled.")
+        message(WARNING "On macOS, install with: brew install libomp")
+        set(USING_MANUAL_OPENMP FALSE)
+    endif()
 endif()
 
 add_library(vectordb_lib ${LIB_FILES})
 add_library(vectordb_dylib SHARED ${LIB_FILES})
 find_package(Boost REQUIRED COMPONENTS filesystem)
 
-# Link OpenMP to libraries - Use special macOS linker flags
-if(APPLE AND LIBOMP_PREFIX)
-    # Create interface library with OpenMP
-    add_library(openmp_interface INTERFACE)
-    target_link_libraries(openmp_interface INTERFACE omp)
-    target_link_directories(openmp_interface INTERFACE ${LIBOMP_PREFIX}/lib)
-    target_link_options(openmp_interface INTERFACE "-Wl,-rpath,${LIBOMP_PREFIX}/lib")
+# Link OpenMP to libraries
+if(USING_MANUAL_OPENMP)
+    # For shared library with manual OpenMP (Homebrew libomp on macOS)
+    # Use target_link_directories and target_link_libraries to ensure proper link order
+    target_link_directories(vectordb_dylib PUBLIC ${LIBOMP_PREFIX}/lib)
+    target_link_libraries(vectordb_dylib PUBLIC omp)
+    target_link_options(vectordb_dylib PUBLIC "-Wl,-rpath,${LIBOMP_PREFIX}/lib")
     
-    # Link OpenMP to the libraries
-    target_link_libraries(vectordb_lib PUBLIC openmp_interface)
-    target_link_libraries(vectordb_dylib PUBLIC openmp_interface)
-    
-    # CRITICAL: Add linker flag to force load ALL symbols from static library
-    # This ensures OpenMP symbols are resolved even though libomp comes after libvectordb_lib.a
-    # Note: These will be applied later after vectordb target is created
-    target_link_options(vectordb_dylib PUBLIC "LINKER:-all_load")
-    
-    message(STATUS "Created OpenMP interface library with force_load flags")
+    message(STATUS "Linked Homebrew libomp to vectordb_dylib")
+elseif(OpenMP_CXX_FOUND)
+    # Use find_package discovered OpenMP
+    target_link_libraries(vectordb_dylib PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "Linked OpenMP::OpenMP_CXX to vectordb_dylib")
 endif()
 
 target_include_directories(vectordb_lib PUBLIC ${Boost_INCLUDE_DIRS})
@@ -274,9 +312,15 @@ target_link_libraries(vectordb PUBLIC oatpp)
 target_link_libraries(vectordb PUBLIC oatpp_curl)
 target_link_libraries(vectordb PUBLIC oatpp_swagger)
 
-# Apply force_load for vectordb executable on macOS to resolve OpenMP symbols
-if(APPLE AND LIBOMP_PREFIX)
-    target_link_options(vectordb PUBLIC "LINKER:-force_load,$<TARGET_FILE:vectordb_lib>")
+# Add OpenMP linker flags for vectordb executable
+if(USING_MANUAL_OPENMP)
+    target_link_directories(vectordb PUBLIC ${LIBOMP_PREFIX}/lib)
+    target_link_libraries(vectordb PUBLIC omp)
+    target_link_options(vectordb PUBLIC "-Wl,-rpath,${LIBOMP_PREFIX}/lib")
+    message(STATUS "Linked Homebrew libomp to vectordb executable")
+elseif(OpenMP_CXX_FOUND)
+    target_link_libraries(vectordb PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "Linked OpenMP::OpenMP_CXX to vectordb executable")
 endif()
 
 find_package(CURL REQUIRED)
@@ -316,15 +360,6 @@ if(Python3_FOUND)
   endif()
 endif()
 
-# Apply OpenMP to specific targets if found via find_package
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(vectordb PUBLIC OpenMP::OpenMP_CXX)
-    target_link_libraries(vectordb_lib PUBLIC OpenMP::OpenMP_CXX)
-    target_link_libraries(vectordb_dylib PUBLIC OpenMP::OpenMP_CXX)
-endif()
-
-
-
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -357,13 +392,20 @@ file(COPY test/engine/db/testdata DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/engine
 
 target_link_libraries(
   vector_db_test
+  PUBLIC
   GTest::gtest_main
   vectordb_lib
 )
 
-# Apply force_load for vector_db_test executable on macOS to resolve OpenMP symbols
-if(APPLE AND LIBOMP_PREFIX)
-    target_link_options(vector_db_test PUBLIC "LINKER:-force_load,$<TARGET_FILE:vectordb_lib>")
+# Link OpenMP after vectordb_lib to ensure OpenMP symbols are available
+if(USING_MANUAL_OPENMP)
+    target_link_directories(vector_db_test PUBLIC ${LIBOMP_PREFIX}/lib)
+    target_link_libraries(vector_db_test PUBLIC omp)
+    target_link_options(vector_db_test PUBLIC "-Wl,-rpath,${LIBOMP_PREFIX}/lib")
+    message(STATUS "Linked Homebrew libomp to vector_db_test")
+elseif(OpenMP_CXX_FOUND)
+    target_link_libraries(vector_db_test PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "Linked OpenMP::OpenMP_CXX to vector_db_test")
 endif()
 
 gtest_discover_tests(vector_db_test)

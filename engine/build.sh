@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+bash scripts/install_oatpp_modules.sh
+
 # Create build directory
 mkdir -p build
 cd build
