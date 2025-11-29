@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <ctime>
+#include <cstdlib>
 #include <iostream>
 
 #include "server/server.hpp"
@@ -25,6 +26,27 @@ void print_banner() {
   std::cout << std::endl;
   std::cout << "Welcome to use Epsilla Vector Database!" << std::endl;
   std::cout << std::endl;
+}
+
+void print_startup_config(uint16_t port, const std::string& port_source,
+                          bool rebuild, bool is_leader,
+                          const std::string& embedding_baseurl,
+                          const std::string& config_filename) {
+  std::cout << "\n";
+  std::cout << "================================================================================\n";
+  std::cout << "                        VectorDB Startup Configuration                          \n";
+  std::cout << "================================================================================\n";
+
+  std::cout << " Server Configuration:\n";
+  std::cout << "   - Server Port              : " << port << " (" << port_source << ")\n";
+  std::cout << "   - Rebuild Mode             : " << (rebuild ? "ENABLED" : "DISABLED") << "\n";
+  std::cout << "   - Leader Mode              : " << (is_leader ? "ENABLED" : "DISABLED") << "\n";
+  std::cout << "   - Embedding Service URL    : " << embedding_baseurl << "\n";
+  if (!config_filename.empty()) {
+    std::cout << "   - Config File              : " << config_filename << "\n";
+  }
+  std::cout << "\n";
+  std::cout << "================================================================================\n\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -57,7 +79,24 @@ int main(int argc, char *argv[]) {
   // }
 
   int value;
+  // Initialize port from environment variable SERVICE_PORT, default to 8888
   uint16_t port = 8888;
+  std::string port_source = "default";
+  const char* service_port_env = std::getenv("SERVICE_PORT");
+  if (service_port_env != nullptr) {
+    try {
+      int env_port = std::stoi(service_port_env);
+      if (env_port > 0 && env_port <= 65535) {
+        port = static_cast<uint16_t>(env_port);
+        port_source = "SERVICE_PORT environment variable";
+        logger.Info("Port set to " + std::to_string(port) + " from SERVICE_PORT environment variable");
+      } else {
+        logger.Warning("Invalid SERVICE_PORT value: " + std::string(service_port_env) + ", using default: 8888");
+      }
+    } catch (const std::exception& e) {
+      logger.Warning("Failed to parse SERVICE_PORT: " + std::string(service_port_env) + ", using default: 8888");
+    }
+  }
   bool rebuild = true;
   bool is_leader = true;
   std::string embedding_baseurl = "http://localhost:8889";
@@ -72,7 +111,20 @@ int main(int argc, char *argv[]) {
       }
       case 'p': {
         std::string server_port = optarg;
-        port = (uint16_t)(stoi(server_port));
+        try {
+          int cmd_port = std::stoi(server_port);
+          if (cmd_port > 0 && cmd_port <= 65535) {
+            port = static_cast<uint16_t>(cmd_port);
+            port_source = "command line argument";
+            logger.Info("Port set to " + std::to_string(port) + " from command line argument");
+          } else {
+            logger.Error("Invalid port value: " + server_port + " (must be between 1 and 65535)");
+            goto FAIL;
+          }
+        } catch (const std::exception& e) {
+          logger.Error("Failed to parse port: " + server_port);
+          goto FAIL;
+        }
         break;
       }
       case 'r': {
@@ -97,6 +149,9 @@ int main(int argc, char *argv[]) {
         break;
     }
   }
+
+  // Print startup configuration
+  print_startup_config(port, port_source, rebuild, is_leader, embedding_baseurl, config_filename);
 
   server.Init(config_filename);
 
