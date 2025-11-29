@@ -79,22 +79,22 @@ int main(int argc, char *argv[]) {
   // }
 
   int value;
-  // Initialize port from environment variable SERVICE_PORT, default to 8888
+  // Initialize port from environment variable VECTORDB_PORT, default to 8888
   uint16_t port = 8888;
   std::string port_source = "default";
-  const char* service_port_env = std::getenv("SERVICE_PORT");
-  if (service_port_env != nullptr) {
+  const char* vectordb_port_env = std::getenv("VECTORDB_PORT");
+  if (vectordb_port_env != nullptr) {
     try {
-      int env_port = std::stoi(service_port_env);
+      int env_port = std::stoi(vectordb_port_env);
       if (env_port > 0 && env_port <= 65535) {
         port = static_cast<uint16_t>(env_port);
-        port_source = "SERVICE_PORT environment variable";
-        logger.Info("Port set to " + std::to_string(port) + " from SERVICE_PORT environment variable");
+        port_source = "VECTORDB_PORT environment variable";
+        logger.Info("Port set to " + std::to_string(port) + " from VECTORDB_PORT environment variable");
       } else {
-        logger.Warning("Invalid SERVICE_PORT value: " + std::string(service_port_env) + ", using default: 8888");
+        logger.Warning("Invalid VECTORDB_PORT value: " + std::string(vectordb_port_env) + ", using default: 8888");
       }
     } catch (const std::exception& e) {
-      logger.Warning("Failed to parse SERVICE_PORT: " + std::string(service_port_env) + ", using default: 8888");
+      logger.Warning("Failed to parse VECTORDB_PORT: " + std::string(vectordb_port_env) + ", using default: 8888");
     }
   }
   bool rebuild = true;

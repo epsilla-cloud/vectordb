@@ -16,8 +16,8 @@ ARG RELEASE_VERSION=latest
 ENV ENV_RELEASE_VERSION=$RELEASE_VERSION
 COPY --from=builder /vectordb/build/vectordb   /vectordb
 COPY --from=builder /usr/local/bin/geesefs     /usr/local/bin/geesefs
-COPY --from=builder /usr/local/bin/quickwit   /usr/local/bin/quickwit
-COPY --from=builder /usr/local/bin/quickwit.config.yaml /usr/local/bin/config/quickwit.yaml
+#COPY --from=builder /usr/local/bin/quickwit   /usr/local/bin/quickwit
+#COPY --from=builder /usr/local/bin/quickwit.config.yaml /usr/local/bin/config/quickwit.yaml
 COPY ./scripts/heartbeat.sh /heartbeat.sh
 HEALTHCHECK --interval=600s --timeout=30s --retries=1000 CMD bash /heartbeat.sh || exit 0
 ENTRYPOINT ["/vectordb"]
