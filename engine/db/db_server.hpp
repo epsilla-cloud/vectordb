@@ -56,6 +56,19 @@ class DBServer {
       bool with_distance,
       vectordb::Json& facets_config,
       vectordb::Json& facets);
+  Status SearchBatch(
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& field_name,
+      std::vector<std::string>& query_fields,
+      int64_t query_dimension,
+      const std::vector<VectorPtr>& queries_data,
+      const int64_t limit,
+      vectordb::Json& result,
+      const std::string& filter,
+      bool with_distance,
+      vectordb::Json& facets_config,
+      vectordb::Json& facets);
   Status SearchByContent(
       const std::string& db_name,
       const std::string& table_name,
