@@ -3,6 +3,7 @@
 #include <omp.h>
 
 #include <numeric>
+#include <future>
 
 #include "db/catalog/meta_types.hpp"
 
@@ -398,6 +399,142 @@ Status TableMVP::Search(const std::string &field_name,
       facets.AddObjectToArray(std::move(facet));
     }
   }
+  return Status::OK();
+}
+
+Status TableMVP::SearchBatch(const std::string &field_name,
+                             std::vector<std::string> &query_fields,
+                             int64_t query_dimension,
+                             const std::vector<VectorPtr> &queries_data,
+                             const int64_t limit,
+                             vectordb::Json &result,
+                             std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+                             bool with_distance,
+                             std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+                             vectordb::Json &facets) {
+  if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
+    return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
+  }
+  for (auto field : query_fields) {
+    if (field_name_field_type_map_.find(field) == field_name_field_type_map_.end()) {
+      return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field);
+    }
+  }
+
+  auto field_type = field_name_field_type_map_[field_name];
+  if (field_type != meta::FieldType::VECTOR_FLOAT &&
+      field_type != meta::FieldType::VECTOR_DOUBLE &&
+      field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+      field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+    return Status(USER_ERROR, "Field type is not vector.");
+  }
+
+  for (const auto& query_data : queries_data) {
+    if ((std::holds_alternative<DenseVectorPtr>(query_data) && field_type != meta::FieldType::VECTOR_FLOAT &&
+            field_type != meta::FieldType::VECTOR_DOUBLE) ||
+        (std::holds_alternative<SparseVectorPtr>(query_data) && field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
+            field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE)) {
+      return Status(USER_ERROR, "Query vector and field vector type must be both dense or sparse");
+    }
+  }
+
+  auto metric_type = field_name_metric_type_map_[field_name];
+  std::vector<VectorPtr> updatedQueries;
+  std::vector<std::vector<DenseVectorElement>> denseVecs(queries_data.size());
+  std::vector<std::shared_ptr<SparseVector>> sparseVecs(queries_data.size());
+
+  for (size_t i = 0; i < queries_data.size(); ++i) {
+    VectorPtr updatedQueryData = queries_data[i];
+    if (metric_type == meta::MetricType::COSINE) {
+      if (std::holds_alternative<DenseVectorPtr>(queries_data[i])) {
+        auto q = std::get<DenseVectorPtr>(queries_data[i]);
+        denseVecs[i].resize(query_dimension);
+        denseVecs[i].insert(denseVecs[i].begin(), q, q + query_dimension);
+        Normalize((DenseVectorPtr)(denseVecs[i].data()), query_dimension);
+        updatedQueryData = denseVecs[i].data();
+      } else if (std::holds_alternative<SparseVectorPtr>(queries_data[i])) {
+        sparseVecs[i] = std::make_shared<SparseVector>();
+        *sparseVecs[i] = *std::get<SparseVectorPtr>(queries_data[i]);
+        Normalize(*sparseVecs[i]);
+        updatedQueryData = sparseVecs[i];
+      }
+    }
+    updatedQueries.push_back(updatedQueryData);
+  }
+
+  int64_t field_offset = table_segment_->vec_field_name_executor_pool_idx_map_[field_name];
+  std::unique_lock<std::mutex> lock(executor_pool_mutex_);
+  auto pool = executor_pool_.at(field_offset);
+  lock.unlock();
+
+  {
+    auto executor = execution::RAIIVecSearchExecutor(pool, pool->acquire());
+    if (std::holds_alternative<DenseVectorPtr>(queries_data[0]) && query_dimension != executor.exec_->dimension_) {
+      return Status(DB_UNEXPECTED_ERROR, "Query dimension doesn't match the vector field dimension.");
+    }
+  }
+
+  size_t batch_size_cap = 64; 
+  if (updatedQueries.size() > batch_size_cap) {
+    return Status(USER_ERROR, "Batch size exceeds the safety cap of " + std::to_string(batch_size_cap));
+  }
+
+  result.LoadFromString("[]");
+  facets.LoadFromString("[]");
+  std::vector<vectordb::Json> batch_results(updatedQueries.size());
+  std::vector<vectordb::Json> batch_facets(updatedQueries.size());
+
+  size_t pool_size = globalConfig.NumExecutorPerField.load();
+  size_t i = 0;
+  while (i < updatedQueries.size()) {
+    size_t chunk_end = std::min(i + pool_size, updatedQueries.size());
+    std::vector<std::future<Status>> futures;
+
+    for (size_t j = i; j < chunk_end; ++j) {
+      futures.push_back(std::async(std::launch::async, [this, j, &updatedQueries, limit, &filter_nodes, &query_fields, with_distance, facet_executors, &batch_results, &batch_facets, pool]() -> Status {
+        auto executor = execution::RAIIVecSearchExecutor(pool, pool->acquire());
+
+        int64_t result_num = 0;
+        executor.exec_->Search(updatedQueries[j], table_segment_.get(), limit, filter_nodes, result_num);
+        result_num = result_num > limit ? limit : result_num;
+
+        if (query_fields.size() > 0 || facet_executors.size() == 0) {
+          auto status = Project(query_fields, result_num, executor.exec_->search_result_, batch_results[j], with_distance, executor.exec_->distance_);
+          if (!status.ok()) return status;
+        } else {
+          batch_results[j].LoadFromString("[]");
+        }
+
+        if (facet_executors.size() > 0) {
+          batch_facets[j].LoadFromString("[]");
+          auto local_facet_executors = facet_executors;
+          for (auto &facet_executor : local_facet_executors) {
+            facet_executor.Aggregate(table_segment_.get(), result_num, executor.exec_->search_result_, true, executor.exec_->distance_);
+            vectordb::Json facet;
+            facet_executor.Project(facet);
+            batch_facets[j].AddObjectToArray(std::move(facet));
+          }
+        }
+        return Status::OK();
+      }));
+    }
+
+    for (auto& future : futures) {
+      Status s = future.get();
+      if (!s.ok()) return s;
+    }
+    i = chunk_end;
+  }
+
+  for (size_t k = 0; k < updatedQueries.size(); ++k) {
+    result.AddObjectToArray(std::move(batch_results[k]));
+  }
+  if (facet_executors.size() > 0) {
+    for (size_t k = 0; k < updatedQueries.size(); ++k) {
+      facets.AddObjectToArray(std::move(batch_facets[k]));
+    }
+  }
+
   return Status::OK();
 }
 

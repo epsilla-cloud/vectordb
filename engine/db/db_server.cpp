@@ -509,6 +509,57 @@ Status DBServer::Search(const std::string& db_name,
                        result, expr_nodes, with_distance, facet_executors, facets);
 }
 
+Status DBServer::SearchBatch(const std::string& db_name,
+                             const std::string& table_name,
+                             std::string& field_name,
+                             std::vector<std::string>& query_fields,
+                             int64_t query_dimension,
+                             const std::vector<VectorPtr>& queries_data,
+                             const int64_t limit,
+                             vectordb::Json& result,
+                             const std::string& filter,
+                             bool with_distance,
+                             vectordb::Json& facets_config,
+                             vectordb::Json& facets) {
+  auto db = GetDB(db_name);
+  if (db == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
+  }
+  auto table = db->GetTable(table_name);
+  if (table == nullptr) {
+    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  }
+
+  if (field_name.empty()) {
+    for (auto& field: table->table_schema_.fields_) {
+      if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
+          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
+        if (!field_name.empty()) {
+          return Status(INVALID_PAYLOAD, "Must specify queryField if there are more than 1 vector fields.");
+        }
+        field_name = field.name_;
+      }
+    }
+  }
+
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
+  if (!expr_parse_status.ok()) {
+    return expr_parse_status;
+  }
+
+  std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
+  Status facet_status = preprocessFacets(facets_config, table, facet_executors);
+  if (!facet_status.ok()) {
+    return facet_status;
+  }
+
+  return table->SearchBatch(field_name, query_fields, query_dimension, queries_data, limit,
+                            result, expr_nodes, with_distance, facet_executors, facets);
+}
+
 Status DBServer::SearchByContent(
       const std::string& db_name,
       const std::string& table_name,

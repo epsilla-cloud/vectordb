@@ -511,6 +511,104 @@ TEST(DbServer, SparseVector) {
   }
 }
 
+TEST(DbServer, SearchBatch) {
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_search_batch");
+  vectordb::engine::DBServer database;
+  std::filesystem::remove_all(tempDir);
+  const auto dbName = "MyDb";
+  const auto tableName = "MyTable";
+  size_t queryDimension = 4;
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
+  size_t tableId = 0;
+
+  const std::string schema = R"_(
+{
+  "name": "MyTable",
+  "fields": [
+    {
+      "name": "ID",
+      "dataType": "INT",
+      "primaryKey": true
+    },
+    {
+      "name": "Doc",
+      "dataType": "STRING"
+    },
+    {
+      "name": "EmbeddingEuclidean",
+      "dataType": "VECTOR_FLOAT",
+      "dimensions": 4,
+      "metricType": "EUCLIDEAN"
+    }
+  ]
+}
+    )_";
+
+  const std::string records = R"_(
+[
+  {
+    "ID": 1,
+    "Doc": "Berlin",
+    "EmbeddingEuclidean": [ 0.05, 0.61, 0.76, 0.74 ]
+  },
+  {
+    "ID": 2,
+    "Doc": "London",
+    "EmbeddingEuclidean": [ 0.19, 0.81, 0.75, 0.11 ]
+  },
+  {
+    "ID": 3,
+    "Doc": "Moscow",
+    "EmbeddingEuclidean": [ 0.36, 0.55, 0.47, 0.94 ]
+  }
+]
+    )_";
+
+  auto createTableStatus = database.CreateTable(dbName, schema, tableId);
+  EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
+  vectordb::Json recordsJson;
+  EXPECT_TRUE(recordsJson.LoadFromString(records));
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
+  EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+
+  // Test dimension mismatch
+  vectordb::engine::DenseVectorElement badQueryDataPtr[] = {0.35, 0.55, 0.47}; // 3 dims instead of 4
+  vectordb::engine::DenseVectorElement goodQueryDataPtr1[] = {0.35, 0.55, 0.47, 0.94};
+  
+  std::vector<vectordb::engine::VectorPtr> queries;
+  queries.push_back(goodQueryDataPtr1);
+  queries.push_back(badQueryDataPtr);
+
+  vectordb::Json result;
+  auto queryFields = std::vector<std::string>{"ID", "Doc", "EmbeddingEuclidean"};
+  auto facetsConfig = vectordb::Json();
+  facetsConfig.LoadFromString("[]");
+  auto facets = vectordb::Json();
+  std::string fieldName = "EmbeddingEuclidean";
+
+  auto badQueryStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
+  EXPECT_FALSE(badQueryStatus.ok()) << "query with dimension mismatch in one vector should fail";
+
+  // Test batch size larger than executor pool size (pool size is 16, let's do 20 queries)
+  queries.clear();
+  for (int i = 0; i < 20; i++) {
+    queries.push_back(goodQueryDataPtr1);
+  }
+  
+  auto bigBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
+  EXPECT_TRUE(bigBatchStatus.ok()) << bigBatchStatus.message();
+  EXPECT_EQ(result.GetSize(), 20) << "Should return 20 result arrays for 20 queries";
+
+  // Test batch cap limit (cap is 64, let's do 65 queries)
+  queries.clear();
+  for (int i = 0; i < 65; i++) {
+    queries.push_back(goodQueryDataPtr1);
+  }
+  auto overflowBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
+  EXPECT_FALSE(overflowBatchStatus.ok()) << "query with more than batch_size_cap should fail";
+}
+
 TEST(DbServer, DeleteByPK) {
   std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_delete_by_pk");
   vectordb::engine::DBServer database;
