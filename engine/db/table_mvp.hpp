@@ -66,6 +66,18 @@ class TableMVP {
       std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
       vectordb::Json &facets);
 
+  Status SearchBatch(
+      const std::string &field_name,
+      std::vector<std::string> &query_fields,
+      int64_t query_dimension,
+      const std::vector<VectorPtr> &queries_data,
+      const int64_t limit,
+      vectordb::Json &result,
+      std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
+      bool with_distance,
+      std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+      vectordb::Json &facets);
+
   Status SearchByAttribute(
       std::vector<std::string> &query_fields,
       vectordb::Json &primary_keys,
