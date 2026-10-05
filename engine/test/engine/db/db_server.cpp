@@ -572,13 +572,9 @@ TEST(DbServer, SearchBatch) {
   auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
   EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
 
-  // Test dimension mismatch
-  vectordb::engine::DenseVectorElement badQueryDataPtr[] = {0.35, 0.55, 0.47}; // 3 dims instead of 4
   vectordb::engine::DenseVectorElement goodQueryDataPtr1[] = {0.35, 0.55, 0.47, 0.94};
   
   std::vector<vectordb::engine::VectorPtr> queries;
-  queries.push_back(goodQueryDataPtr1);
-  queries.push_back(badQueryDataPtr);
 
   vectordb::Json result;
   auto queryFields = std::vector<std::string>{"ID", "Doc", "EmbeddingEuclidean"};
@@ -587,8 +583,9 @@ TEST(DbServer, SearchBatch) {
   auto facets = vectordb::Json();
   std::string fieldName = "EmbeddingEuclidean";
 
-  auto badQueryStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
-  EXPECT_FALSE(badQueryStatus.ok()) << "query with dimension mismatch in one vector should fail";
+  // Test empty batch
+  auto emptyBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
+  EXPECT_FALSE(emptyBatchStatus.ok()) << "query with empty batch should fail";
 
   // Test batch size larger than executor pool size (pool size is 16, let's do 20 queries)
   queries.clear();

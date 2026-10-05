@@ -556,8 +556,13 @@ Status DBServer::SearchBatch(const std::string& db_name,
     return facet_status;
   }
 
+  std::function<void(std::vector<vectordb::engine::execution::FacetExecutor>&)> facet_factory = 
+    [&facets_config, table](std::vector<vectordb::engine::execution::FacetExecutor>& local_executors) {
+      preprocessFacets(facets_config, table, local_executors);
+  };
+
   return table->SearchBatch(field_name, query_fields, query_dimension, queries_data, limit,
-                            result, expr_nodes, with_distance, facet_executors, facets);
+                            result, expr_nodes, with_distance, facet_factory, facets);
 }
 
 Status DBServer::SearchByContent(

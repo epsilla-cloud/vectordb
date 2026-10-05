@@ -1,5 +1,8 @@
 #pragma once
 
+#include <functional>
+#pragma once
+
 #include <atomic>
 #include <string>
 #include <unordered_map>
@@ -75,7 +78,7 @@ class TableMVP {
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       bool with_distance,
-      std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+      std::function<void(std::vector<vectordb::engine::execution::FacetExecutor>&)> &facet_factory,
       vectordb::Json &facets);
 
   Status SearchByAttribute(

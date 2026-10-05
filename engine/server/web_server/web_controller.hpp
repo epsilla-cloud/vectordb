@@ -753,6 +753,7 @@ class WebController : public oatpp::web::server::api::ApiController {
     if (parsedBody.HasMember("queryVector") || parsedBody.HasMember("queryVectors")) {
       std::vector<engine::VectorPtr> queries;
       size_t dense_vector_size = 0;
+      bool dimension_set = false;
       std::vector<std::vector<engine::DenseVectorElement>> denseQueryVecs;
       std::vector<std::shared_ptr<engine::SparseVector>> sparseQueryVecs;
 
@@ -781,8 +782,14 @@ class WebController : public oatpp::web::server::api::ApiController {
 
         if (queryVecJson.IsArray()) {
           size_t current_size = queryVecJson.GetSize();
-          if (dense_vector_size == 0) {
+          if (current_size == 0) {
+            status_dto->statusCode = Status::CODE_400.code;
+            status_dto->message = "Vector cannot be empty at index " + std::to_string(q_idx);
+            return createDtoResponse(Status::CODE_400, status_dto);
+          }
+          if (!dimension_set) {
             dense_vector_size = current_size;
+            dimension_set = true;
           } else if (dense_vector_size != current_size) {
             status_dto->statusCode = Status::CODE_400.code;
             status_dto->message = "Dimension mismatch in query vector at index " + std::to_string(q_idx);
@@ -822,7 +829,17 @@ class WebController : public oatpp::web::server::api::ApiController {
             sparseQueryVecs[q_idx]->at(i).value = static_cast<float>(val.GetDouble());
           }
           queries.push_back(sparseQueryVecs[q_idx]);
+        } else {
+          status_dto->statusCode = Status::CODE_400.code;
+          status_dto->message = "Unsupported vector type at index " + std::to_string(q_idx);
+          return createDtoResponse(Status::CODE_400, status_dto);
         }
+      }
+
+      if (queries.empty() || queries.size() != num_queries) {
+        status_dto->statusCode = Status::CODE_400.code;
+        status_dto->message = "Invalid query vectors parsed.";
+        return createDtoResponse(Status::CODE_400, status_dto);
       }
 
       if (is_batch) {

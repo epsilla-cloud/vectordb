@@ -410,8 +410,16 @@ Status TableMVP::SearchBatch(const std::string &field_name,
                              vectordb::Json &result,
                              std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
                              bool with_distance,
-                             std::vector<vectordb::engine::execution::FacetExecutor> &facet_executors,
+                             std::function<void(std::vector<vectordb::engine::execution::FacetExecutor>&)> &facet_factory,
                              vectordb::Json &facets) {
+  if (queries_data.empty()) {
+    return Status(INVALID_PAYLOAD, "Query batch cannot be empty");
+  }
+  size_t batch_size_cap = 64; 
+  if (queries_data.size() > batch_size_cap) {
+    return Status(INVALID_PAYLOAD, "Batch size exceeds the safety cap of " + std::to_string(batch_size_cap));
+  }
+
   if (field_name_field_type_map_.find(field_name) == field_name_field_type_map_.end()) {
     return Status(DB_UNEXPECTED_ERROR, "Field name not found: " + field_name);
   }
@@ -426,7 +434,7 @@ Status TableMVP::SearchBatch(const std::string &field_name,
       field_type != meta::FieldType::VECTOR_DOUBLE &&
       field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
       field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE) {
-    return Status(USER_ERROR, "Field type is not vector.");
+    return Status(INVALID_PAYLOAD, "Field type is not vector.");
   }
 
   for (const auto& query_data : queries_data) {
@@ -434,7 +442,7 @@ Status TableMVP::SearchBatch(const std::string &field_name,
             field_type != meta::FieldType::VECTOR_DOUBLE) ||
         (std::holds_alternative<SparseVectorPtr>(query_data) && field_type != meta::FieldType::SPARSE_VECTOR_FLOAT &&
             field_type != meta::FieldType::SPARSE_VECTOR_DOUBLE)) {
-      return Status(USER_ERROR, "Query vector and field vector type must be both dense or sparse");
+      return Status(INVALID_PAYLOAD, "Query vector and field vector type must be both dense or sparse");
     }
   }
 
@@ -474,9 +482,13 @@ Status TableMVP::SearchBatch(const std::string &field_name,
     }
   }
 
-  size_t batch_size_cap = 64; 
-  if (updatedQueries.size() > batch_size_cap) {
-    return Status(USER_ERROR, "Batch size exceeds the safety cap of " + std::to_string(batch_size_cap));
+  // Resolve default query fields ONCE before spawning tasks to prevent data races in Project()
+  if (query_fields.empty()) {
+    for (int i = 0; i < table_schema_.fields_.size(); ++i) {
+      if (!table_schema_.fields_[i].is_index_field_) {
+        query_fields.push_back(table_schema_.fields_[i].name_);
+      }
+    }
   }
 
   result.LoadFromString("[]");
@@ -491,23 +503,23 @@ Status TableMVP::SearchBatch(const std::string &field_name,
     std::vector<std::future<Status>> futures;
 
     for (size_t j = i; j < chunk_end; ++j) {
-      futures.push_back(std::async(std::launch::async, [this, j, &updatedQueries, limit, &filter_nodes, &query_fields, with_distance, facet_executors, &batch_results, &batch_facets, pool]() -> Status {
+      futures.push_back(std::async(std::launch::async, [this, j, &updatedQueries, limit, &filter_nodes, query_fields, with_distance, &facet_factory, &batch_results, &batch_facets, pool]() mutable -> Status {
         auto executor = execution::RAIIVecSearchExecutor(pool, pool->acquire());
+        std::vector<execution::FacetExecutor> local_facet_executors; facet_factory(local_facet_executors);
 
         int64_t result_num = 0;
         executor.exec_->Search(updatedQueries[j], table_segment_.get(), limit, filter_nodes, result_num);
         result_num = result_num > limit ? limit : result_num;
 
-        if (query_fields.size() > 0 || facet_executors.size() == 0) {
+        if (query_fields.size() > 0 || local_facet_executors.size() == 0) {
           auto status = Project(query_fields, result_num, executor.exec_->search_result_, batch_results[j], with_distance, executor.exec_->distance_);
           if (!status.ok()) return status;
         } else {
           batch_results[j].LoadFromString("[]");
         }
 
-        if (facet_executors.size() > 0) {
+        if (local_facet_executors.size() > 0) {
           batch_facets[j].LoadFromString("[]");
-          auto local_facet_executors = facet_executors;
           for (auto &facet_executor : local_facet_executors) {
             facet_executor.Aggregate(table_segment_.get(), result_num, executor.exec_->search_result_, true, executor.exec_->distance_);
             vectordb::Json facet;
@@ -528,15 +540,15 @@ Status TableMVP::SearchBatch(const std::string &field_name,
 
   for (size_t k = 0; k < updatedQueries.size(); ++k) {
     result.AddObjectToArray(std::move(batch_results[k]));
-  }
-  if (facet_executors.size() > 0) {
-    for (size_t k = 0; k < updatedQueries.size(); ++k) {
-      facets.AddObjectToArray(std::move(batch_facets[k]));
     }
-  }
+    std::vector<execution::FacetExecutor> test_facets; facet_factory(test_facets); if (test_facets.size() > 0) {
+      for (size_t k = 0; k < updatedQueries.size(); ++k) {
+        facets.AddObjectToArray(std::move(batch_facets[k]));
+      }
+    }
 
-  return Status::OK();
-}
+    return Status::OK();
+  }
 
 Status TableMVP::SearchByAttribute(
     std::vector<std::string> &query_fields,
