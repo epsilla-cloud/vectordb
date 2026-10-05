@@ -105,4 +105,3 @@ curl -X POST -L --header "Content-Type: application/json" \
       \"external_ip\": \"${EXTERNAL_IP}\"
     }
   }";
-
