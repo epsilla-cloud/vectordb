@@ -142,6 +142,14 @@ class DBServer {
   bool rebuild_started_ = false;
   std::shared_ptr<vectordb::engine::EmbeddingService> embedding_service_;
 
+  Status PrepareSearch(
+      const std::string& db_name,
+      const std::string& table_name,
+      std::string& field_name,
+      const std::string& filter,
+      std::shared_ptr<TableMVP>& table,
+      std::vector<query::expr::ExprNodePtr>& expr_nodes);
+
   // periodically in a separate thread
   void RebuildPeriodically() {
     const std::chrono::milliseconds rebuild_interval(RebuildInterval);

@@ -587,23 +587,78 @@ TEST(DbServer, SearchBatch) {
   auto emptyBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
   EXPECT_FALSE(emptyBatchStatus.ok()) << "query with empty batch should fail";
 
-  // Test batch size larger than executor pool size (pool size is 16, let's do 20 queries)
+  // Test batch cap limit using BATCH_SIZE_CAP
   queries.clear();
-  for (int i = 0; i < 20; i++) {
-    queries.push_back(goodQueryDataPtr1);
-  }
-  
-  auto bigBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
-  EXPECT_TRUE(bigBatchStatus.ok()) << bigBatchStatus.message();
-  EXPECT_EQ(result.GetSize(), 20) << "Should return 20 result arrays for 20 queries";
-
-  // Test batch cap limit (cap is 64, let's do 65 queries)
-  queries.clear();
-  for (int i = 0; i < 65; i++) {
+  for (size_t i = 0; i < vectordb::engine::TableMVP::BATCH_SIZE_CAP + 1; i++) {
     queries.push_back(goodQueryDataPtr1);
   }
   auto overflowBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
-  EXPECT_FALSE(overflowBatchStatus.ok()) << "query with more than batch_size_cap should fail";
+  EXPECT_FALSE(overflowBatchStatus.ok()) << "query with more than BATCH_SIZE_CAP should fail";
+
+  // Test distinct queries and assert each batch_result[i] matches single Search result
+  vectordb::engine::DenseVectorElement q1[] = {0.05, 0.61, 0.76, 0.74}; // Near Berlin (ID: 1)
+  vectordb::engine::DenseVectorElement q2[] = {0.19, 0.81, 0.75, 0.11}; // Near London (ID: 2)
+  vectordb::engine::DenseVectorElement q3[] = {0.36, 0.55, 0.47, 0.94}; // Near Moscow (ID: 3)
+
+  std::vector<vectordb::engine::VectorPtr> distinct_queries = {q1, q2, q3};
+
+  vectordb::Json batch_distinct_result;
+  auto batchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, distinct_queries, 2, batch_distinct_result, "", true, facetsConfig, facets);
+  EXPECT_TRUE(batchStatus.ok()) << batchStatus.message();
+  EXPECT_EQ(batch_distinct_result.GetSize(), 3);
+
+  for (size_t i = 0; i < distinct_queries.size(); ++i) {
+    vectordb::Json single_result;
+    vectordb::Json single_facets;
+    auto singleStatus = database.Search(dbName, tableName, fieldName, queryFields, queryDimension, distinct_queries[i], 2, single_result, "", true, facetsConfig, single_facets);
+    EXPECT_TRUE(singleStatus.ok()) << singleStatus.message();
+
+    auto batch_elem_str = batch_distinct_result.GetArrayElement(i).ToString();
+    auto single_elem_str = single_result.ToString();
+    EXPECT_EQ(batch_elem_str, single_elem_str) << "Batch result for query " << i << " must match single Search result";
+  }
+
+  // Test facets with and without response fields
+  const std::string facetsJsonStr = R"_(
+  [
+    {
+      "groupBy": "Doc",
+      "aggregations": [
+        {
+          "type": "COUNT",
+          "field": "Doc"
+        }
+      ]
+    }
+  ]
+  )_";
+  vectordb::Json testFacetsConfig;
+  EXPECT_TRUE(testFacetsConfig.LoadFromString(facetsJsonStr));
+
+  // Case with facets and response fields:
+  vectordb::Json facetResultsWithFields;
+  vectordb::Json facetDataWithFields;
+  auto facetStatus1 = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, distinct_queries, 2, facetResultsWithFields, "", true, testFacetsConfig, facetDataWithFields);
+  EXPECT_TRUE(facetStatus1.ok()) << facetStatus1.message();
+  EXPECT_EQ(facetResultsWithFields.GetSize(), 3);
+  EXPECT_EQ(facetDataWithFields.GetSize(), 3);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_GT(facetResultsWithFields.GetArrayElement(i).GetSize(), 0);
+    EXPECT_GT(facetDataWithFields.GetArrayElement(i).GetSize(), 0);
+  }
+
+  // Case with facets without response fields (facets-only mode):
+  std::vector<std::string> emptyQueryFields;
+  vectordb::Json facetResultsOnly;
+  vectordb::Json facetDataOnly;
+  auto facetStatus2 = database.SearchBatch(dbName, tableName, fieldName, emptyQueryFields, queryDimension, distinct_queries, 2, facetResultsOnly, "", true, testFacetsConfig, facetDataOnly);
+  EXPECT_TRUE(facetStatus2.ok()) << facetStatus2.message();
+  EXPECT_EQ(facetResultsOnly.GetSize(), 3);
+  EXPECT_EQ(facetDataOnly.GetSize(), 3);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(facetResultsOnly.GetArrayElement(i).GetSize(), 0) << "Records should be empty in facets-only mode";
+    EXPECT_GT(facetDataOnly.GetArrayElement(i).GetSize(), 0) << "Facets must still be populated";
+  }
 }
 
 TEST(DbServer, DeleteByPK) {

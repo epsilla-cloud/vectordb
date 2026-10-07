@@ -1,10 +1,8 @@
 #pragma once
 
-#include <functional>
-#pragma once
-
 #include <atomic>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -32,6 +30,8 @@ namespace engine {
 
 class TableMVP {
  public:
+  static constexpr size_t BATCH_SIZE_CAP = 64;
+
   explicit TableMVP(
     meta::TableSchema &table_schema,
     const std::string &db_catalog_path,
@@ -57,6 +57,17 @@ class TableMVP {
       const std::string &filter,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes);
 
+  Status ExecuteSingleSearch(
+      const VectorPtr query_data,
+      const int64_t limit,
+      const std::vector<query::expr::ExprNodePtr> &filter_nodes,
+      std::vector<std::string> query_fields,
+      bool with_distance,
+      std::shared_ptr<execution::ExecutorPool<execution::VecSearchExecutor>> pool,
+      std::vector<execution::FacetExecutor> &facet_executors,
+      vectordb::Json &result,
+      vectordb::Json &facets);
+
   Status Search(
       const std::string &field_name,
       std::vector<std::string> &query_fields,
@@ -78,7 +89,7 @@ class TableMVP {
       vectordb::Json &result,
       std::vector<vectordb::query::expr::ExprNodePtr> &filter_nodes,
       bool with_distance,
-      std::function<void(std::vector<vectordb::engine::execution::FacetExecutor>&)> &facet_factory,
+      std::vector<std::vector<vectordb::engine::execution::FacetExecutor>> &batch_facet_executors,
       vectordb::Json &facets);
 
   Status SearchByAttribute(

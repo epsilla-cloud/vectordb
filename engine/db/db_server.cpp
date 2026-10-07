@@ -455,23 +455,17 @@ int64_t facet_size = facets_config.GetSize();
   return Status::OK();
 }
 
-Status DBServer::Search(const std::string& db_name,
-                        const std::string& table_name,
-                        std::string& field_name,
-                        std::vector<std::string>& query_fields,
-                        int64_t query_dimension,
-                        const VectorPtr query_data,
-                        const int64_t limit,
-                        vectordb::Json& result,
-                        const std::string& filter,
-                        bool with_distance,
-                        vectordb::Json& facets_config,
-                        vectordb::Json& facets) {
+Status DBServer::PrepareSearch(const std::string& db_name,
+                               const std::string& table_name,
+                               std::string& field_name,
+                               const std::string& filter,
+                               std::shared_ptr<TableMVP>& table,
+                               std::vector<query::expr::ExprNodePtr>& expr_nodes) {
   auto db = GetDB(db_name);
   if (db == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
   }
-  auto table = db->GetTable(table_name);
+  table = db->GetTable(table_name);
   if (table == nullptr) {
     return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
   }
@@ -492,15 +486,36 @@ Status DBServer::Search(const std::string& db_name,
   }
 
   // Filter validation
-  std::vector<query::expr::ExprNodePtr> expr_nodes;
   Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
   if (!expr_parse_status.ok()) {
     return expr_parse_status;
   }
 
+  return Status::OK();
+}
+
+Status DBServer::Search(const std::string& db_name,
+                        const std::string& table_name,
+                        std::string& field_name,
+                        std::vector<std::string>& query_fields,
+                        int64_t query_dimension,
+                        const VectorPtr query_data,
+                        const int64_t limit,
+                        vectordb::Json& result,
+                        const std::string& filter,
+                        bool with_distance,
+                        vectordb::Json& facets_config,
+                        vectordb::Json& facets) {
+  std::shared_ptr<TableMVP> table;
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  auto status = PrepareSearch(db_name, table_name, field_name, filter, table, expr_nodes);
+  if (!status.ok()) {
+    return status;
+  }
+
   // Facets validation
   std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
-  Status facet_status = preprocessFacets(facets_config, table, facet_executors);
+  Status facet_status = preprocessFacets(facets_config, table.get(), facet_executors);
   if (!facet_status.ok()) {
     return facet_status;
   }
@@ -521,48 +536,26 @@ Status DBServer::SearchBatch(const std::string& db_name,
                              bool with_distance,
                              vectordb::Json& facets_config,
                              vectordb::Json& facets) {
-  auto db = GetDB(db_name);
-  if (db == nullptr) {
-    return Status(DB_UNEXPECTED_ERROR, "DB not found: " + db_name);
-  }
-  auto table = db->GetTable(table_name);
-  if (table == nullptr) {
-    return Status(DB_UNEXPECTED_ERROR, "Table not found: " + table_name);
+  std::shared_ptr<TableMVP> table;
+  std::vector<query::expr::ExprNodePtr> expr_nodes;
+  auto status = PrepareSearch(db_name, table_name, field_name, filter, table, expr_nodes);
+  if (!status.ok()) {
+    return status;
   }
 
-  if (field_name.empty()) {
-    for (auto& field: table->table_schema_.fields_) {
-      if (field.field_type_ == meta::FieldType::VECTOR_FLOAT ||
-          field.field_type_ == meta::FieldType::VECTOR_DOUBLE ||
-          field.field_type_ == meta::FieldType::SPARSE_VECTOR_FLOAT ||
-          field.field_type_ == meta::FieldType::SPARSE_VECTOR_DOUBLE) {
-        if (!field_name.empty()) {
-          return Status(INVALID_PAYLOAD, "Must specify queryField if there are more than 1 vector fields.");
-        }
-        field_name = field.name_;
+  std::vector<std::vector<vectordb::engine::execution::FacetExecutor>> batch_facet_executors;
+  if (!facets_config.empty() && facets_config.IsArray() && facets_config.GetSize() > 0) {
+    batch_facet_executors.resize(queries_data.size());
+    for (size_t q = 0; q < queries_data.size(); ++q) {
+      Status facet_status = preprocessFacets(facets_config, table.get(), batch_facet_executors[q]);
+      if (!facet_status.ok()) {
+        return facet_status;
       }
     }
   }
 
-  std::vector<query::expr::ExprNodePtr> expr_nodes;
-  Status expr_parse_status = vectordb::query::expr::Expr::ParseNodeFromStr(filter, expr_nodes, table->field_name_field_type_map_);
-  if (!expr_parse_status.ok()) {
-    return expr_parse_status;
-  }
-
-  std::vector<vectordb::engine::execution::FacetExecutor> facet_executors;
-  Status facet_status = preprocessFacets(facets_config, table, facet_executors);
-  if (!facet_status.ok()) {
-    return facet_status;
-  }
-
-  std::function<void(std::vector<vectordb::engine::execution::FacetExecutor>&)> facet_factory = 
-    [&facets_config, table](std::vector<vectordb::engine::execution::FacetExecutor>& local_executors) {
-      preprocessFacets(facets_config, table, local_executors);
-  };
-
   return table->SearchBatch(field_name, query_fields, query_dimension, queries_data, limit,
-                            result, expr_nodes, with_distance, facet_factory, facets);
+                            result, expr_nodes, with_distance, batch_facet_executors, facets);
 }
 
 Status DBServer::SearchByContent(
