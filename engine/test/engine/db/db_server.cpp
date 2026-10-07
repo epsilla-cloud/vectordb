@@ -511,6 +511,156 @@ TEST(DbServer, SparseVector) {
   }
 }
 
+TEST(DbServer, SearchBatch) {
+  std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_search_batch");
+  vectordb::engine::DBServer database;
+  std::filesystem::remove_all(tempDir);
+  const auto dbName = "MyDb";
+  const auto tableName = "MyTable";
+  size_t queryDimension = 4;
+  std::unordered_map<std::string, std::string> headers;
+  database.LoadDB(dbName, tempDir, 150000, true, headers);
+  size_t tableId = 0;
+
+  const std::string schema = R"_(
+{
+  "name": "MyTable",
+  "fields": [
+    {
+      "name": "ID",
+      "dataType": "INT",
+      "primaryKey": true
+    },
+    {
+      "name": "Doc",
+      "dataType": "STRING"
+    },
+    {
+      "name": "EmbeddingEuclidean",
+      "dataType": "VECTOR_FLOAT",
+      "dimensions": 4,
+      "metricType": "EUCLIDEAN"
+    }
+  ]
+}
+    )_";
+
+  const std::string records = R"_(
+[
+  {
+    "ID": 1,
+    "Doc": "Berlin",
+    "EmbeddingEuclidean": [ 0.05, 0.61, 0.76, 0.74 ]
+  },
+  {
+    "ID": 2,
+    "Doc": "London",
+    "EmbeddingEuclidean": [ 0.19, 0.81, 0.75, 0.11 ]
+  },
+  {
+    "ID": 3,
+    "Doc": "Moscow",
+    "EmbeddingEuclidean": [ 0.36, 0.55, 0.47, 0.94 ]
+  }
+]
+    )_";
+
+  auto createTableStatus = database.CreateTable(dbName, schema, tableId);
+  EXPECT_TRUE(createTableStatus.ok()) << createTableStatus.message();
+  vectordb::Json recordsJson;
+  EXPECT_TRUE(recordsJson.LoadFromString(records));
+  auto insertStatus = database.Insert(dbName, tableName, recordsJson, headers);
+  EXPECT_TRUE(insertStatus.ok()) << insertStatus.message();
+
+  vectordb::engine::DenseVectorElement goodQueryDataPtr1[] = {0.35, 0.55, 0.47, 0.94};
+  
+  std::vector<vectordb::engine::VectorPtr> queries;
+
+  vectordb::Json result;
+  auto queryFields = std::vector<std::string>{"ID", "Doc", "EmbeddingEuclidean"};
+  auto facetsConfig = vectordb::Json();
+  facetsConfig.LoadFromString("[]");
+  auto facets = vectordb::Json();
+  std::string fieldName = "EmbeddingEuclidean";
+
+  // Test empty batch
+  auto emptyBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
+  EXPECT_FALSE(emptyBatchStatus.ok()) << "query with empty batch should fail";
+
+  // Test batch cap limit using BATCH_SIZE_CAP
+  queries.clear();
+  for (size_t i = 0; i < vectordb::engine::TableMVP::BATCH_SIZE_CAP + 1; i++) {
+    queries.push_back(goodQueryDataPtr1);
+  }
+  auto overflowBatchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, queries, 2, result, "", true, facetsConfig, facets);
+  EXPECT_FALSE(overflowBatchStatus.ok()) << "query with more than BATCH_SIZE_CAP should fail";
+
+  // Test distinct queries and assert each batch_result[i] matches single Search result
+  vectordb::engine::DenseVectorElement q1[] = {0.05, 0.61, 0.76, 0.74}; // Near Berlin (ID: 1)
+  vectordb::engine::DenseVectorElement q2[] = {0.19, 0.81, 0.75, 0.11}; // Near London (ID: 2)
+  vectordb::engine::DenseVectorElement q3[] = {0.36, 0.55, 0.47, 0.94}; // Near Moscow (ID: 3)
+
+  std::vector<vectordb::engine::VectorPtr> distinct_queries = {q1, q2, q3};
+
+  vectordb::Json batch_distinct_result;
+  auto batchStatus = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, distinct_queries, 2, batch_distinct_result, "", true, facetsConfig, facets);
+  EXPECT_TRUE(batchStatus.ok()) << batchStatus.message();
+  EXPECT_EQ(batch_distinct_result.GetSize(), 3);
+
+  for (size_t i = 0; i < distinct_queries.size(); ++i) {
+    vectordb::Json single_result;
+    vectordb::Json single_facets;
+    auto singleStatus = database.Search(dbName, tableName, fieldName, queryFields, queryDimension, distinct_queries[i], 2, single_result, "", true, facetsConfig, single_facets);
+    EXPECT_TRUE(singleStatus.ok()) << singleStatus.message();
+
+    auto batch_elem_str = batch_distinct_result.GetArrayElement(i).ToString();
+    auto single_elem_str = single_result.ToString();
+    EXPECT_EQ(batch_elem_str, single_elem_str) << "Batch result for query " << i << " must match single Search result";
+  }
+
+  // Test facets with and without response fields
+  const std::string facetsJsonStr = R"_(
+  [
+    {
+      "groupBy": "Doc",
+      "aggregations": [
+        {
+          "type": "COUNT",
+          "field": "Doc"
+        }
+      ]
+    }
+  ]
+  )_";
+  vectordb::Json testFacetsConfig;
+  EXPECT_TRUE(testFacetsConfig.LoadFromString(facetsJsonStr));
+
+  // Case with facets and response fields:
+  vectordb::Json facetResultsWithFields;
+  vectordb::Json facetDataWithFields;
+  auto facetStatus1 = database.SearchBatch(dbName, tableName, fieldName, queryFields, queryDimension, distinct_queries, 2, facetResultsWithFields, "", true, testFacetsConfig, facetDataWithFields);
+  EXPECT_TRUE(facetStatus1.ok()) << facetStatus1.message();
+  EXPECT_EQ(facetResultsWithFields.GetSize(), 3);
+  EXPECT_EQ(facetDataWithFields.GetSize(), 3);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_GT(facetResultsWithFields.GetArrayElement(i).GetSize(), 0);
+    EXPECT_GT(facetDataWithFields.GetArrayElement(i).GetSize(), 0);
+  }
+
+  // Case with facets without response fields (facets-only mode):
+  std::vector<std::string> emptyQueryFields;
+  vectordb::Json facetResultsOnly;
+  vectordb::Json facetDataOnly;
+  auto facetStatus2 = database.SearchBatch(dbName, tableName, fieldName, emptyQueryFields, queryDimension, distinct_queries, 2, facetResultsOnly, "", true, testFacetsConfig, facetDataOnly);
+  EXPECT_TRUE(facetStatus2.ok()) << facetStatus2.message();
+  EXPECT_EQ(facetResultsOnly.GetSize(), 3);
+  EXPECT_EQ(facetDataOnly.GetSize(), 3);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_EQ(facetResultsOnly.GetArrayElement(i).GetSize(), 0) << "Records should be empty in facets-only mode";
+    EXPECT_GT(facetDataOnly.GetArrayElement(i).GetSize(), 0) << "Facets must still be populated";
+  }
+}
+
 TEST(DbServer, DeleteByPK) {
   std::string tempDir = std::filesystem::temp_directory_path() / std::filesystem::path("ut_db_server_delete_by_pk");
   vectordb::engine::DBServer database;
