@@ -292,17 +292,20 @@ Status SplitTokens(std::string& expression, std::vector<std::string>& tokens) {
   return Status::OK();
 };
 
-std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
-  std::vector<std::string> res;
+Status ShuntingYard(const std::vector<std::string>& tokens, std::vector<std::string>& res) {
+  res.clear();
   std::stack<std::string> operator_stack;
 
-  for (std::string str : tokens) {
+  for (const std::string& str : tokens) {
     if (str == "(") {
       operator_stack.push(str);
     } else if (str == ")") {
       while (!operator_stack.empty() && operator_stack.top() != "(") {
         res.push_back(operator_stack.top());
         operator_stack.pop();
+      }
+      if (operator_stack.empty()) {
+        return Status(INVALID_EXPR, "unmatched ')' in expression");
       }
       operator_stack.pop();  // Pop the '('
     } else if (isOperator(str)) {
@@ -317,11 +320,14 @@ std::vector<std::string> ShuntingYard(const std::vector<std::string>& tokens) {
   }
 
   while (!operator_stack.empty()) {
+    if (operator_stack.top() == "(") {
+      return Status(INVALID_EXPR, "unmatched '(' in expression");
+    }
     res.push_back(operator_stack.top());
     operator_stack.pop();
   }
 
-  return res;
+  return Status::OK();
 };
 
 bool isBoolConstant(std::string str) {
@@ -714,7 +720,11 @@ Status Expr::ParseNodeFromStr(
   }
 
   std::vector<std::string> tokens_queue;
-  tokens_queue = ShuntingYard(token_list);
+  Status shunting_status = ShuntingYard(token_list, tokens_queue);
+  if (!shunting_status.ok()) {
+    logger.Error(shunting_status.message());
+    return shunting_status;
+  }
 
   Status nodes_status = GenerateNodes(tokens_queue, nodes, field_map, check_bool);
   if (!nodes_status.ok()) {
